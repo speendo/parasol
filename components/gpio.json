@@ -1,0 +1,6 @@
+[
+  ["pin", "number", "Pin Number", {"attrs": {"min": 0, "max": 39, "placeholder": "0"}, "default": 2, "tooltip": "GPIO pin number"}],
+  ["direction", "select", "Direction", {"options": [["input", "Input"], ["output", "Output"]], "default": "output", "tooltip": "Pin direction"}],
+  ["pull", "radio", "Pull Resistor", {"options": [["none", "None"], ["up", "Pull Up"], ["down", "Pull Down"]], "default": "none", "tooltip": "Internal pull resistor"}],
+  ["initial", "select", "Initial State", {"options": [["low", "Low"], ["high", "High"]], "default": "low", "tooltip": "Initial output state"}]
+]

@@ -1,0 +1,7 @@
+[
+  ["ssid", "text", "SSID", {"attrs": {"maxlength": 32, "placeholder": "MyNetwork"}, "default": "", "tooltip": "WiFi network name"}],
+  ["password", "password", "Password", {"attrs": {"maxlength": 64, "placeholder": "Enter password"}, "default": "", "tooltip": "WiFi password"}],
+  ["mode", "select", "Mode", {"options": [["station", "Station"], ["ap", "Access Point"]], "default": "station", "tooltip": "WiFi operating mode"}],
+  ["hidden", "switch", "Hidden SSID", {"default": false, "tooltip": "Hide network from scans"}],
+  ["channel", "range", "Channel", {"attrs": {"min": 1, "max": 13, "step": 1}, "default": 6, "tooltip": "WiFi channel number"}]
+]

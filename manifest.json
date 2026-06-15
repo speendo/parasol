@@ -1,0 +1,4 @@
+[
+  {"id": "wifi", "label": "WiFi Configuration", "file": "components/wifi.json"},
+  {"id": "gpio", "label": "GPIO Settings", "file": "components/gpio.json"}
+]

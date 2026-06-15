@@ -1,0 +1,10 @@
+{
+  "name": "pico-website",
+  "private": true,
+  "scripts": {
+    "build": "terser app.js -o app.min.js -c -m"
+  },
+  "devDependencies": {
+    "terser": "^5.0.0"
+  }
+}
