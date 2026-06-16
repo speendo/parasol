@@ -102,9 +102,8 @@
     const changes = getPending();
     const count = Object.keys(changes).length;
     const pending = count > 0;
-    btnSaveApply.disabled = !pending;
-    btnApply.disabled = !pending;
-    btnReset.disabled = !pending;
+    const ok = pending && configForm.checkValidity();
+    btnSaveApply.disabled = btnApply.disabled = btnReset.disabled = !ok;
     footer.classList.toggle('pending', pending);
     pendingCount.textContent = pending ? count + ' pending' : '';
   }
