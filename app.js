@@ -193,9 +193,6 @@
   function bindChangeListeners() {
     configForm.addEventListener('input', updateUI);
     configForm.addEventListener('change', updateUI);
-    configForm.addEventListener('focusout', function (e) {
-      if (e.target.reportValidity) e.target.reportValidity();
-    });
   }
 
   function wireButtons() {
