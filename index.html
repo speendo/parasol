@@ -14,13 +14,18 @@
       #status-bar {
         margin: 0;
       }
-      footer.pending {
+      .sticky-bar {
         position: sticky;
-        bottom: 0;
         z-index: 10;
         background: var(--pico-background-color);
         box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
       }
+      .sticky-bar.top { top: 0; }
+      .sticky-bar.bottom { bottom: 0; }
+      .sticky-bar.pending {
+        border-top: 3px solid var(--pico-color-red);
+      }
+      #server-changed[hidden] { display: none; }
     </style>
 </head>
 <body>
@@ -35,18 +40,24 @@
         </nav>
     </header>
 
+  <mark id="server-changed" role="alert" hidden>
+    <span id="notif-text"></span>
+    <button id="notif-load" hidden>Load</button>
+    <button id="notif-keep" hidden>Keep</button>
+    <button id="notif-keep-local" hidden>Keep all local</button>
+    <button id="notif-accept-server" hidden>Accept all server</button>
+  </mark>
+
     <main class="container">
-        <form id="config-form">
+        <form id="config-form" aria-busy="true">
             <!-- JS populates details sections here -->
         </form>
     </main>
 
-    <footer>
+    <footer class="sticky-bar bottom">
         <mark id="status-bar"></mark>
-        <small id="pending-count"></small>
         <div role="group">
             <button id="btn-save-apply" class="contrast" disabled>Save &amp; Apply</button>
-            <button id="btn-apply" class="primary" disabled>Apply</button>
             <button id="btn-reset" class="secondary" disabled>Reset</button>
         </div>
     </footer>
