@@ -6,9 +6,7 @@
   var statusBar = document.getElementById('status-bar');
   var footer = document.querySelector('footer');
   var btnSaveApply = document.getElementById('btn-save-apply');
-  var btnApply = document.getElementById('btn-apply');
   var btnReset = document.getElementById('btn-reset');
-  var pendingCount = document.getElementById('pending-count');
 
   var baseline = null;
   var components = [];
@@ -102,16 +100,17 @@
     }
   }
 
+  // Drives button states. Two independent conditions:
+  //   btnReset:  enabled when there are pending local changes (FV != AV) AND form is valid
+  //   btnSaveApply: enabled when server _dirty flag is true AND form is valid
   function updateUI() {
     var changes = getPending();
     var count = 0;
     for (var k in changes) count++;
     var modified = count > 0;
     var formOk = configForm.checkValidity();
-    btnApply.disabled = btnReset.disabled = !(modified && formOk);
+    btnReset.disabled = !(modified && formOk);
     btnSaveApply.disabled = !(dirty && formOk);
-    footer.classList.toggle('pending', modified && formOk);
-    pendingCount.textContent = modified ? count + ' pending change(s)' : '';
   }
 
   function buildPatch(changes) {
@@ -175,16 +174,6 @@
     var body = count > 0 ? buildPatch(changes) : buildPatch(serialize());
     postJSON('/api/settings/save', body).then(function (ok) {
       if (ok) syncThen(true);
-    });
-  }
-
-  function handleApply() {
-    var changes = getPending();
-    var count = 0;
-    for (var k in changes) count++;
-    if (count === 0) return;
-    postJSON('/api/settings/apply', buildPatch(changes)).then(function (ok) {
-      if (ok) syncThen(false);
     });
   }
 
@@ -281,12 +270,11 @@
 
   function wireButtons() {
     btnSaveApply.addEventListener('click', handleSaveApply);
-    btnApply.addEventListener('click', handleApply);
     btnReset.addEventListener('click', handleReset);
   }
 
   async function init() {
-    if (!configForm || !navList || !statusBar || !footer || !btnSaveApply || !btnApply || !btnReset) return;
+    if (!configForm || !navList || !statusBar || !footer || !btnSaveApply || !btnReset) return;
     var ok = await loadSettings();
     if (!ok) return;
     renderNav();
@@ -424,5 +412,5 @@
       }
     }
   }
-  /* test-expose */if(window.__TEST_MODE){window.serialize=serialize;window.setBaseline=setBaseline;window.getPending=getPending;window.createField=createField;window.populateFromComponents=populateFromComponents;window.applyAttrs=applyAttrs;window.updateUI=updateUI;window.showError=showError;window.clearError=clearError;window.postJSON=postJSON;window.loadSettings=loadSettings;window.refreshComponents=refreshComponents;window.syncThen=syncThen;window.handleSaveApply=handleSaveApply;window.handleApply=handleApply;window.handleReset=handleReset;window.renderNav=renderNav;window.renderForm=renderForm;window.handleHash=handleHash;window.wireButtons=wireButtons;window.bindChangeListeners=bindChangeListeners;window.init=init;window.buildPatch=buildPatch;window.__test={};Object.defineProperty(window.__test,'components',{get:function(){return components},set:function(v){components=v}});Object.defineProperty(window.__test,'dirty',{get:function(){return dirty},set:function(v){dirty=v}});}
+  /* test-expose */if(window.__TEST_MODE){window.serialize=serialize;window.setBaseline=setBaseline;window.getPending=getPending;window.createField=createField;window.populateFromComponents=populateFromComponents;window.applyAttrs=applyAttrs;window.updateUI=updateUI;window.showError=showError;window.clearError=clearError;window.postJSON=postJSON;window.loadSettings=loadSettings;window.refreshComponents=refreshComponents;window.syncThen=syncThen;window.handleSaveApply=handleSaveApply;window.handleReset=handleReset;window.renderNav=renderNav;window.renderForm=renderForm;window.handleHash=handleHash;window.wireButtons=wireButtons;window.bindChangeListeners=bindChangeListeners;window.init=init;window.buildPatch=buildPatch;window.__test={};Object.defineProperty(window.__test,'components',{get:function(){return components},set:function(v){components=v}});Object.defineProperty(window.__test,'dirty',{get:function(){return dirty},set:function(v){dirty=v}});}
 })();

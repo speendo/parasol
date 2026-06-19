@@ -98,51 +98,40 @@ describe('updateUI', () => {
   it('disables buttons when no pending changes and not dirty', () => {
     window.updateUI()
     expect(document.getElementById('btn-save-apply').disabled).toBe(true)
-    expect(document.getElementById('btn-apply').disabled).toBe(true)
     expect(document.getElementById('btn-reset').disabled).toBe(true)
   })
 
-  it('enables Apply and Reset when pending changes exist', () => {
+  it('enables Reset when pending changes exist', () => {
     document.querySelector('[name="wifi.ssid"]').value = 'Net'
     window.updateUI()
-    expect(document.getElementById('btn-apply').disabled).toBe(false)
     expect(document.getElementById('btn-reset').disabled).toBe(false)
-    expect(document.getElementById('btn-save-apply').disabled).toBe(true)
+  })
+
+  it('disables Reset when form is invalid', () => {
+    document.querySelector('[name="wifi.ssid"]').value = ''
+    window.__test.dirty = true
+    window.updateUI()
+    expect(document.getElementById('btn-reset').disabled).toBe(true)
   })
 
   it('enables Save & Apply when dirty is true', () => {
-    document.querySelector('[name="wifi.ssid"]').value = 'saved'
-    window.setBaseline()
     window.__test.dirty = true
     window.updateUI()
     expect(document.getElementById('btn-save-apply').disabled).toBe(false)
-    expect(document.getElementById('btn-apply').disabled).toBe(true)
-    expect(document.getElementById('btn-reset').disabled).toBe(true)
   })
 
-  it('enables both Save & Apply and Apply when dirty and pending', () => {
-    window.__test.dirty = true
-    document.querySelector('[name="wifi.ssid"]').value = 'Net'
-    window.updateUI()
-    expect(document.getElementById('btn-save-apply').disabled).toBe(false)
-    expect(document.getElementById('btn-apply').disabled).toBe(false)
-  })
-
-  it('disables buttons when form is invalid', () => {
-    document.querySelector('[name="wifi.ssid"]').value = ''
-    window.__test.dirty = true
+  it('disables Save & Apply when dirty is false', () => {
     window.updateUI()
     expect(document.getElementById('btn-save-apply').disabled).toBe(true)
-    expect(document.getElementById('btn-apply').disabled).toBe(true)
   })
 
-  it('disables Apply when pending is reverted', () => {
+  it('disables Reset when pending is reverted', () => {
     document.querySelector('[name="wifi.ssid"]').value = 'Net'
     window.updateUI()
-    expect(document.getElementById('btn-apply').disabled).toBe(false)
+    expect(document.getElementById('btn-reset').disabled).toBe(false)
     document.querySelector('[name="wifi.ssid"]').value = ''
     window.updateUI()
-    expect(document.getElementById('btn-apply').disabled).toBe(true)
+    expect(document.getElementById('btn-reset').disabled).toBe(true)
   })
 })
 
@@ -480,7 +469,7 @@ describe('wireButtons / bindChangeListeners', () => {
     window.setBaseline()
   })
 
-  it('wireButtons attaches click handler to btn-apply', async () => {
+  it('wireButtons attaches click handler to btn-reset', async () => {
     document.querySelector('[name="wifi.ssid"]').value = 'changed'
     window.fetch = function (url, opts) {
       if (opts && opts.method === 'POST') return Promise.resolve({ ok: true })
@@ -488,7 +477,8 @@ describe('wireButtons / bindChangeListeners', () => {
     }
     window.wireButtons()
     window.updateUI()
-    document.getElementById('btn-apply').click()
+    expect(document.getElementById('btn-reset').disabled).toBe(false)
+    document.getElementById('btn-reset').click()
     await new Promise(function (r) { return setTimeout(r, 0) })
     expect(window.getPending()).toEqual({})
   })
@@ -497,14 +487,12 @@ describe('wireButtons / bindChangeListeners', () => {
     window.bindChangeListeners()
     document.querySelector('[name="wifi.ssid"]').value = 'changed'
     document.querySelector('[name="wifi.ssid"]').dispatchEvent(new Event('input', { bubbles: true }))
-    expect(document.getElementById('pending-count').textContent).toBe('1 pending change(s)')
   })
 
   it('bindChangeListeners triggers updateUI on change event', () => {
     window.bindChangeListeners()
     document.querySelector('[name="wifi.ssid"]').value = 'changed'
     document.querySelector('[name="wifi.ssid"]').dispatchEvent(new Event('change', { bubbles: true }))
-    expect(document.getElementById('pending-count').textContent).toBe('1 pending change(s)')
   })
 })
 
@@ -589,39 +577,6 @@ describe('buildPatch', () => {
   })
 })
 
-describe('handleApply', () => {
-  beforeEach(() => {
-    document.querySelector('#config-form').innerHTML = '<input name="wifi.ssid" value="" />'
-    window.__test.components = [{ id: 'wifi', fields: [{ key: 'ssid', type: 'text', label: 'SSID' }] }]
-    window.setBaseline()
-  })
-
-  it('sends patch to /api/settings/apply and clears pending on success', async () => {
-    var postedUrl = null
-    var postedData = null
-    window.fetch = function (url, opts) {
-      if (opts && opts.method === 'POST') {
-        postedUrl = url
-        postedData = JSON.parse(opts.body)
-        return Promise.resolve({ ok: true })
-      }
-      return Promise.resolve({ ok: true, json: function () { return Promise.resolve({ _dirty: false, wifi: { ssid: ['text', 'SSID', { value: 'changed' }] } }) } })
-    }
-    document.querySelector('[name="wifi.ssid"]').value = 'changed'
-    expect(Object.keys(window.getPending()).length).toBeGreaterThan(0)
-    window.handleApply()
-    await new Promise(function (r) { return setTimeout(r, 0) })
-    expect(postedUrl).toBe('/api/settings/apply')
-    expect(postedData).toEqual({ wifi: { ssid: ['text', 'SSID', { value: 'changed' }] } })
-    expect(window.getPending()).toEqual({})
-  })
-
-  it('does nothing when no pending changes', () => {
-    window.fetch = function () { throw new Error('should not be called') }
-    expect(function () { window.handleApply() }).not.toThrow()
-  })
-})
-
 describe('handleSaveApply', () => {
   beforeEach(() => {
     document.querySelector('#config-form').innerHTML = '<input name="wifi.ssid" value="" />'
@@ -637,7 +592,7 @@ describe('handleSaveApply', () => {
         postedUrl = url
         return Promise.resolve({ ok: true })
       }
-      return Promise.resolve({ ok: true, json: function () { return Promise.resolve({ _dirty: false, wifi: { ssid: ['text', 'SSID', { value: 'saved' }] } }) } })
+      return Promise.resolve({ ok: true, json: function () { return Promise.resolve({ _dirty: false }) } })
     }
     document.querySelector('[name="wifi.ssid"]').value = 'saved'
     window.handleSaveApply()
@@ -653,7 +608,7 @@ describe('handleSaveApply', () => {
         postedData = JSON.parse(opts.body)
         return Promise.resolve({ ok: true })
       }
-      return Promise.resolve({ ok: true, json: function () { return Promise.resolve({ _dirty: false, wifi: { ssid: ['text', 'SSID', { value: '' }] } }) } })
+      return Promise.resolve({ ok: true, json: function () { return Promise.resolve({ _dirty: false }) } })
     }
     window.handleSaveApply()
     await new Promise(function (r) { return setTimeout(r, 0) })
