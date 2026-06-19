@@ -1,25 +1,18 @@
-/**
- * ESP32 Modular Configuration UI
- *
- * Loads manifest.json → fetches per-component JSON files → builds
- * nav links and accordion form dynamically. Minify for deployment.
- */
 (function () {
   'use strict';
 
-  // DOM references
-  const navList = document.getElementById('nav-list');
-  const configForm = document.getElementById('config-form');
-  const statusBar = document.getElementById('status-bar');
-  const footer = document.querySelector('footer');
-  const btnSaveApply = document.getElementById('btn-save-apply');
-  const btnApply = document.getElementById('btn-apply');
-  const btnReset = document.getElementById('btn-reset');
-  const pendingCount = document.getElementById('pending-count');
+  var navList = document.getElementById('nav-list');
+  var configForm = document.getElementById('config-form');
+  var statusBar = document.getElementById('status-bar');
+  var footer = document.querySelector('footer');
+  var btnSaveApply = document.getElementById('btn-save-apply');
+  var btnApply = document.getElementById('btn-apply');
+  var btnReset = document.getElementById('btn-reset');
+  var pendingCount = document.getElementById('pending-count');
 
-  let baseline = null;
-
-  let components = [];
+  var baseline = null;
+  var components = [];
+  var dirty = false;
 
   function showError(msg) {
     statusBar.textContent = msg;
@@ -32,15 +25,16 @@
   }
 
   function serialize() {
-    const data = {};
-    for (const comp of components) {
+    var data = {};
+    for (var ci = 0; ci < components.length; ci++) {
+      var comp = components[ci];
       if (!comp.fields) continue;
-      for (const field of comp.fields) {
-        const key = field[0], type = field[1], name = comp.id + '.' + key;
-        const el = configForm.querySelector('[name="' + name + '"]');
+      for (var fi = 0; fi < comp.fields.length; fi++) {
+        var field = comp.fields[fi];
+        var el = configForm.querySelector('[name="' + comp.id + '.' + field.key + '"]');
         if (!el) continue;
-        data[name] = type === 'checkbox' || type === 'switch' ? el.checked
-          : type === 'radio' ? (configForm.querySelector('[name="' + name + '"]:checked') || {}).value || null
+        data[comp.id + '.' + field.key] = field.type === 'checkbox' || field.type === 'switch' ? el.checked
+          : field.type === 'radio' ? (configForm.querySelector('[name="' + comp.id + '.' + field.key + '"]:checked') || {}).value || null
           : el.value;
       }
     }
@@ -53,75 +47,110 @@
 
   function getPending() {
     if (!baseline) return {};
-    const current = serialize();
-    const changes = {};
-    for (const key in current) {
+    var current = serialize();
+    var changes = {};
+    for (var key in current) {
       if (current[key] !== baseline[key]) changes[key] = current[key];
     }
     return changes;
   }
 
-  function populateFromComponents(components) {
-    for (const comp of components) {
+  function populateFromComponents(comps) {
+    for (var ci = 0; ci < comps.length; ci++) {
+      var comp = comps[ci];
       if (!comp.fields) continue;
-      for (const field of comp.fields) {
-        const key = field[0];
-        const type = field[1];
-        const opts = field[3] || {};
-        const name = comp.id + '.' + key;
-        const el = configForm.querySelector('[name="' + name + '"]');
+      for (var fi = 0; fi < comp.fields.length; fi++) {
+        var field = comp.fields[fi];
+        var el = configForm.querySelector('[name="' + comp.id + '.' + field.key + '"]');
         if (!el) continue;
-        if (type === 'checkbox' || type === 'switch') {
-          el.checked = !!opts.default;
-        } else if (type === 'radio') {
-          const radios = configForm.querySelectorAll('[name="' + name + '"]');
-          for (const radio of radios) {
-            radio.checked = opts.default !== undefined && String(radio.value) === String(opts.default);
+        if (field.type === 'checkbox' || field.type === 'switch') {
+          el.checked = !!field.opts.value;
+        } else if (field.type === 'radio') {
+          var radios = configForm.querySelectorAll('[name="' + comp.id + '.' + field.key + '"]');
+          for (var ri = 0; ri < radios.length; ri++) {
+            radios[ri].checked = field.opts.value !== undefined && String(radios[ri].value) === String(field.opts.value);
           }
         } else {
-          el.value = opts.default !== undefined ? opts.default : '';
+          el.value = field.opts.value !== undefined ? field.opts.value : '';
         }
       }
     }
   }
 
   async function refreshComponents() {
-    const results = await Promise.allSettled(
-      components.map(async (comp) => {
-        const res = await fetch('/' + comp.file);
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        comp.fields = await res.json();
-      })
-    );
-    if (results.some(r => r.status === 'rejected')) {
-      showError('Failed to refresh component values');
+    try {
+      var res = await fetch('/api/settings');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var data = await res.json();
+      dirty = data._dirty === true;
+      for (var ci = 0; ci < components.length; ci++) {
+        var comp = components[ci];
+        var group = data[comp.id];
+        if (!group) {
+          comp.fields = [];
+          continue;
+        }
+        comp.fields = [];
+        for (var fkey in group) {
+          var field = group[fkey];
+          comp.fields.push({ key: fkey, type: field[0], label: field[1], opts: field[2] });
+        }
+      }
+      clearError();
+    } catch (err) {
+      showError('Failed to refresh settings: ' + err.message);
     }
   }
 
   function updateUI() {
-    const changes = getPending();
-    const count = Object.keys(changes).length;
-    const pending = count > 0;
-    const ok = pending && configForm.checkValidity();
-    btnSaveApply.disabled = btnApply.disabled = btnReset.disabled = !ok;
-    footer.classList.toggle('pending', ok);
-    pendingCount.textContent = pending ? count + ' pending change(s)' : '';
+    var changes = getPending();
+    var count = 0;
+    for (var k in changes) count++;
+    var modified = count > 0;
+    var formOk = configForm.checkValidity();
+    btnApply.disabled = btnReset.disabled = !(modified && formOk);
+    btnSaveApply.disabled = !(dirty && formOk);
+    footer.classList.toggle('pending', modified && formOk);
+    pendingCount.textContent = modified ? count + ' pending change(s)' : '';
   }
 
-  // Bootstrap on DOM ready
+  function buildPatch(changes) {
+    var data = {};
+    for (var name in changes) {
+      var dot = name.indexOf('.');
+      var compId = name.slice(0, dot);
+      var fieldKey = name.slice(dot + 1);
+      if (!data[compId]) data[compId] = {};
+      for (var ci = 0; ci < components.length; ci++) {
+        if (components[ci].id === compId) {
+          var fields = components[ci].fields;
+          for (var fi = 0; fi < fields.length; fi++) {
+            if (fields[fi].key === fieldKey) {
+              data[compId][fieldKey] = [fields[fi].type, fields[fi].label, { value: changes[name] }];
+              break;
+            }
+          }
+          break;
+        }
+      }
+    }
+    return data;
+  }
+
   document.addEventListener('DOMContentLoaded', init);
 
   async function postJSON(url, data) {
     clearError();
     try {
-      const res = await fetch(url, {
+      var res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
       });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const result = await res.json();
-      if (result.error) throw new Error(result.error);
+      if (!res.ok) {
+        var text = await res.text();
+        throw new Error(text || 'HTTP ' + res.status);
+      }
       return true;
     } catch (err) {
       showError('Request failed: ' + err.message);
@@ -139,17 +168,22 @@
   }
 
   function handleSaveApply() {
-    const data = getPending();
-    if (Object.keys(data).length === 0) return;
-    postJSON('/api/save', data).then(function (ok) {
+    var changes = getPending();
+    var count = 0;
+    for (var k in changes) count++;
+    if (count === 0 && !dirty) return;
+    var body = count > 0 ? buildPatch(changes) : buildPatch(serialize());
+    postJSON('/api/settings/save', body).then(function (ok) {
       if (ok) syncThen(true);
     });
   }
 
   function handleApply() {
-    const data = getPending();
-    if (Object.keys(data).length === 0) return;
-    postJSON('/api/apply', data).then(function (ok) {
+    var changes = getPending();
+    var count = 0;
+    for (var k in changes) count++;
+    if (count === 0) return;
+    postJSON('/api/settings/apply', buildPatch(changes)).then(function (ok) {
       if (ok) syncThen(false);
     });
   }
@@ -159,22 +193,72 @@
     syncThen(true);
   }
 
-  function renderForm() {
-    for (const comp of components) {
-      const details = document.createElement('details');
-      details.id = comp.id;
+  function labelFromKey(key) {
+    return key
+      .replace(/[_-]/g, ' ')
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+  }
 
-      const summary = document.createElement('summary');
+  async function loadSettings() {
+    try {
+      var res = await fetch('/api/settings');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var data = await res.json();
+      dirty = data._dirty === true;
+      var comps = [];
+      for (var key in data) {
+        if (key[0] === '_') continue;
+        var comp = { id: key, label: labelFromKey(key), fields: [] };
+        var group = data[key];
+        for (var fkey in group) {
+          var field = group[fkey];
+          comp.fields.push({ key: fkey, type: field[0], label: field[1], opts: field[2] });
+        }
+        comps.push(comp);
+      }
+      components = comps;
+      clearError();
+      return true;
+    } catch (err) {
+      showError('Failed to load settings: ' + err.message);
+      return false;
+    }
+  }
+
+  function renderNav() {
+    for (var ci = 0; ci < components.length; ci++) {
+      var comp = components[ci];
+      var li = document.createElement('li');
+      var a = document.createElement('a');
+      a.href = '#' + comp.id;
+      a.textContent = comp.label;
+      li.appendChild(a);
+      navList.appendChild(li);
+    }
+    navList.addEventListener('click', function (e) {
+      var link = e.target.closest('a');
+      if (link && link.hash) {
+        var el = document.getElementById(link.hash.slice(1));
+        if (el && el.tagName === 'DETAILS') el.open = true;
+      }
+    });
+  }
+
+  function renderForm() {
+    for (var ci = 0; ci < components.length; ci++) {
+      var comp = components[ci];
+      var details = document.createElement('details');
+      details.id = comp.id;
+      var summary = document.createElement('summary');
       summary.textContent = comp.label;
       details.appendChild(summary);
-
       if (comp.fields) {
-        for (const field of comp.fields) {
-          const fieldEl = createField(comp.id, field);
+        for (var fi = 0; fi < comp.fields.length; fi++) {
+          var fieldEl = createField(comp.id, comp.fields[fi]);
           if (fieldEl) details.appendChild(fieldEl);
         }
       }
-
       configForm.appendChild(details);
     }
   }
@@ -182,7 +266,7 @@
   function handleHash() {
     function openHash() {
       if (location.hash) {
-        const el = document.getElementById(location.hash.slice(1));
+        var el = document.getElementById(location.hash.slice(1));
         if (el && el.tagName === 'DETAILS') el.open = true;
       }
     }
@@ -203,9 +287,8 @@
 
   async function init() {
     if (!configForm || !navList || !statusBar || !footer || !btnSaveApply || !btnApply || !btnReset) return;
-    const ok = await loadManifest();
+    var ok = await loadSettings();
     if (!ok) return;
-    await loadComponents();
     renderNav();
     renderForm();
     populateFromComponents(components);
@@ -216,77 +299,21 @@
     handleHash();
   }
 
-  async function loadManifest() {
-    try {
-      const res = await fetch('/manifest.json');
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      components = await res.json();
-      clearError();
-      return true;
-    } catch (err) {
-      showError('Failed to load manifest: ' + err.message);
-      return false;
-    }
-  }
-
-  function renderNav() {
-    for (const comp of components) {
-      const li = document.createElement('li');
-      const a = document.createElement('a');
-      a.href = '#' + comp.id;
-      a.textContent = comp.label;
-      li.appendChild(a);
-      navList.appendChild(li);
-    }
-    navList.addEventListener('click', function (e) {
-      const link = e.target.closest('a');
-      if (link && link.hash) {
-        const el = document.getElementById(link.hash.slice(1));
-        if (el && el.tagName === 'DETAILS') el.open = true;
-      }
-    });
-  }
-
-  async function loadComponents() {
-    const results = await Promise.allSettled(
-      components.map(async (comp) => {
-        const res = await fetch('/' + comp.file);
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        comp.fields = await res.json();
-      })
-    );
-    // Filter out failed components, show single warning
-    const failed = results.filter((r) => r.status === 'rejected');
-    const skipped = [];
-    components = components.filter((comp, i) => {
-      if (results[i].status === 'fulfilled') return true;
-      skipped.push(comp.label);
-      return false;
-    });
-    if (failed.length > 0) {
-      showError('Skipped: ' + skipped.join(', '));
-    }
-  }
-
   function createField(namePrefix, field) {
-    // field = [key, type, label, opts?]
-    if (!Array.isArray(field) || field.length < 3) return null;
-
-    const key = field[0];
-    const type = field[1];
-    const labelText = field[2];
-    const opts = field[3] || {};
-    const required = opts.attrs && opts.attrs.required;
-
-    // HTML input types that map directly to <input type="...">
-    const inputTypes = ['text', 'email', 'number', 'password', 'tel', 'url', 'color'];
+    if (!field || typeof field !== 'object' || !field.key) return null;
+    var key = field.key;
+    var type = field.type;
+    var labelText = field.label;
+    var opts = field.opts || {};
+    var required = opts.attrs && opts.attrs.required;
+    var inputTypes = ['text', 'email', 'number', 'password', 'tel', 'url', 'color'];
 
     if (type === 'checkbox') {
-      const label = document.createElement('label');
-      const input = document.createElement('input');
+      var label = document.createElement('label');
+      var input = document.createElement('input');
       input.type = 'checkbox';
       input.name = namePrefix + '.' + key;
-      if (opts.default) input.checked = true;
+      if (opts.value) input.checked = true;
       applyAttrs(input, opts.attrs);
       label.appendChild(input);
       label.appendChild(document.createTextNode(' ' + labelText + (required ? '*' : '')));
@@ -295,12 +322,12 @@
     }
 
     if (type === 'switch') {
-      const label = document.createElement('label');
-      const input = document.createElement('input');
+      var label = document.createElement('label');
+      var input = document.createElement('input');
       input.type = 'checkbox';
       input.role = 'switch';
       input.name = namePrefix + '.' + key;
-      if (opts.default) input.checked = true;
+      if (opts.value) input.checked = true;
       applyAttrs(input, opts.attrs);
       label.appendChild(input);
       label.appendChild(document.createTextNode(' ' + labelText + (required ? '*' : '')));
@@ -309,20 +336,20 @@
     }
 
     if (type === 'radio') {
-      const fieldset = document.createElement('fieldset');
-      const legend = document.createElement('legend');
+      var fieldset = document.createElement('fieldset');
+      var legend = document.createElement('legend');
       legend.textContent = labelText + (required ? '*' : '');
       if (opts.tooltip) legend.setAttribute('data-tooltip', opts.tooltip);
       fieldset.appendChild(legend);
-
       if (opts.options) {
-        for (const opt of opts.options) {
-          const radioLabel = document.createElement('label');
-          const radio = document.createElement('input');
+        for (var oi = 0; oi < opts.options.length; oi++) {
+          var opt = opts.options[oi];
+          var radioLabel = document.createElement('label');
+          var radio = document.createElement('input');
           radio.type = 'radio';
           radio.name = namePrefix + '.' + key;
           radio.value = opt[0];
-          if (opts.default !== undefined && String(opt[0]) === String(opts.default)) {
+          if (opts.value !== undefined && String(opt[0]) === String(opts.value)) {
             radio.checked = true;
           }
           radioLabel.appendChild(radio);
@@ -333,26 +360,24 @@
       return fieldset;
     }
 
-    const labelEl = document.createElement('label');
+    var labelEl = document.createElement('label');
     labelEl.textContent = labelText + (required ? '*' : '');
     if (opts.tooltip) labelEl.setAttribute('data-tooltip', opts.tooltip);
-
-    let input;
+    var input;
 
     if (inputTypes.indexOf(type) !== -1) {
       input = document.createElement('input');
       input.type = type;
       input.name = namePrefix + '.' + key;
-      if (opts.default !== undefined) input.value = opts.default;
+      if (opts.value !== undefined) input.value = opts.value;
       applyAttrs(input, opts.attrs);
     } else if (type === 'range') {
       input = document.createElement('input');
       input.type = 'range';
       input.name = namePrefix + '.' + key;
-      if (opts.default !== undefined) input.value = opts.default;
+      if (opts.value !== undefined) input.value = opts.value;
       applyAttrs(input, opts.attrs);
-
-      const valueDisplay = document.createElement('output');
+      var valueDisplay = document.createElement('output');
       valueDisplay.textContent = input.value;
       valueDisplay.style.marginLeft = '0.5em';
       input.addEventListener('input', function () {
@@ -363,11 +388,12 @@
       input = document.createElement('select');
       input.name = namePrefix + '.' + key;
       if (opts.options) {
-        for (const opt of opts.options) {
-          const option = document.createElement('option');
+        for (var oi = 0; oi < opts.options.length; oi++) {
+          var opt = opts.options[oi];
+          var option = document.createElement('option');
           option.value = opt[0];
           option.textContent = opt[1];
-          if (opts.default !== undefined && String(opt[0]) === String(opts.default)) {
+          if (opts.value !== undefined && String(opt[0]) === String(opts.value)) {
             option.selected = true;
           }
           input.appendChild(option);
@@ -377,7 +403,7 @@
     } else if (type === 'textarea') {
       input = document.createElement('textarea');
       input.name = namePrefix + '.' + key;
-      if (opts.default !== undefined) input.value = opts.default;
+      if (opts.value !== undefined) input.value = opts.value;
       applyAttrs(input, opts.attrs);
     } else {
       return null;
@@ -392,11 +418,11 @@
 
   function applyAttrs(el, attrs) {
     if (!attrs) return;
-    for (const key in attrs) {
+    for (var key in attrs) {
       if (Object.prototype.hasOwnProperty.call(attrs, key)) {
         el.setAttribute(key, attrs[key]);
       }
     }
   }
-  /* test-expose */if(window.__TEST_MODE){window.serialize=serialize;window.setBaseline=setBaseline;window.getPending=getPending;window.createField=createField;window.populateFromComponents=populateFromComponents;window.applyAttrs=applyAttrs;window.updateUI=updateUI;window.showError=showError;window.clearError=clearError;window.postJSON=postJSON;window.loadManifest=loadManifest;window.loadComponents=loadComponents;window.refreshComponents=refreshComponents;window.syncThen=syncThen;window.handleSaveApply=handleSaveApply;window.handleApply=handleApply;window.handleReset=handleReset;window.renderNav=renderNav;window.renderForm=renderForm;window.handleHash=handleHash;window.wireButtons=wireButtons;window.bindChangeListeners=bindChangeListeners;window.init=init;window.__test={};Object.defineProperty(window.__test,'components',{get:()=>components,set:v=>{components=v}});}
+  /* test-expose */if(window.__TEST_MODE){window.serialize=serialize;window.setBaseline=setBaseline;window.getPending=getPending;window.createField=createField;window.populateFromComponents=populateFromComponents;window.applyAttrs=applyAttrs;window.updateUI=updateUI;window.showError=showError;window.clearError=clearError;window.postJSON=postJSON;window.loadSettings=loadSettings;window.refreshComponents=refreshComponents;window.syncThen=syncThen;window.handleSaveApply=handleSaveApply;window.handleApply=handleApply;window.handleReset=handleReset;window.renderNav=renderNav;window.renderForm=renderForm;window.handleHash=handleHash;window.wireButtons=wireButtons;window.bindChangeListeners=bindChangeListeners;window.init=init;window.buildPatch=buildPatch;window.__test={};Object.defineProperty(window.__test,'components',{get:function(){return components},set:function(v){components=v}});Object.defineProperty(window.__test,'dirty',{get:function(){return dirty},set:function(v){dirty=v}});}
 })();

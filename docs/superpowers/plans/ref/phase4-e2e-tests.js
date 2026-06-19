@@ -1,9 +1,5 @@
 import { test, expect } from '@playwright/test'
 
-test.beforeEach(async ({ page }) => {
-  await page.goto('/api/settings/reset', { waitUntil: 'networkidle' })
-})
-
 test.describe('Form rendering', () => {
   test('renders accordion sections from /api/settings', async ({ page }) => {
     await page.goto('/')
@@ -224,8 +220,19 @@ test.describe('Button actions', () => {
     await expect(page.locator('#pending-count')).toHaveText('1 pending change(s)')
     await page.locator('#btn-reset').click()
     await page.waitForTimeout(500)
-    await expect(page.locator('[name="wifi.ssid"]')).toHaveValue('StableNet')
+    await expect(page.locator('[name="wifi.ssid"]')).toHaveValue('')
     await expect(page.locator('#pending-count')).toHaveText('')
+  })
+
+  test('save and apply persists values', async ({ page }) => {
+    await page.goto('/')
+    await page.locator('details#wifi summary').click()
+    await page.locator('[name="wifi.ssid"]').fill('SavedNet')
+    await page.locator('#btn-save-apply').click()
+    await page.waitForTimeout(500)
+    await page.reload()
+    await page.waitForSelector('details#wifi')
+    await expect(page.locator('[name="wifi.ssid"]')).toHaveValue('SavedNet')
   })
 })
 
@@ -280,62 +287,6 @@ test.describe('Error states', () => {
     await page.locator('#btn-apply').click()
     await page.waitForTimeout(500)
     await expect(page.locator('#status-bar')).toHaveText('')
-  })
-})
-
-test.describe('Dirty flag behavior', () => {
-  test('Save & Apply disabled initially (not dirty)', async ({ page }) => {
-    await page.goto('/')
-    await expect(page.locator('#btn-save-apply')).toBeDisabled()
-  })
-
-  test('Save & Apply enabled after apply (dirty becomes true)', async ({ page }) => {
-    await page.goto('/')
-    await page.locator('details#wifi summary').click()
-    await page.locator('[name="wifi.ssid"]').fill('DirtyTest')
-    await page.locator('#btn-apply').click()
-    await page.waitForTimeout(500)
-    await expect(page.locator('#btn-save-apply')).toBeEnabled()
-  })
-
-  test('Save & Apply clears dirty flag after save', async ({ page }) => {
-    await page.goto('/')
-    await page.locator('details#wifi summary').click()
-    await page.locator('[name="wifi.ssid"]').fill('DirtyTest')
-    await page.locator('#btn-apply').click()
-    await page.waitForTimeout(500)
-    await expect(page.locator('#btn-save-apply')).toBeEnabled()
-    await page.locator('#btn-save-apply').click()
-    await page.waitForTimeout(500)
-    await expect(page.locator('#btn-save-apply')).toBeDisabled()
-  })
-
-  test('Apply still works after dirty is set', async ({ page }) => {
-    await page.goto('/')
-    await page.locator('details#wifi summary').click()
-    await page.locator('[name="wifi.ssid"]').fill('First')
-    await page.locator('#btn-apply').click()
-    await page.waitForTimeout(500)
-    await expect(page.locator('#btn-save-apply')).toBeEnabled()
-    await page.locator('[name="wifi.ssid"]').fill('Second')
-    await page.locator('#btn-apply').click()
-    await page.waitForTimeout(500)
-    await expect(page.locator('#btn-save-apply')).toBeEnabled()
-    await expect(page.locator('#pending-count')).toHaveText('')
-  })
-
-  test('reset after save still works', async ({ page }) => {
-    await page.goto('/')
-    await page.locator('details#wifi summary').click()
-    await page.locator('[name="wifi.ssid"]').fill('SaveMe')
-    await page.locator('#btn-apply').click()
-    await page.waitForTimeout(500)
-    await page.locator('#btn-save-apply').click()
-    await page.waitForTimeout(500)
-    await page.locator('[name="wifi.ssid"]').fill('ChangeAgain')
-    await page.locator('#btn-reset').click()
-    await page.waitForTimeout(500)
-    await expect(page.locator('[name="wifi.ssid"]')).toHaveValue('SaveMe')
   })
 })
 

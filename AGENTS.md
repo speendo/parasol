@@ -9,6 +9,46 @@ to minimize server load.
 - Reuse JS functions across HTTP and WebSocket paths (DRY)
 - Avoid unnecessary dependencies on the ESP32
 - Static files (HTML, JS, CSS) are served from the ESP32's filesystem
+- **Write short JS.** Every byte matters on the ESP32. Prefer `function` over arrow
+  functions (gzip compresses `function` better than the varied arrow syntax). Use
+  template literals only when you have multiple variables. Favor simple imperative
+  code over functional abstractions that add bytes. Avoid lodash, utility libs,
+  and any dependency heavier than a single inlined helper.
 
 See `docs/superpowers/specs/2026-06-18-unified-settings-design.md` for the
 current architecture and API design.
+
+# Commands
+
+- `npm run build` — minify `app.js` → `app.min.js` via terser
+- `npm test` — run all tests (unit + e2e)
+- `npm run test:unit` — vitest unit tests only
+- `npm run test:e2e` — Playwright e2e tests only
+- `npm run test:watch` — vitest in watch mode
+
+# Test Server
+
+A FastAPI test server lives at `test_server/`. It auto-starts when e2e tests
+run (configured in `playwright.config.js` webServer). Start it manually:
+
+```bash
+pip install fastapi uvicorn
+uvicorn test_server.main:app --host 127.0.0.1 --port 8765
+```
+
+# Playwright E2E Tests
+
+E2e tests use Playwright against the test server. First install browsers:
+
+```bash
+npx playwright install chromium
+```
+
+Then run e2e tests (test server auto-starts):
+
+```bash
+npm run test:e2e
+```
+
+The test server reset endpoint (`/api/settings/reset`) is called before each
+test via `test.beforeEach` in `tests/e2e/app.test.js`.

@@ -7,68 +7,136 @@ app = FastAPI()
 
 BASE = Path(__file__).resolve().parent.parent
 
-nvs_store: dict[str, str | int | bool] = {}
-applied_store: dict[str, str | int | bool] = {}
+# Schema definition — mirrors the Phase 4 settings format
+# Each top-level key is a component group. Each group has field definitions:
+# {field_key: [type, label, opts]}
+SETTINGS = {
+    "wifi": {
+        "ssid": ["text", "SSID", {"attrs": {"maxlength": 32, "placeholder": "MyNetwork"}, "value": "", "tooltip": "WiFi network name"}],
+        "password": ["password", "Password", {"attrs": {"maxlength": 64, "placeholder": "Enter password"}, "value": "", "tooltip": "WiFi password"}],
+        "mode": ["select", "Mode", {"options": [["station", "Station"], ["ap", "Access Point"]], "value": "station", "tooltip": "WiFi operating mode"}],
+        "hidden": ["switch", "Hidden SSID", {"value": False, "tooltip": "Hide network from scans"}],
+        "channel": ["range", "Channel", {"attrs": {"min": 1, "max": 13, "step": 1}, "value": 6, "tooltip": "WiFi channel number"}],
+    },
+    "gpio": {
+        "pin": ["number", "Pin Number", {"attrs": {"min": 0, "max": 39, "placeholder": "0"}, "value": 2, "tooltip": "GPIO pin number"}],
+        "direction": ["select", "Direction", {"options": [["input", "Input"], ["output", "Output"]], "value": "output", "tooltip": "Pin direction"}],
+        "pull": ["radio", "Pull Resistor", {"options": [["none", "None"], ["up", "Pull Up"], ["down", "Pull Down"]], "value": "none", "tooltip": "Internal pull resistor"}],
+        "initial": ["select", "Initial State", {"options": [["low", "Low"], ["high", "High"]], "value": "low", "tooltip": "Initial output state"}],
+    },
+}
+
+nvs_store: dict[str, object] = {}
+applied_store: dict[str, object] = {}
 
 
 @app.on_event("startup")
 async def startup():
-    manifest_path = BASE / "manifest.json"
-    manifest = json.loads(manifest_path.read_text())
-    for comp in manifest:
-        fields_path = BASE / comp["file"]
-        fields = json.loads(fields_path.read_text())
-        for f in fields:
-            key = f"{comp['id']}.{f[0]}"
-            opts = f[3] if len(f) > 3 else {}
-            default = opts.get("default", "")
-            nvs_store[key] = default
-            applied_store[key] = default
+    for comp_id, fields in SETTINGS.items():
+        for key, field_def in fields.items():
+            opts = field_def[2]
+            val = opts.get("value", "")
+            store_key = comp_id + "." + key
+            nvs_store[store_key] = val
+            applied_store[store_key] = val
+
+
+@app.get("/api/settings")
+async def get_settings():
+    result = {"_dirty": nvs_store != applied_store}
+    for comp_id, fields in SETTINGS.items():
+        group = {}
+        for key, field_def in fields.items():
+            ftype, flabel, fopts = field_def
+            opts = dict(fopts)
+            store_key = comp_id + "." + key
+            if store_key in applied_store:
+                opts["value"] = applied_store[store_key]
+            group[key] = [ftype, flabel, opts]
+        result[comp_id] = group
+    return result
+
+
+@app.post("/api/settings/save")
+async def api_settings_save(request: Request):
+    try:
+        data = await request.json()
+    except Exception:
+        return PlainTextResponse("Invalid JSON", status_code=400)
+    if not isinstance(data, dict):
+        return PlainTextResponse("Body must be a JSON object", status_code=400)
+    for comp_id, fields in data.items():
+        if comp_id.startswith("_"):
+            continue
+        for key, field_def in fields.items():
+            if not isinstance(field_def, list) or len(field_def) < 3:
+                continue
+            opts = field_def[2]
+            if "value" in opts:
+                store_key = comp_id + "." + key
+                nvs_store[store_key] = opts["value"]
+                applied_store[store_key] = opts["value"]
+    return {}
+
+
+@app.post("/api/settings/apply")
+async def api_settings_apply(request: Request):
+    try:
+        data = await request.json()
+    except Exception:
+        return PlainTextResponse("Invalid JSON", status_code=400)
+    if not isinstance(data, dict):
+        return PlainTextResponse("Body must be a JSON object", status_code=400)
+    for comp_id, fields in data.items():
+        if comp_id.startswith("_"):
+            continue
+        for key, field_def in fields.items():
+            if not isinstance(field_def, list) or len(field_def) < 3:
+                continue
+            opts = field_def[2]
+            if "value" in opts:
+                store_key = comp_id + "." + key
+                applied_store[store_key] = opts["value"]
+    return {}
+
+
+@app.api_route("/manifest.json", methods=["GET", "POST"])
+async def old_manifest():
+    return PlainTextResponse("Not Found", status_code=404)
+
+
+@app.api_route("/components/{name:path}", methods=["GET", "POST"])
+async def old_component(name: str):
+    return PlainTextResponse("Not Found", status_code=404)
+
+
+@app.api_route("/api/save", methods=["GET", "POST"])
+async def old_save():
+    return PlainTextResponse("Not Found", status_code=404)
+
+
+@app.api_route("/api/apply", methods=["GET", "POST"])
+async def old_apply():
+    return PlainTextResponse("Not Found", status_code=404)
+
+
+@app.api_route("/api/settings/reset", methods=["GET", "POST"])
+async def api_settings_reset():
+    nvs_store.clear()
+    applied_store.clear()
+    for comp_id, fields in SETTINGS.items():
+        for key, field_def in fields.items():
+            opts = field_def[2]
+            val = opts.get("value", "")
+            store_key = comp_id + "." + key
+            nvs_store[store_key] = val
+            applied_store[store_key] = val
+    return {}
 
 
 @app.get("/")
 async def get_root():
     return FileResponse(str(BASE / "index.html"))
-
-
-@app.get("/manifest.json")
-async def get_manifest():
-    return FileResponse(str(BASE / "manifest.json"))
-
-
-@app.get("/components/{name}")
-async def get_component(name: str):
-    p = BASE / "components" / name
-    if p.is_file() and p.suffix in (".json",):
-        return FileResponse(str(p))
-    return PlainTextResponse("Not Found", status_code=404)
-
-
-@app.post("/api/save")
-async def api_save(request: Request):
-    try:
-        data = await request.json()
-    except Exception:
-        return PlainTextResponse("Invalid JSON", status_code=400)
-    if not isinstance(data, dict):
-        return PlainTextResponse("Body must be a JSON object", status_code=400)
-    for key, value in data.items():
-        nvs_store[key] = value
-        applied_store[key] = value
-    return {"ok": True}
-
-
-@app.post("/api/apply")
-async def api_apply(request: Request):
-    try:
-        data = await request.json()
-    except Exception:
-        return PlainTextResponse("Invalid JSON", status_code=400)
-    if not isinstance(data, dict):
-        return PlainTextResponse("Body must be a JSON object", status_code=400)
-    for key, value in data.items():
-        applied_store[key] = value
-    return {"ok": True}
 
 
 @app.get("/{name:path}")
