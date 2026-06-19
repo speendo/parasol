@@ -34,3 +34,20 @@ def test_serves_app_js():
 def test_404_for_unknown():
     response = client.get("/nonexistent.txt")
     assert response.status_code == 404
+
+
+def test_save_updates_nvs():
+    response = client.post("/api/save", json={"wifi.ssid": "TestNet"})
+    assert response.status_code == 200
+    assert response.json() == {"ok": True}
+
+
+def test_save_rejects_invalid_json():
+    response = client.post("/api/save", content=b"not json", headers={"Content-Type": "application/json"})
+    assert response.status_code == 400
+
+
+def test_save_returns_ok_json():
+    response = client.post("/api/save", json={"wifi.ssid": "MyNetwork"})
+    data = response.json()
+    assert data == {"ok": True}

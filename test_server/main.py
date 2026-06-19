@@ -44,6 +44,33 @@ async def get_component(name: str):
     return PlainTextResponse("Not Found", status_code=404)
 
 
+@app.post("/api/save")
+async def api_save(request: Request):
+    try:
+        data = await request.json()
+    except Exception:
+        return PlainTextResponse("Invalid JSON", status_code=400)
+    if not isinstance(data, dict):
+        return PlainTextResponse("Body must be a JSON object", status_code=400)
+    for key, value in data.items():
+        nvs_store[key] = value
+        applied_store[key] = value
+    return {"ok": True}
+
+
+@app.post("/api/apply")
+async def api_apply(request: Request):
+    try:
+        data = await request.json()
+    except Exception:
+        return PlainTextResponse("Invalid JSON", status_code=400)
+    if not isinstance(data, dict):
+        return PlainTextResponse("Body must be a JSON object", status_code=400)
+    for key, value in data.items():
+        applied_store[key] = value
+    return {"ok": True}
+
+
 @app.get("/{name:path}")
 async def get_static(name: str):
     p = BASE / name
