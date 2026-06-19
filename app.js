@@ -262,6 +262,28 @@
     }
   }
 
+  function sendToServer(key, value) {
+    if (!ws || ws.readyState !== 1) return;
+    lastSent[key] = value;
+    inFlight[key] = true;
+    var parts = key.split('.');
+    var patch = {};
+    var cur = patch;
+    for (var i = 0; i < parts.length - 1; i++) {
+      cur[parts[i]] = {};
+      cur = cur[parts[i]];
+    }
+    cur[parts[parts.length - 1]] = value;
+    ws.send(JSON.stringify({action: 'apply', data: patch}));
+  }
+
+  function onUserInput(key, newValue) {
+    if (inFlight[key]) return;
+    var ls = lastSent[key];
+    if (JSON.stringify(newValue) === JSON.stringify(ls)) return;
+    sendToServer(key, newValue);
+  }
+
   function resolveNested(obj, parts) {
     var cur = obj;
     for (var i = 0; i < parts.length; i++) {
@@ -380,8 +402,26 @@
   }
 
   function bindChangeListeners() {
-    configForm.addEventListener('input', updateUI);
-    configForm.addEventListener('change', updateUI);
+    var els = configForm.querySelectorAll('input, select, textarea');
+    for (var ei = 0; ei < els.length; ei++) {
+      var el = els[ei];
+      var key = el.name;
+      if (!key) continue;
+      var handler = function () {
+        if (!el.checkValidity()) { updateUI(); return; }
+        var val = (el.type === 'checkbox') ? el.checked :
+                  (el.type === 'number' || el.type === 'range') ? parseFloat(el.value) : el.value;
+        onUserInput(key, val);
+        updateUI();
+      };
+      if (el.type === 'text' || el.type === 'password' || el.type === 'email' ||
+          el.type === 'tel' || el.type === 'url' || el.type === 'textarea') {
+        el.addEventListener('blur', handler);
+      } else {
+        el.addEventListener('change', handler);
+      }
+      el.addEventListener('input', function () { updateUI(); });
+    }
   }
 
   function wireButtons() {
@@ -521,5 +561,5 @@
       }
     }
   }
-  /* test-expose */if(window.__TEST_MODE){window.serialize=serialize;window.setBaseline=setBaseline;window.getPending=getPending;window.createField=createField;window.populateFromComponents=populateFromComponents;window.applyAttrs=applyAttrs;window.updateUI=updateUI;window.showError=showError;window.clearError=clearError;window.postJSON=postJSON;window.loadSettings=loadSettings;window.refreshComponents=refreshComponents;window.syncThen=syncThen;window.handleSaveApply=handleSaveApply;window.handleReset=handleReset;window.renderNav=renderNav;window.renderForm=renderForm;window.handleHash=handleHash;window.wireButtons=wireButtons;window.bindChangeListeners=bindChangeListeners;window.init=init;window.buildPatch=buildPatch;window.connectWS=connectWS;window.disconnectWS=disconnectWS;window.processSettings=processSettings;window.onWSMessage=onWSMessage;window.updateAV=updateAV;window.applyAV=applyAV;window.syncLS=syncLS;window.resolveNested=resolveNested;window.__test={};window.__test.receiveWSMessage=onWSMessage;Object.defineProperty(window.__test,'components',{get:function(){return components},set:function(v){components=v}});Object.defineProperty(window.__test,'dirty',{get:function(){return dirty},set:function(v){dirty=v}});}
+  /* test-expose */if(window.__TEST_MODE){window.serialize=serialize;window.setBaseline=setBaseline;window.getPending=getPending;window.createField=createField;window.populateFromComponents=populateFromComponents;window.applyAttrs=applyAttrs;window.updateUI=updateUI;window.showError=showError;window.clearError=clearError;window.postJSON=postJSON;window.loadSettings=loadSettings;window.refreshComponents=refreshComponents;window.syncThen=syncThen;window.handleSaveApply=handleSaveApply;window.handleReset=handleReset;window.renderNav=renderNav;window.renderForm=renderForm;window.handleHash=handleHash;window.wireButtons=wireButtons;window.bindChangeListeners=bindChangeListeners;window.init=init;window.buildPatch=buildPatch;window.connectWS=connectWS;window.disconnectWS=disconnectWS;window.processSettings=processSettings;window.onWSMessage=onWSMessage;window.updateAV=updateAV;window.applyAV=applyAV;window.syncLS=syncLS;window.resolveNested=resolveNested;window.sendToServer=sendToServer;window.onUserInput=onUserInput;window.__test={};window.__test.receiveWSMessage=onWSMessage;window.__test.wsReady=function(){if(ws)ws.readyState=1};Object.defineProperty(window.__test,'components',{get:function(){return components},set:function(v){components=v}});Object.defineProperty(window.__test,'dirty',{get:function(){return dirty},set:function(v){dirty=v}});Object.defineProperty(window.__test,'lastSent',{get:function(){return lastSent},set:function(v){lastSent=v}});Object.defineProperty(window.__test,'inFlight',{get:function(){return inFlight},set:function(v){inFlight=v}});}
 })();

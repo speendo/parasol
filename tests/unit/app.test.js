@@ -681,6 +681,40 @@ describe('handleReset', () => {
   })
 })
 
+describe('onUserInput', () => {
+  beforeEach(() => {
+    window.__test.wsSent = null
+    window.__test.onWSSend = function (data) { window.__test.wsSent = JSON.parse(data) }
+    window.connectWS()
+    window.__test.wsReady()
+  })
+
+  it('sends value over WS when field changes', () => {
+    window.onUserInput('wifi.ssid', 'NewNet')
+    expect(window.__test.wsSent).toEqual({ action: 'apply', data: { wifi: { ssid: 'NewNet' } } })
+  })
+
+  it('sets lastSent and inFlight after sending', () => {
+    window.onUserInput('gpio.pin', 7)
+    expect(window.__test.lastSent['gpio.pin']).toBe(7)
+    expect(window.__test.inFlight['gpio.pin']).toBe(true)
+  })
+
+  it('does not send when value unchanged from lastSent', () => {
+    window.onUserInput('wifi.ssid', 'SameNet')
+    window.__test.wsSent = null
+    window.onUserInput('wifi.ssid', 'SameNet')
+    expect(window.__test.wsSent).toBeNull()
+  })
+
+  it('does not send when inFlight is true', () => {
+    window.onUserInput('wifi.ssid', 'val1')
+    window.__test.wsSent = null
+    window.onUserInput('wifi.ssid', 'val2')
+    expect(window.__test.wsSent).toBeNull()
+  })
+})
+
 describe('init', () => {
   beforeEach(() => {
     document.getElementById('nav-list').innerHTML = ''
