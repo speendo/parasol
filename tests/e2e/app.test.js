@@ -116,3 +116,114 @@ test.describe('Initial values', () => {
     await expect(page.locator('#btn-save-apply')).toBeDisabled()
   })
 })
+
+test.describe('Pending detection', () => {
+  test('changing text shows pending', async ({ page }) => {
+    await page.goto('/')
+    await page.locator('details#wifi summary').click()
+    await page.locator('[name="wifi.ssid"]').fill('MyNetwork')
+    await expect(page.locator('#pending-count')).toHaveText('1 pending change(s)')
+  })
+
+  test('restoring value clears pending', async ({ page }) => {
+    await page.goto('/')
+    await page.locator('details#wifi summary').click()
+    const ssid = page.locator('[name="wifi.ssid"]')
+    await ssid.fill('MyNetwork')
+    await expect(page.locator('#pending-count')).toHaveText('1 pending change(s)')
+    await ssid.fill('')
+    await expect(page.locator('#pending-count')).toHaveText('')
+  })
+
+  test('changing switch triggers pending', async ({ page }) => {
+    await page.goto('/')
+    await page.locator('details#wifi summary').click()
+    await page.locator('[name="wifi.hidden"]').check()
+    await expect(page.locator('#pending-count')).toHaveText('1 pending change(s)')
+  })
+
+  test('changing select triggers pending', async ({ page }) => {
+    await page.goto('/')
+    await page.locator('details#wifi summary').click()
+    await page.locator('[name="wifi.mode"]').selectOption('ap')
+    await expect(page.locator('#pending-count')).toHaveText('1 pending change(s)')
+  })
+
+  test('changing range triggers pending', async ({ page }) => {
+    await page.goto('/')
+    await page.locator('details#wifi summary').click()
+    await page.locator('[name="wifi.channel"]').fill('11')
+    await expect(page.locator('#pending-count')).toHaveText('1 pending change(s)')
+  })
+
+  test('multiple changes show correct count', async ({ page }) => {
+    await page.goto('/')
+    await page.locator('details#wifi summary').click()
+    await page.locator('[name="wifi.ssid"]').fill('MyNet')
+    await page.locator('[name="wifi.mode"]').selectOption('ap')
+    await expect(page.locator('#pending-count')).toHaveText('2 pending change(s)')
+  })
+
+  test('changing radio triggers pending', async ({ page }) => {
+    await page.goto('/')
+    await page.locator('details#gpio summary').click()
+    await page.locator('[name="gpio.pull"]').nth(1).check()
+    await expect(page.locator('#pending-count')).toHaveText('1 pending change(s)')
+  })
+
+  test('switch toggle and revert clears pending', async ({ page }) => {
+    await page.goto('/')
+    await page.locator('details#wifi summary').click()
+    const sw = page.locator('[name="wifi.hidden"]')
+    await sw.check()
+    await expect(page.locator('#pending-count')).toHaveText('1 pending change(s)')
+    await sw.uncheck()
+    await expect(page.locator('#pending-count')).toHaveText('')
+  })
+
+  test('radio change and revert clears pending', async ({ page }) => {
+    await page.goto('/')
+    await page.locator('details#gpio summary').click()
+    await page.locator('[name="gpio.pull"][value="up"]').check()
+    await expect(page.locator('#pending-count')).toHaveText('1 pending change(s)')
+    await page.locator('[name="gpio.pull"][value="none"]').check()
+    await expect(page.locator('#pending-count')).toHaveText('')
+  })
+})
+
+test.describe('Button actions', () => {
+  test('apply clears pending', async ({ page }) => {
+    await page.goto('/')
+    await page.locator('details#wifi summary').click()
+    await page.locator('[name="wifi.ssid"]').fill('TestNet')
+    await expect(page.locator('#pending-count')).toHaveText('1 pending change(s)')
+    await page.locator('#btn-apply').click()
+    await page.waitForTimeout(500)
+    await expect(page.locator('#pending-count')).toHaveText('')
+  })
+
+  test('reset after apply reverts to design-time defaults', async ({ page }) => {
+    await page.goto('/')
+    await page.locator('details#wifi summary').click()
+    await page.locator('[name="wifi.ssid"]').fill('StableNet')
+    await page.locator('#btn-apply').click()
+    await page.waitForTimeout(500)
+    await page.locator('[name="wifi.ssid"]').fill('LocalChange')
+    await expect(page.locator('#pending-count')).toHaveText('1 pending change(s)')
+    await page.locator('#btn-reset').click()
+    await page.waitForTimeout(500)
+    await expect(page.locator('[name="wifi.ssid"]')).toHaveValue('')
+    await expect(page.locator('#pending-count')).toHaveText('')
+  })
+
+  test('save and apply then reload shows design-time defaults', async ({ page }) => {
+    await page.goto('/')
+    await page.locator('details#wifi summary').click()
+    await page.locator('[name="wifi.ssid"]').fill('SavedNet')
+    await page.locator('#btn-save-apply').click()
+    await page.waitForTimeout(500)
+    await page.reload()
+    await page.waitForSelector('details#wifi')
+    await expect(page.locator('[name="wifi.ssid"]')).toHaveValue('')
+  })
+})
