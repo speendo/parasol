@@ -380,9 +380,10 @@
   }
 
   function onUserInput(key, newValue) {
-    if (inFlight[key]) return;
+    if (inFlight[key]) { console.log('onUserInput SKIP inFlight', key, newValue); return; }
     var ls = lastSent[key];
-    if (JSON.stringify(newValue) === JSON.stringify(ls)) return;
+    if (JSON.stringify(newValue) === JSON.stringify(ls)) { console.log('onUserInput SKIP same', key, newValue, ls); return; }
+    console.log('onUserInput SEND', key, newValue);
     sendToServer(key, newValue);
   }
 
@@ -545,6 +546,7 @@
           if (!el.checkValidity()) { updateUI(); return; }
           var val = (el.type === 'checkbox') ? el.checked :
                     (el.type === 'number' || el.type === 'range') ? parseFloat(el.value) : el.value;
+          console.log('handler firing', el.type, el.name, el.value, 'checked:', el.checked, 'key:', key, 'val:', val);
           onUserInput(key, val);
           updateUI();
         };
