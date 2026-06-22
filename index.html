@@ -28,6 +28,9 @@
       #server-changed[hidden] { display: none; }
       #status-bar:empty { display: none; }
       footer .container { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; width: 100%; }
+      footer:not(:has(button:not([hidden]))):has(#status-bar:empty) {
+        display: none;
+      }
     </style>
 </head>
 <body>
@@ -60,8 +63,7 @@
       <div class="container">
         <mark id="status-bar"></mark>
         <div role="group">
-          <button id="btn-save-apply" class="contrast" disabled>Save &amp; Apply</button>
-          <button id="btn-reset" class="secondary" disabled>Reset</button>
+          <button id="btn-save-apply" class="contrast" disabled hidden>Save</button>
         </div>
       </div>
     </footer>
