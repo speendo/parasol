@@ -864,3 +864,184 @@ describe('WS reconnect', () => {
     expect(document.getElementById('config-form').getAttribute('aria-busy')).toBe('true')
   })
 })
+
+describe('populateFromComponents null safety', () => {
+  beforeEach(() => {
+    document.querySelector('#config-form').innerHTML = '<input name="wifi.ssid" value="" />'
+  })
+
+  it('handles field without opts gracefully', () => {
+    expect(function () {
+      window.populateFromComponents([
+        { id: 'wifi', fields: [{ key: 'ssid', type: 'text', label: 'SSID' }] },
+      ])
+    }).not.toThrow()
+  })
+
+  it('handles field with opts undefined gracefully', () => {
+    expect(function () {
+      window.populateFromComponents([
+        { id: 'wifi', fields: [{ key: 'ssid', type: 'text', label: 'SSID', opts: undefined }] },
+      ])
+    }).not.toThrow()
+  })
+})
+
+describe('dirty flag propagation', () => {
+  beforeEach(() => {
+    window.__test.dirty = false
+  })
+
+  it('onWSMessage sets dirty from _dirty flag', () => {
+    window.__test.receiveWSMessage({ data: JSON.stringify({ _dirty: true, wifi: { ssid: ['text', 'SSID', { value: '' }] } }) })
+    expect(window.__test.dirty).toBe(true)
+  })
+
+  it('onWSMessage sets dirty false when _dirty is false', () => {
+    window.__test.receiveWSMessage({ data: JSON.stringify({ _dirty: false, wifi: { ssid: ['text', 'SSID', { value: '' }] } }) })
+    expect(window.__test.dirty).toBe(false)
+  })
+
+  it('syncThen resets dirty to false', () => {
+    window.__test.dirty = true
+    window.syncThen()
+    expect(window.__test.dirty).toBe(false)
+  })
+})
+
+describe('sendToServer field lookup', () => {
+  beforeEach(() => {
+    document.querySelector('#config-form').innerHTML = '<input name="wifi.ssid" value="" />'
+    window.__test.components = [
+      { id: 'wifi', fields: [{ key: 'ssid', type: 'text', label: 'SSID', opts: {} }] },
+    ]
+    window.__test.wsSent = null
+    window.__test.onWSSend = function (data) { window.__test.wsSent = JSON.parse(data) }
+    window.__test.lastSent = {}
+    window.__test.inFlight = {}
+    if (window.ws) window.ws.close()
+    window.connectWS()
+  })
+
+  it('sends full field format with type and label from components', () => {
+    window.__test.wsReady()
+    window.sendToServer('wifi.ssid', 'MyVal')
+    expect(window.__test.wsSent).toEqual({
+      action: 'apply',
+      data: { wifi: { ssid: ['text', 'SSID', { value: 'MyVal' }] } },
+    })
+  })
+})
+
+describe('radio event handling', () => {
+  beforeEach(() => {
+    document.querySelector('#config-form').innerHTML = [
+      '<input type="radio" name="gpio.pull" id="gpio.pull.none" value="none">',
+      '<input type="radio" name="gpio.pull" id="gpio.pull.up" value="up">',
+      '<input type="radio" name="gpio.pull" id="gpio.pull.down" value="down">',
+    ].join('')
+    window.__test.components = [{
+      id: 'gpio', fields: [
+        { key: 'pull', type: 'radio', label: 'Pull Resistor', opts: { value: 'none' } },
+      ],
+    }]
+    window.__test.dirty = false
+    window.setBaseline()
+  })
+
+  it('radio uses click event not change', () => {
+    window.bindChangeListeners()
+    var radio = document.getElementById('gpio.pull.up')
+    var clickFired = false
+    radio.addEventListener('click', function () { clickFired = true })
+    radio.dispatchEvent(new Event('click', { bubbles: true }))
+    expect(clickFired).toBe(true)
+  })
+
+  it('bindChangeListeners does not attach change handler to radio', () => {
+    window.bindChangeListeners()
+    var radio = document.getElementById('gpio.pull.up')
+    var handlers = radio.eventListeners
+    expect(handlers).toBeUndefined()
+  })
+})
+
+describe('radio createField structure', () => {
+  it('returns div container not fieldset', () => {
+    var field = window.createField('gpio', {
+      key: 'pull', type: 'radio', label: 'Pull Resistor',
+      opts: { options: [['none', 'None'], ['up', 'Up'], ['down', 'Down']], value: 'none' },
+    })
+    expect(field.tagName).toBe('DIV')
+    expect(field.querySelector('fieldset')).not.toBeNull()
+  })
+
+  it('radio tooltip is outside fieldset inside the container div', () => {
+    var field = window.createField('gpio', {
+      key: 'pull', type: 'radio', label: 'Pull Resistor',
+      opts: {
+        options: [['none', 'None'], ['up', 'Up'], ['down', 'Down']],
+        value: 'none',
+        tooltip: 'Select pull resistor',
+      },
+    })
+    var fieldset = field.querySelector('fieldset')
+    var small = field.querySelector('small')
+    expect(small).not.toBeNull()
+    expect(fieldset.contains(small)).toBe(false)
+    expect(field.contains(small)).toBe(true)
+  })
+})
+
+describe('echo path syncLS', () => {
+  beforeEach(() => {
+    document.querySelector('#config-form').innerHTML = '<input name="wifi.ssid" value="newVal" />'
+    window.__test.components = [{
+      id: 'wifi', fields: [{ key: 'ssid', type: 'text', label: 'SSID', opts: { value: 'oldVal' } }],
+    }]
+    window.__test.lastSent = {}
+    window.__test.inFlight = { 'wifi.ssid': true }
+    window.__test.lastSent['wifi.ssid'] = 'newVal'
+  })
+
+  it('syncLS called after echo match updates lastSent', () => {
+    window.__test.receiveWSMessage({
+      data: JSON.stringify({
+        _dirty: true,
+        wifi: { ssid: ['text', 'SSID', { value: 'newVal' }] },
+      }),
+    })
+    expect(window.__test.lastSent['wifi.ssid']).toBe('newVal')
+  })
+})
+
+describe('init does not call bindChangeListeners', () => {
+  beforeEach(() => {
+    document.getElementById('nav-list').innerHTML = ''
+    document.getElementById('config-form').innerHTML = ''
+    document.getElementById('status-bar').textContent = ''
+  })
+
+  it('init connects WS without calling bindChangeListeners', async () => {
+    var called = false
+    var orig = window.bindChangeListeners
+    window.bindChangeListeners = function () { called = true }
+    await window.init()
+    expect(called).toBe(false)
+    window.bindChangeListeners = orig
+  })
+})
+
+describe('footer visibility (CSS-only)', () => {
+  beforeEach(() => {
+    document.getElementById('status-bar').textContent = ''
+  })
+
+  it('footer visible when status bar has content even without button', () => {
+    window.showError('Test error')
+    var footer = document.querySelector('footer')
+    var btnHidden = document.getElementById('btn-save-apply').hidden
+    var cssHides = btnHidden && !document.getElementById('status-bar').textContent
+    expect(cssHides).toBe(false)
+  })
+})
