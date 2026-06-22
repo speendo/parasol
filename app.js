@@ -551,6 +551,8 @@
         if (el.type === 'text' || el.type === 'password' || el.type === 'email' ||
             el.type === 'tel' || el.type === 'url' || el.type === 'textarea') {
           el.addEventListener('blur', handler);
+        } else if (el.type === 'radio') {
+          el.addEventListener('click', handler);
         } else {
           el.addEventListener('change', handler);
         }
