@@ -203,7 +203,9 @@ describe('createField', () => {
       key: 'pull', type: 'radio', label: 'Pull Resistor',
       opts: { options: [['none', 'None'], ['up', 'Up'], ['down', 'Down']], value: 'none' },
     })
-    expect(field.tagName).toBe('FIELDSET')
+    expect(field.tagName).toBe('DIV')
+    var fieldset = field.querySelector('fieldset')
+    expect(fieldset).not.toBeNull()
     var radios = field.querySelectorAll('input[type="radio"]')
     expect(radios.length).toBe(3)
     expect(radios[0].value).toBe('none')

@@ -217,6 +217,7 @@
     components = comps;
     renderNav();
     renderForm();
+    bindChangeListeners();
     populateFromComponents();
     setBaseline();
     configForm.removeAttribute('aria-busy');
@@ -596,7 +597,6 @@
 
   async function init() {
     if (!configForm || !navList || !statusBar || !footer || !btnSaveApply) return;
-    bindChangeListeners();
     wireButtons();
     connectWS();
   }
@@ -659,13 +659,6 @@
       var legend = document.createElement('legend');
       legend.textContent = labelText + (required ? '*' : '');
       fieldset.appendChild(legend);
-      if (opts.tooltip) {
-        var helper = document.createElement('small');
-        helper.id = namePrefix + '.' + key + '-helper';
-        helper.textContent = opts.tooltip;
-        legend.setAttribute('aria-describedby', helper.id);
-        fieldset.appendChild(helper);
-      }
       if (opts.options) {
         for (var oi = 0; oi < opts.options.length; oi++) {
           var opt = opts.options[oi];
@@ -685,7 +678,15 @@
           fieldset.appendChild(radioLabel);
         }
       }
-      return fieldset;
+      var container = document.createElement('div');
+      container.appendChild(fieldset);
+      if (opts.tooltip) {
+        var helper = document.createElement('small');
+        helper.id = namePrefix + '.' + key + '-helper';
+        helper.textContent = opts.tooltip;
+        container.appendChild(helper);
+      }
+      return container;
     }
 
     var labelEl = document.createElement('label');
