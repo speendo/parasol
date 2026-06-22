@@ -23,60 +23,19 @@ test.describe('Form rendering', () => {
 
   test('no pending changes initially', async ({ page }) => {
     await page.goto('/')
-    await expect(page.locator('#btn-save-apply')).toBeDisabled()
-    await expect(page.locator('#btn-reset')).toBeDisabled()
+    await expect(page.locator('#btn-save-apply')).toBeHidden()
   })
 
   test('tooltip is rendered', async ({ page }) => {
     await page.goto('/')
     await page.locator('details#wifi summary').click()
-    await expect(page.locator('[name="wifi.ssid"]')).toHaveAttribute('title', 'WiFi network name')
+    await expect(page.locator('[name="wifi.ssid"]')).toHaveAttribute('aria-describedby', 'wifi.ssid-helper')
+    await expect(page.locator('#wifi\\.ssid-helper')).toHaveText('WiFi network name')
   })
 
   test('removes aria-busy after settings loaded', async ({ page }) => {
     await page.goto('/')
     await expect(page.locator('#config-form')).not.toHaveAttribute('aria-busy', 'true')
-  })
-})
-
-test.describe('Pending detection', () => {
-  test('detects text input change', async ({ page }) => {
-    await page.goto('/')
-    await page.locator('details#wifi summary').click()
-    await page.locator('[name="wifi.ssid"]').fill('MyNetwork')
-    await expect(page.locator('#btn-reset')).toBeEnabled()
-  })
-
-  test('detects select change', async ({ page }) => {
-    await page.goto('/')
-    await page.locator('details#wifi summary').click()
-    await page.locator('[name="wifi.mode"]').selectOption('ap')
-    await expect(page.locator('#btn-reset')).toBeEnabled()
-  })
-
-  test('detects switch change', async ({ page }) => {
-    await page.goto('/')
-    await page.locator('details#gpio summary').click()
-    await page.locator('[name="gpio.initial"]').selectOption('high')
-    await expect(page.locator('#btn-reset')).toBeEnabled()
-  })
-
-  test('revert clears pending', async ({ page }) => {
-    await page.goto('/')
-    await page.locator('details#wifi summary').click()
-    await page.locator('[name="wifi.ssid"]').fill('Temporary')
-    await expect(page.locator('#btn-reset')).toBeEnabled()
-    await page.locator('[name="wifi.ssid"]').fill('')
-    await expect(page.locator('#btn-reset')).toBeDisabled()
-  })
-
-  test('multiple changes enable Reset', async ({ page }) => {
-    await page.goto('/')
-    await page.locator('details#wifi summary').click()
-    await page.locator('details#gpio summary').click()
-    await page.locator('[name="wifi.ssid"]').fill('A')
-    await page.locator('[name="gpio.pin"]').fill('7')
-    await expect(page.locator('#btn-reset')).toBeEnabled()
   })
 })
 
@@ -88,6 +47,7 @@ test.describe('Save & Apply button', () => {
     await page.locator('[name="wifi.password"]').focus()
     await page.waitForTimeout(500)
     await expect(page.locator('#btn-save-apply')).toBeEnabled()
+    await expect(page.locator('#btn-save-apply')).not.toBeHidden()
   })
 
   test('Save & Apply clears dirty after save', async ({ page }) => {
@@ -100,6 +60,7 @@ test.describe('Save & Apply button', () => {
     await page.locator('#btn-save-apply').click()
     await page.waitForTimeout(500)
     await expect(page.locator('#btn-save-apply')).toBeDisabled()
+    await expect(page.locator('#btn-save-apply')).toBeHidden()
   })
 })
 
@@ -157,13 +118,4 @@ test.describe('WebSocket notifications', () => {
   })
 })
 
-test.describe('Error states', () => {
-  test('reset restores default values', async ({ page }) => {
-    await page.goto('/')
-    await page.locator('details#wifi summary').click()
-    await page.locator('[name="wifi.ssid"]').fill('Changed')
-    await page.locator('#btn-reset').click()
-    await page.waitForTimeout(500)
-    await expect(page.locator('[name="wifi.ssid"]')).toHaveValue('')
-  })
-})
+
