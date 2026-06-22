@@ -13,7 +13,6 @@ document.body.innerHTML = `
   <div id="status-bar"></div>
   <footer></footer>
   <button id="btn-save-apply"></button>
-  <button id="btn-reset"></button>
   <mark id="server-changed" hidden>
     <span id="notif-text"></span>
     <button id="notif-load" hidden></button>

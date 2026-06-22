@@ -464,20 +464,6 @@ describe('wireButtons / bindChangeListeners', () => {
     window.setBaseline()
   })
 
-  it('wireButtons attaches click handler to btn-reset', async () => {
-    document.querySelector('[name="wifi.ssid"]').value = 'changed'
-    window.fetch = function (url, opts) {
-      if (opts && opts.method === 'POST') return Promise.resolve({ ok: true })
-      return Promise.resolve({ ok: true, json: function () { return Promise.resolve({ _dirty: false, wifi: { ssid: ['text', 'SSID', { value: 'changed' }] } }) } })
-    }
-    window.wireButtons()
-    window.updateUI()
-    expect(document.getElementById('btn-reset').disabled).toBe(false)
-    document.getElementById('btn-reset').click()
-    await new Promise(function (r) { return setTimeout(r, 0) })
-    expect(window.getPending()).toEqual({})
-  })
-
   it('bindChangeListeners triggers updateUI on input event', () => {
     window.bindChangeListeners()
     document.querySelector('[name="wifi.ssid"]').value = 'changed'
@@ -651,26 +637,6 @@ describe('handleSaveApply', () => {
   it('does nothing when no pending and dirty is false', () => {
     window.fetch = function () { throw new Error('should not be called') }
     expect(function () { window.handleSaveApply() }).not.toThrow()
-  })
-})
-
-describe('handleReset', () => {
-  beforeEach(() => {
-    document.querySelector('#config-form').innerHTML = '<input name="wifi.ssid" value="baseline" />'
-    window.__test.components = [{ id: 'wifi', fields: [{ key: 'ssid', type: 'text', label: 'SSID', opts: { value: 'baseline' } }] }]
-    window.setBaseline()
-    document.getElementById('status-bar').textContent = 'some error'
-    window.fetch = function () {
-      return Promise.resolve({ ok: true, json: function () { return Promise.resolve({ _dirty: false, wifi: { ssid: ['text', 'SSID', { value: 'baseline' }] } }) } })
-    }
-  })
-
-  it('clears error and reconnects WS', async () => {
-    document.querySelector('[name="wifi.ssid"]').value = 'dirty'
-    expect(Object.keys(window.getPending()).length).toBeGreaterThan(0)
-    window.handleReset()
-    await new Promise(function (r) { return setTimeout(r, 0) })
-    expect(document.getElementById('status-bar').textContent).toBe('')
   })
 })
 
