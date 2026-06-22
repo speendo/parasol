@@ -267,10 +267,12 @@
         }
         updateAV(data);
         applyAV();
+        syncLS();
         return;
       }
       updateAV(data);
       applyAV();
+      syncLS();
       return;
     }
 
@@ -380,10 +382,9 @@
   }
 
   function onUserInput(key, newValue) {
-    if (inFlight[key]) { console.log('onUserInput SKIP inFlight', key, newValue); return; }
+    if (inFlight[key]) return;
     var ls = lastSent[key];
-    if (JSON.stringify(newValue) === JSON.stringify(ls)) { console.log('onUserInput SKIP same', key, newValue, ls); return; }
-    console.log('onUserInput SEND', key, newValue);
+    if (JSON.stringify(newValue) === JSON.stringify(ls)) return;
     sendToServer(key, newValue);
   }
 
@@ -546,7 +547,6 @@
           if (!el.checkValidity()) { updateUI(); return; }
           var val = (el.type === 'checkbox') ? el.checked :
                     (el.type === 'number' || el.type === 'range') ? parseFloat(el.value) : el.value;
-          console.log('handler firing', el.type, el.name, el.value, 'checked:', el.checked, 'key:', key, 'val:', val);
           onUserInput(key, val);
           updateUI();
         };
