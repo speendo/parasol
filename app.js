@@ -398,8 +398,13 @@
   }
 
   function readFormValue(parts) {
-    var el = document.querySelector('[name="' + parts.join('.') + '"]');
+    var nameSel = '[name="' + parts.join('.') + '"]';
+    var el = document.querySelector(nameSel);
     if (!el) return undefined;
+    if (el.type === 'radio') {
+      var checked = document.querySelector(nameSel + ':checked');
+      return checked ? checked.value : undefined;
+    }
     if (el.type === 'checkbox') return el.checked;
     if (el.type === 'number' || el.type === 'range') return parseFloat(el.value);
     return el.value;

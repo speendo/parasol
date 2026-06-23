@@ -1032,6 +1032,45 @@ describe('init does not call bindChangeListeners', () => {
   })
 })
 
+describe('readFormValue', () => {
+  beforeEach(() => {
+    document.querySelector('#config-form').innerHTML = [
+      '<input type="radio" name="gpio.pull" id="gpio.pull.none" value="none" checked />',
+      '<input type="radio" name="gpio.pull" id="gpio.pull.up" value="up" />',
+      '<input type="radio" name="gpio.pull" id="gpio.pull.down" value="down" />',
+    ].join('')
+  })
+
+  it('returns checked radio value not first radio', () => {
+    expect(window.readFormValue(['gpio', 'pull'])).toBe('none')
+  })
+
+  it('returns updated checked radio value after selection change', () => {
+    document.getElementById('gpio.pull.up').checked = true
+    expect(window.readFormValue(['gpio', 'pull'])).toBe('up')
+  })
+
+  it('returns checked state for checkbox (true/false)', () => {
+    document.querySelector('#config-form').innerHTML =
+      '<input type="checkbox" name="gpio.enabled" checked />'
+    expect(window.readFormValue(['gpio', 'enabled'])).toBe(true)
+    document.querySelector('[name="gpio.enabled"]').checked = false
+    expect(window.readFormValue(['gpio', 'enabled'])).toBe(false)
+  })
+
+  it('returns value for non-radio fields unchanged', () => {
+    var text = document.createElement('input')
+    text.setAttribute('name', 'wifi.ssid')
+    text.value = 'hello'
+    document.querySelector('#config-form').appendChild(text)
+    expect(window.readFormValue(['wifi', 'ssid'])).toBe('hello')
+  })
+
+  it('returns undefined when element not found', () => {
+    expect(window.readFormValue(['wifi', 'missing'])).toBeUndefined()
+  })
+})
+
 describe('footer visibility (CSS-only)', () => {
   beforeEach(() => {
     document.getElementById('status-bar').textContent = ''
