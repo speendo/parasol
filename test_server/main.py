@@ -119,7 +119,10 @@ def build_status():
 async def status_broadcaster():
     while True:
         await asyncio.sleep(3)
-        payload = build_status()
+        try:
+            payload = build_status()
+        except Exception:
+            continue
         for client in list(connected):
             try:
                 await client.send_json({"type": "status", "data": payload})
