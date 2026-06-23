@@ -890,6 +890,8 @@ describe('populateFromComponents null safety', () => {
 describe('dirty flag propagation', () => {
   beforeEach(() => {
     window.__test.dirty = false
+    window.__test.inFlight = {}
+    window.__test.lastSent = {}
   })
 
   it('onWSMessage sets dirty from _dirty flag', () => {
@@ -1068,6 +1070,36 @@ describe('readFormValue', () => {
 
   it('returns undefined when element not found', () => {
     expect(window.readFormValue(['wifi', 'missing'])).toBeUndefined()
+  })
+})
+
+describe('dirty flag survives dropped WS messages', () => {
+  beforeEach(() => {
+    document.querySelector('#config-form').innerHTML = [
+      '<input type="radio" name="gpio.pull" value="none" checked />',
+      '<input type="radio" name="gpio.pull" value="up" />',
+      '<input type="radio" name="gpio.pull" value="down" />',
+    ].join('')
+    window.__test.components = [{
+      id: 'gpio', fields: [
+        { key: 'pull', type: 'radio', label: 'Pull Resistor', opts: { value: 'up' } },
+      ],
+    }]
+    window.__test.lastSent = {}
+    window.__test.inFlight = {}
+    window.__test.dirty = true
+    window.__test.lastSent['gpio.pull'] = 'up'
+    window.__test.inFlight['gpio.pull'] = true
+  })
+
+  it('dirty stays true when WS message is dropped due to inFlight mismatch', () => {
+    window.__test.receiveWSMessage({
+      data: JSON.stringify({
+        _dirty: false,
+        gpio: { pull: ['radio', 'Pull Resistor', { value: 'none' }] },
+      }),
+    })
+    expect(window.__test.dirty).toBe(true)
   })
 })
 

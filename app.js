@@ -232,9 +232,7 @@
     if (msg.type !== 'settings' && msg._dirty === undefined) return;
     wsRetries = 0;
 
-    var dirtyFlag = msg._dirty;
     var data = msg.data || msg;
-    dirty = dirtyFlag;
 
     // ── Echo resolution ──
     var echoMatched = false;
@@ -252,6 +250,7 @@
     }
 
     if (echoMatched) {
+      dirty = msg._dirty;
       var queuedKeys = [];
       for (var key in inFlight) {
         if (inFlight[key]) continue;
@@ -280,9 +279,11 @@
     for (var k in inFlight) { if (inFlight[k]) { hasInFlight = true; break; } }
     if (hasInFlight) return;
 
+    dirty = msg._dirty;
+
     // Initial load — no components yet, process settings directly
     if (components.length === 0) {
-      processSettings(data, dirtyFlag);
+      processSettings(data, msg._dirty);
       return;
     }
 
