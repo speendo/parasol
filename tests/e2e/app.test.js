@@ -62,6 +62,27 @@ test.describe('Save & Apply button', () => {
     await expect(page.locator('#btn-save-apply')).toBeDisabled()
     await expect(page.locator('#btn-save-apply')).toBeHidden()
   })
+
+  test('Save stays visible after multiple radio changes', async ({ page }) => {
+    await page.goto('/#gpio')
+    await page.waitForTimeout(500)
+    await expect(page.locator('#btn-save-apply')).toBeHidden()
+    await page.locator('#gpio\\.pull\\.up').check()
+    await page.waitForTimeout(500)
+    await expect(page.locator('#btn-save-apply')).toBeVisible()
+    await page.locator('#gpio\\.pull\\.down').check()
+    await page.waitForTimeout(500)
+    await expect(page.locator('#btn-save-apply')).toBeVisible()
+  })
+
+  test('Save appears after toggling checkbox', async ({ page }) => {
+    await page.goto('/#gpio')
+    await page.waitForTimeout(500)
+    await expect(page.locator('[name="gpio.enabled"]')).toBeChecked()
+    await page.locator('[name="gpio.enabled"]').uncheck()
+    await page.waitForTimeout(500)
+    await expect(page.locator('#btn-save-apply')).toBeVisible()
+  })
 })
 
 test.describe('Navigation and hash', () => {

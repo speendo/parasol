@@ -1136,6 +1136,36 @@ describe('echo resolution with radio does not trigger spurious queued keys', () 
   })
 })
 
+describe('echo resolution with checkbox preserves dirty', () => {
+  beforeEach(() => {
+    document.querySelector('#config-form').innerHTML =
+      '<input type="checkbox" name="gpio.enabled" checked />'
+    window.__test.components = [{
+      id: 'gpio', fields: [
+        { key: 'enabled', type: 'checkbox', label: 'GPIO Enabled', opts: { value: false } },
+      ],
+    }]
+    window.__test.lastSent = {}
+    window.__test.inFlight = {}
+    window.__test.dirty = false
+    window.__test.lastSent['gpio.enabled'] = true
+    window.__test.inFlight['gpio.enabled'] = true
+    document.getElementById('server-changed').hidden = true
+  })
+
+  it('echo match with checkbox does not queue spurious change', () => {
+    window.__test.receiveWSMessage({
+      data: JSON.stringify({
+        _dirty: true,
+        gpio: { enabled: ['checkbox', 'GPIO Enabled', { value: true }] },
+      }),
+    })
+    expect(window.__test.inFlight['gpio.enabled']).toBe(false)
+    expect(window.__test.dirty).toBe(true)
+    expect(window.__test.components[0].fields[0].opts.value).toBe(true)
+  })
+})
+
 describe('footer visibility (CSS-only)', () => {
   beforeEach(() => {
     document.getElementById('status-bar').textContent = ''
