@@ -1,9 +1,9 @@
 import { defineConfig } from '@playwright/test'
 import { existsSync } from 'fs'
 
-const customLibPath = '/tmp/glib-noble/usr/lib/x86_64-linux-gnu'
-const launchEnv = existsSync(customLibPath)
-  ? { LD_LIBRARY_PATH: customLibPath + ':/tmp/playwright-libs/usr/lib/x86_64-linux-gnu' }
+const testDepsLib = process.cwd() + '/test-deps/lib'
+const launchEnv = existsSync(testDepsLib)
+  ? { LD_LIBRARY_PATH: testDepsLib }
   : undefined
 
 export default defineConfig({

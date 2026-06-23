@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test'
 
+test.beforeEach(async ({ request }) => {
+  await request.get('/api/settings/reset')
+})
+
 test.describe('Form rendering', () => {
   test('renders accordion sections from settings', async ({ page }) => {
     await page.goto('/')

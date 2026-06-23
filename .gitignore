@@ -1,3 +1,7 @@
 node_modules/
 .venv/
 __pycache__/
+test-deps/lib/
+test-deps/debs/
+test-deps/_extract/
+test-deps/*.bak/

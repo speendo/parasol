@@ -59,3 +59,23 @@ npm run test:e2e
 
 The test server reset endpoint (`/api/settings/reset`) is called before each
 test via `test.beforeEach` in `tests/e2e/app.test.js`.
+
+# Playwright System Dependencies
+
+The chromium headless shell used by Playwright requires several shared
+libraries (libnss3, libnspr4, libdbus-1-3, libatk, etc.) that may not be
+installed on the system. These are provided in `test-deps/lib/`.
+
+To (re)generate `test-deps/lib/`, run the setup script (no sudo needed):
+
+```bash
+bash test-deps/setup.sh
+```
+
+This downloads the required .deb packages from `archive.ubuntu.com` and
+extracts them into `test-deps/lib/`. The `playwright.config.js` sets
+`LD_LIBRARY_PATH` to point at this directory automatically when it exists.
+
+The cached `.deb` files live in `test-deps/debs/` to avoid re-downloading. Both
+directories are safe to commit — they're platform-specific (Ubuntu Noble
+24.04 amd64) but needed for CI.
