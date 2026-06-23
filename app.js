@@ -16,16 +16,23 @@
   var wsReconnectTimer = null;
   var wsRetries = 0;
 
+  /** Show an error message in the status bar. @param {string} msg */
   function showError(msg) {
     statusBar.textContent = msg;
     statusBar.style.color = 'var(--pico-color-red)';
   }
 
+  /** Clear the status bar error. */
   function clearError() {
     statusBar.textContent = '';
     statusBar.style.color = '';
   }
 
+  /**
+   * Serialize all form field values into a flat key-value object.
+   * Keys are "compId.fieldKey", values are native types (string, boolean).
+   * @returns {Object<string, (string|boolean)>}
+   */
   function serialize() {
     var data = {};
     for (var ci = 0; ci < components.length; ci++) {
@@ -43,10 +50,15 @@
     return data;
   }
 
+  /** Snapshot current form values as the baseline for diffing. */
   function setBaseline() {
     baseline = serialize();
   }
 
+  /**
+   * Return only the fields whose form value differs from the baseline.
+   * @returns {Object<string, (string|boolean)>}
+   */
   function getPending() {
     if (!baseline) return {};
     var current = serialize();
@@ -57,6 +69,10 @@
     return changes;
   }
 
+  /**
+   * Populate form elements from component field definitions' opts.value.
+   * @param {Array} [comps] - optional component array, defaults to global `components`
+   */
   function populateFromComponents(comps) {
     if (!comps) comps = components;
     for (var ci = 0; ci < comps.length; ci++) {
@@ -81,6 +97,10 @@
     }
   }
 
+  /**
+   * Determine whether the Save button should be visible.
+   * Visible when `dirty` is true and the form is valid.
+   */
   function updateUI() {
     var formOk = configForm.checkValidity();
     var showBtn = dirty && formOk;
@@ -88,6 +108,12 @@
     btnSaveApply.disabled = !showBtn;
   }
 
+  /**
+   * Find a field definition by component ID and field key.
+   * @param {string} compId - e.g. "wifi"
+   * @param {string} fieldKey - e.g. "ssid"
+   * @returns {Object|null} the field object {key, type, label, opts} or null if not found
+   */
   function findField(compId, fieldKey) {
     for (var ci = 0; ci < components.length; ci++) {
       if (components[ci].id !== compId) continue;
@@ -101,6 +127,13 @@
     return null;
   }
 
+  /**
+   * Build a nested JSON patch body from a flat changes object.
+   * Input:  {"wifi.ssid": "MyNet"}
+   * Output: {"wifi": {"ssid": ["text", "SSID", {"value": "MyNet"}]}}
+   * @param {Object<string, *>} changes - flat key→value map of changed fields
+   * @returns {Object}
+   */
   function buildPatch(changes) {
     var data = {};
     for (var name in changes) {
@@ -116,6 +149,12 @@
 
   document.addEventListener('DOMContentLoaded', init);
 
+  /**
+   * POST JSON to a URL, display errors on failure.
+   * @param {string} url
+   * @param {*} data - JSON-serializable body
+   * @returns {Promise<boolean>} true on success, false on error
+   */
   async function postJSON(url, data) {
     clearError();
     try {
@@ -135,6 +174,7 @@
     }
   }
 
+  /** Open a WebSocket connection to /api/settings/ws. Sets aria-busy on the form. */
   function connectWS() {
     configForm.setAttribute('aria-busy', 'true');
     var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -145,11 +185,13 @@
     ws.onerror = function () { if (ws) ws.close(); };
   }
 
+  /** Close the WebSocket and cancel any reconnect timer. */
   function disconnectWS() {
     if (wsReconnectTimer) { clearTimeout(wsReconnectTimer); wsReconnectTimer = null; }
     if (ws) { ws.onclose = null; ws.close(); ws = null; }
   }
 
+  /** Handle WS close: exponential backoff reconnect up to 5 retries, then show manual retry button. */
   function onWSClose() {
     ws = null;
     configForm.setAttribute('aria-busy', 'true');
@@ -165,6 +207,7 @@
     wsReconnectTimer = setTimeout(connectWS, delay);
   }
 
+  /** Create a "Retry" button for manual reconnection after WS retries exhausted. */
   function createRetryButton() {
     var btn = document.createElement('button');
     btn.id = 'btn-ws-retry';
@@ -179,6 +222,13 @@
     return btn;
   }
 
+  /**
+   * Parse the full settings JSON from the server into the `components` array,
+   * render nav + form, bind listeners, set baseline, handle hash navigation.
+   * Called on initial WebSocket load (when components is empty).
+   * @param {Object} data - settings payload (without _dirty)
+   * @param {boolean} dirtyFlag - server `_dirty` flag
+   */
   function processSettings(data, dirtyFlag) {
     dirty = dirtyFlag === true;
     var comps = [];
@@ -204,6 +254,15 @@
     handleHash();
   }
 
+  /**
+   * WebSocket message handler - implements the 10-case state machine.
+   *
+   * Echo resolution:   Cases 6-7 - match inFlight sends against server echo
+   * External updates:  Cases 1,3,4,5 - handle server-pushed changes
+   * In-flight defer:   Cases 8-9-10 - ignore packets while awaiting echo
+   *
+   * @param {MessageEvent} event - WS message with JSON data
+   */
   function onWSMessage(event) {
     var msg = JSON.parse(event.data);
     if (msg.type === 'error') { showError(msg.message); return; }
@@ -308,6 +367,11 @@
     }
   }
 
+  /**
+   * Copy Applied Values from a server settings payload into
+   * the in-memory component field definitions (field.opts.value).
+   * @param {Object} data - settings payload keyed by component ID
+   */
   function updateAV(data) {
     for (var ci = 0; ci < components.length; ci++) {
       var comp = components[ci];
@@ -322,12 +386,17 @@
     }
   }
 
+  /** Write AV from in-memory fields into the DOM form and update baseline. */
   function applyAV() {
     populateFromComponents();
     setBaseline();
     updateUI();
   }
 
+  /**
+   * Sync the lastSent tracking map with current AV values
+   * (so subsequent user changes are detected as new).
+   */
   function syncLS() {
     for (var ci = 0; ci < components.length; ci++) {
       for (var fi = 0; fi < components[ci].fields.length; fi++) {
@@ -337,6 +406,12 @@
     }
   }
 
+  /**
+   * Send a single field value to the server over WebSocket as an `apply` action.
+   * Sets lastSent and inFlight tracking.
+   * @param {string} key - "compId.fieldKey"
+   * @param {*} value
+   */
   function sendToServer(key, value) {
     if (!ws || ws.readyState !== 1) return;
     lastSent[key] = value;
@@ -352,6 +427,12 @@
     ws.send(JSON.stringify({action: 'apply', data: patch}));
   }
 
+  /**
+   * Fire-and-forget a user-initiated field change to the server.
+   * No-ops if inFlight, or if the value matches lastSent.
+   * @param {string} key - "compId.fieldKey"
+   * @param {*} newValue
+   */
   function onUserInput(key, newValue) {
     if (inFlight[key]) return;
     var ls = lastSent[key];
@@ -359,6 +440,12 @@
     sendToServer(key, newValue);
   }
 
+  /**
+   * Resolve a nested property path within an object.
+   * @param {Object} obj
+   * @param {string[]} parts - path segments, e.g. ["wifi", "ssid"]
+   * @returns {*|undefined}
+   */
   function resolveNested(obj, parts) {
     var cur = obj;
     for (var i = 0; i < parts.length; i++) {
@@ -368,6 +455,12 @@
     return cur;
   }
 
+  /**
+   * Read a form field's value by compound key path.
+   * Handles type coercion: radio→checked value, checkbox→boolean, number/range→float.
+   * @param {string[]} parts - path segments, e.g. ["wifi", "ssid"]
+   * @returns {(string|number|boolean|undefined)}
+   */
   function readFormValue(parts) {
     var nameSel = '[name="' + parts.join('.') + '"]';
     var el = document.querySelector(nameSel);
@@ -381,6 +474,7 @@
     return el.value;
   }
 
+  /** Show the "Server settings changed" notification bar (external update, user idle). @param {Array} fields */
   function showExternalNotification(fields) {
     var bar = document.getElementById('server-changed');
     var text = document.getElementById('notif-text');
@@ -392,6 +486,7 @@
     bar.hidden = false;
   }
 
+  /** Show the conflict resolution prompt when both local and server values changed. @param {Array} conflicts */
   function showConflictPrompt(conflicts) {
     var bar = document.getElementById('server-changed');
     var text = document.getElementById('notif-text');
@@ -404,11 +499,13 @@
     footer.classList.add('pending');
   }
 
+  /** Hide the server-changed notification bar and remove pending style from footer. */
   function hideNotification() {
     document.getElementById('server-changed').hidden = true;
     footer.classList.remove('pending');
   }
 
+  /** Reset dirty flag, set baseline, update UI - called after successful save. */
   function syncThen() {
     clearError();
     dirty = false;
@@ -416,6 +513,7 @@
     updateUI();
   }
 
+  /** Handle the Save button click: POST pending changes to /api/settings/save. */
   function handleSaveApply() {
     var changes = getPending();
     var count = 0;
@@ -427,6 +525,12 @@
     });
   }
 
+  /**
+   * Derive a human-readable label from a camelCase/snake_case key.
+   * "wifi_ssid" -> "Wifi Ssid", "AudioInterface" -> "Audio Interface"
+   * @param {string} key
+   * @returns {string}
+   */
   function labelFromKey(key) {
     return key
       .replace(/[_-]/g, ' ')
@@ -434,6 +538,7 @@
       .replace(/\b\w/g, function (c) { return c.toUpperCase(); });
   }
 
+  /** Render navigation links in #nav-list from the components array. */
   function renderNav() {
     navList.innerHTML = '';
     for (var ci = 0; ci < components.length; ci++) {
@@ -456,6 +561,7 @@
     });
   }
 
+  /** Render the accordion form in #config-form from the components array. */
   function renderForm() {
     configForm.innerHTML = '';
     for (var ci = 0; ci < components.length; ci++) {
@@ -475,6 +581,7 @@
     }
   }
 
+  /** Bind hashchange listener and open the details section matching the current URL hash. */
   function handleHash() {
     function openHash() {
       if (location.hash) {
@@ -486,6 +593,11 @@
     openHash();
   }
 
+  /**
+   * Bind input/change/blur/click listeners on all form fields.
+   * Text/password/email/tel/url use blur; radio uses click; everything else uses change.
+   * All fields get an `input` listener that calls updateUI for validation feedback.
+   */
   function bindChangeListeners() {
     var els = configForm.querySelectorAll('input, select, textarea');
     for (var ei = 0; ei < els.length; ei++) {
@@ -513,6 +625,7 @@
     }
   }
 
+  /** Wire up button click handlers (Save, notification bar actions). */
   function wireButtons() {
     btnSaveApply.addEventListener('click', handleSaveApply);
     document.getElementById('notif-load').addEventListener('click', function () {
@@ -549,12 +662,22 @@
     });
   }
 
+  /**
+   * Initialization: wire buttons, open WebSocket connection.
+   * Bound to DOMContentLoaded.
+   */
   async function init() {
     if (!configForm || !navList || !statusBar || !footer || !btnSaveApply) return;
     wireButtons();
     connectWS();
   }
 
+  /**
+   * Create a DOM element for a settings field.
+   * @param {string} namePrefix - component ID (e.g. "wifi")
+   * @param {Object} field - { key, type, label, opts }
+   * @returns {HTMLElement|null}
+   */
   function createField(namePrefix, field) {
     if (!field || typeof field !== 'object' || !field.key) return null;
     var key = field.key;
@@ -671,6 +794,7 @@
     return container;
   }
 
+  /** Apply HTML attributes from an object to a DOM element. @param {HTMLElement} el @param {Object} attrs */
   function applyAttrs(el, attrs) {
     if (!attrs) return;
     for (var key in attrs) {
@@ -680,6 +804,13 @@
     }
   }
 
+  /**
+   * Append helper text (small element) to a container, optionally with aria-describedby.
+   * @param {HTMLElement} container
+   * @param {string} baseId - used for the helper's id attribute
+   * @param {string} text - helper text content (no-op if falsy)
+   * @param {HTMLElement|null} describedEl - element to receive aria-describedby, or null
+   */
   function addHelperText(container, baseId, text, describedEl) {
     if (!text) return;
     var helper = document.createElement('small');
