@@ -42,7 +42,7 @@
         var field = comp.fields[fi];
         var el = configForm.querySelector('[name="' + comp.id + '.' + field.key + '"]');
         if (!el) continue;
-        data[comp.id + '.' + field.key] = field.type === 'checkbox' || field.type === 'switch' ? el.checked
+        data[comp.id + '.' + field.key] = field.type === 'switch' ? el.checked
           : field.type === 'radio' ? (configForm.querySelector('[name="' + comp.id + '.' + field.key + '"]:checked') || {}).value || null
           : el.value;
       }
@@ -83,7 +83,7 @@
         var el = configForm.querySelector('[name="' + comp.id + '.' + field.key + '"]');
         if (!el) continue;
         var fopts = field.opts || {};
-        if (field.type === 'checkbox' || field.type === 'switch') {
+        if (field.type === 'switch') {
           el.checked = !!fopts.value;
         } else if (field.type === 'radio') {
           var radios = configForm.querySelectorAll('[name="' + comp.id + '.' + field.key + '"]');
