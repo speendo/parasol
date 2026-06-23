@@ -1144,3 +1144,38 @@ describe('footer visibility (CSS-only)', () => {
     expect(cssHides).toBe(false)
   })
 })
+
+describe('status message routing', () => {
+  beforeEach(() => {
+    document.querySelector('#config-form').innerHTML = ''
+    document.getElementById('nav-list').innerHTML = ''
+    document.getElementById('status-bar').textContent = ''
+    window.__test.components = []
+    window.__test.dirty = false
+  })
+
+  it('routes type:status message to processStatus', () => {
+    window.__test.receiveWSMessage({
+      data: JSON.stringify({ type: 'status', data: { system: { uptime: ['text', 'Uptime', { value: '1d 0h 0m' }] } } }),
+    })
+    expect(window.__test.statusComponents.length).toBe(1)
+    expect(window.__test.statusComponents[0].id).toBe('system')
+    expect(window.__test.statusComponents[0].fields[0].key).toBe('uptime')
+  })
+
+  it('does not route status message to settings handling', () => {
+    window.__test.receiveWSMessage({
+      data: JSON.stringify({ type: 'status', data: { system: { uptime: ['text', 'Uptime', { value: '1d 0h 0m' }] } } }),
+    })
+    expect(window.__test.dirty).toBe(false)
+    expect(window.__test.components.length).toBe(0)
+  })
+
+  it('routes type:settings messages correctly', () => {
+    window.__test.receiveWSMessage({
+      data: JSON.stringify({ type: 'settings', _dirty: true, data: { wifi: { ssid: ['text', 'SSID', { value: 'Net' }] } } }),
+    })
+    expect(window.__test.components.length).toBeGreaterThan(0)
+    expect(window.__test.dirty).toBe(true)
+  })
+})

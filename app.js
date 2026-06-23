@@ -9,6 +9,8 @@
 
   var baseline = null;
   var components = [];
+  /** @type {Array} Read-only status component definitions, parallel to components. */
+  var statusComponents = [];
   var dirty = false;
   var ws = null;
   var lastSent = {};
@@ -178,7 +180,7 @@
   function connectWS() {
     configForm.setAttribute('aria-busy', 'true');
     var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(proto + '//' + location.host + '/api/settings/ws');
+    ws = new WebSocket(proto + '//' + location.host + '/api/events');
     ws.onopen = function () {};
     ws.onmessage = onWSMessage;
     ws.onclose = onWSClose;
@@ -255,6 +257,52 @@
   }
 
   /**
+   * Parse a status data payload into statusComponents and render.
+   * On first call (statusComponents empty) builds the full component tree.
+   * On subsequent calls (partial updates) merges changed field values and
+   * updates the DOM via populateFromComponents.
+   * @param {Object} data - status payload keyed by component ID
+   */
+  function processStatus(data) {
+    if (statusComponents.length === 0) {
+      for (var key in data) {
+        if (key[0] === '_') continue;
+        var group = data[key];
+        var fields = [];
+        for (var fieldKey in group) {
+          var arr = group[fieldKey];
+          fields.push({key: fieldKey, type: arr[0], label: arr[1], opts: arr[2]});
+        }
+        statusComponents.push({id: key, label: labelFromKey(key), fields: fields});
+      }
+      if (components.length > 0) {
+        renderForm();
+        populateFromComponents(statusComponents);
+    populateFromComponents();
+    if (statusComponents.length > 0) populateFromComponents(statusComponents);
+    setBaseline();
+        updateUI();
+      }
+    } else {
+      for (var cid in data) {
+        if (cid[0] === '_') continue;
+        for (var sci = 0; sci < statusComponents.length; sci++) {
+          if (statusComponents[sci].id !== cid) continue;
+          var comp = statusComponents[sci];
+          for (var fk in data[cid]) {
+            for (var fi = 0; fi < comp.fields.length; fi++) {
+              if (comp.fields[fi].key === fk) {
+                comp.fields[fi].opts.value = data[cid][fk][2].value;
+              }
+            }
+          }
+        }
+      }
+      populateFromComponents(statusComponents);
+    }
+  }
+
+  /**
    * WebSocket message handler - implements the 10-case state machine.
    *
    * Echo resolution:   Cases 6-7 - match inFlight sends against server echo
@@ -265,6 +313,7 @@
    */
   function onWSMessage(event) {
     var msg = JSON.parse(event.data);
+    if (msg.type === 'status') { processStatus(msg.data); return; }
     if (msg.type === 'error') { showError(msg.message); return; }
     if (msg.type !== 'settings' && msg._dirty === undefined) return;
     wsRetries = 0;
@@ -819,5 +868,5 @@
     if (describedEl) describedEl.setAttribute('aria-describedby', helper.id);
     container.appendChild(helper);
   }
-  /* test-expose */if(window.__TEST_MODE){window.serialize=serialize;window.setBaseline=setBaseline;window.getPending=getPending;window.createField=createField;window.populateFromComponents=populateFromComponents;window.applyAttrs=applyAttrs;window.addHelperText=addHelperText;window.findField=findField;window.updateUI=updateUI;window.showError=showError;window.clearError=clearError;window.postJSON=postJSON;window.updateUI=updateUI;window.showError=showError;window.clearError=clearError;window.postJSON=postJSON;window.syncThen=syncThen;window.handleSaveApply=handleSaveApply;window.renderNav=renderNav;window.renderForm=renderForm;window.handleHash=handleHash;window.wireButtons=wireButtons;window.bindChangeListeners=bindChangeListeners;window.init=init;window.buildPatch=buildPatch;window.connectWS=connectWS;window.disconnectWS=disconnectWS;window.onWSClose=onWSClose;window.processSettings=processSettings;window.onWSMessage=onWSMessage;window.updateAV=updateAV;window.applyAV=applyAV;window.syncLS=syncLS;window.resolveNested=resolveNested;window.sendToServer=sendToServer;window.onUserInput=onUserInput;window.readFormValue=readFormValue;window.showExternalNotification=showExternalNotification;window.showConflictPrompt=showConflictPrompt;window.hideNotification=hideNotification;window.__test={};window.__test.receiveWSMessage=onWSMessage;window.__test.wsReady=function(){if(ws)ws.readyState=1};Object.defineProperty(window.__test,'components',{get:function(){return components},set:function(v){components=v}});Object.defineProperty(window.__test,'dirty',{get:function(){return dirty},set:function(v){dirty=v}});Object.defineProperty(window.__test,'lastSent',{get:function(){return lastSent},set:function(v){lastSent=v}});Object.defineProperty(window.__test,'inFlight',{get:function(){return inFlight},set:function(v){inFlight=v}});}
+  /* test-expose */if(window.__TEST_MODE){window.serialize=serialize;window.setBaseline=setBaseline;window.getPending=getPending;window.createField=createField;window.populateFromComponents=populateFromComponents;window.applyAttrs=applyAttrs;window.addHelperText=addHelperText;window.findField=findField;window.updateUI=updateUI;window.showError=showError;window.clearError=clearError;window.postJSON=postJSON;window.updateUI=updateUI;window.showError=showError;window.clearError=clearError;window.postJSON=postJSON;window.syncThen=syncThen;window.handleSaveApply=handleSaveApply;window.renderNav=renderNav;window.renderForm=renderForm;window.handleHash=handleHash;window.wireButtons=wireButtons;window.bindChangeListeners=bindChangeListeners;window.init=init;window.buildPatch=buildPatch;window.connectWS=connectWS;window.disconnectWS=disconnectWS;window.onWSClose=onWSClose;window.processSettings=processSettings;window.onWSMessage=onWSMessage;window.updateAV=updateAV;window.applyAV=applyAV;window.syncLS=syncLS;window.resolveNested=resolveNested;window.sendToServer=sendToServer;window.onUserInput=onUserInput;window.readFormValue=readFormValue;window.showExternalNotification=showExternalNotification;window.showConflictPrompt=showConflictPrompt;window.hideNotification=hideNotification;window.__test={};window.__test.receiveWSMessage=onWSMessage;window.__test.wsReady=function(){if(ws)ws.readyState=1};Object.defineProperty(window.__test,'components',{get:function(){return components},set:function(v){components=v}});Object.defineProperty(window.__test,'dirty',{get:function(){return dirty},set:function(v){dirty=v}});Object.defineProperty(window.__test,'lastSent',{get:function(){return lastSent},set:function(v){lastSent=v}});Object.defineProperty(window.__test,'inFlight',{get:function(){return inFlight},set:function(v){inFlight=v}});window.processStatus=processStatus;Object.defineProperty(window.__test,'statusComponents',{get:function(){return statusComponents},set:function(v){statusComponents=v}});}
 })();
