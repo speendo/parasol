@@ -150,13 +150,13 @@ test.describe('Status variables', () => {
     await expect(page.locator('details#sensors')).toBeVisible()
     var allDetails = page.locator('#config-form details')
     await expect(allDetails.nth(0)).toHaveId('system')
-    await expect(allDetails.nth(1)).toHaveId('sensors')
+    await expect(allDetails.nth(1)).toHaveId('network')
   })
 
   test('status summary has secondary class', async ({ page }) => {
     await page.goto('/')
     await expect(page.locator('#system summary')).toHaveClass('secondary')
-    await expect(page.locator('#sensors summary')).toHaveClass('secondary')
+    await expect(page.locator('#network summary')).toHaveClass('secondary')
   })
 
   test('settings summary does not have secondary class', async ({ page }) => {
@@ -167,7 +167,11 @@ test.describe('Status variables', () => {
   test('status fields are disabled', async ({ page }) => {
     await page.goto('/')
     await expect(page.locator('[name="system.uptime"]')).toBeDisabled()
-    await expect(page.locator('[name="system.heap_free"]')).toBeDisabled()
+    await expect(page.locator('[name="system.fw_version"]')).toBeDisabled()
+    await expect(page.locator('[name="system.led"]')).toBeDisabled()
+    await expect(page.locator('[name="network.mode"]').first()).toBeDisabled()
+    await expect(page.locator('[name="network.signal"]')).toBeDisabled()
+    await expect(page.locator('[name="network.connection"]')).toBeDisabled()
     await expect(page.locator('[name="sensors.temperature"]')).toBeDisabled()
   })
 
@@ -179,14 +183,23 @@ test.describe('Status variables', () => {
   test('status shows computed values', async ({ page }) => {
     await page.goto('/')
     await expect(page.locator('[name="system.uptime"]')).not.toHaveValue('')
-    await expect(page.locator('[name="system.heap_free"]')).not.toHaveValue('')
+    await expect(page.locator('[name="network.signal"]')).not.toHaveValue('')
     await expect(page.locator('[name="sensors.temperature"]')).not.toHaveValue('')
   })
 
   test('status nav links are present', async ({ page }) => {
     await page.goto('/')
     await expect(page.locator('#nav-list a[href="#system"]')).toBeVisible()
-    await expect(page.locator('#nav-list a[href="#sensors"]')).toBeVisible()
+    await expect(page.locator('#nav-list a[href="#network"]')).toBeVisible()
+  })
+
+  test('status values update over time', async ({ page }) => {
+    await page.goto('/')
+    await page.waitForTimeout(500)
+    var val1 = await page.locator('[name="network.signal"]').inputValue()
+    await page.waitForTimeout(4000)
+    var val2 = await page.locator('[name="network.signal"]').inputValue()
+    expect(val1).not.toBe(val2)
   })
 })
 
