@@ -243,4 +243,130 @@ test.describe('Status variables', () => {
   })
 })
 
+test.describe('form validation UI', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/')
+    await page.waitForSelector('#config-form:not([aria-busy])', { timeout: 8000 })
+  })
+
+  test('required empty field shows :invalid after blur', async ({ page }) => {
+    await page.locator('details#wifi summary').click()
+    var input = page.locator('[name="wifi.ssid"]')
+    await input.focus()
+    await input.blur()
+    var isInvalid = await input.evaluate(function (el) { return el.matches(':invalid') })
+    expect(isInvalid).toBe(true)
+  })
+
+  test('required field loses :invalid after filling valid value', async ({ page }) => {
+    await page.locator('details#wifi summary').click()
+    var input = page.locator('[name="wifi.ssid"]')
+    await input.fill('MyNetwork')
+    await input.blur()
+    var isInvalid = await input.evaluate(function (el) { return el.matches(':invalid') })
+    expect(isInvalid).toBe(false)
+  })
+
+  test('maxlength violation shows :invalid', async ({ page }) => {
+    await page.locator('details#wifi summary').click()
+    var input = page.locator('[name="wifi.ssid"]')
+    await input.evaluate(function (el) { el.removeAttribute('maxlength') })
+    await input.fill('a'.repeat(33))
+    await input.evaluate(function (el) {
+      el.setAttribute('maxlength', '32')
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    var tooLong = await input.evaluate(function (el) { return el.validity.tooLong })
+    expect(tooLong).toBe(true)
+  })
+
+  test('minlength violation shows :invalid after blur', async ({ page }) => {
+    await page.locator('#nav-list a[href="#mqtt"]').click()
+    var input = page.locator('[name="mqtt.client_id"]')
+    await input.fill('ab')
+    await input.blur()
+    var isInvalid = await input.evaluate(function (el) { return el.matches(':invalid') })
+    expect(isInvalid).toBe(true)
+  })
+
+  test('minlength satisfied does not show :invalid', async ({ page }) => {
+    await page.locator('#nav-list a[href="#mqtt"]').click()
+    var input = page.locator('[name="mqtt.client_id"]')
+    await input.fill('esp32-device')
+    await input.blur()
+    var isInvalid = await input.evaluate(function (el) { return el.matches(':invalid') })
+    expect(isInvalid).toBe(false)
+  })
+
+  test('pattern violation shows :invalid after blur', async ({ page }) => {
+    await page.locator('#nav-list a[href="#mqtt"]').click()
+    var input = page.locator('[name="mqtt.client_id"]')
+    await input.fill('!!!')
+    await input.blur()
+    var isInvalid = await input.evaluate(function (el) { return el.matches(':invalid') })
+    expect(isInvalid).toBe(true)
+  })
+
+  test('email type validation shows :invalid for malformed email', async ({ page }) => {
+    await page.locator('#nav-list a[href="#notifications"]').click()
+    var input = page.locator('[name="notifications.sender"]')
+    await input.fill('not-an-email')
+    await input.blur()
+    var isInvalid = await input.evaluate(function (el) { return el.matches(':invalid') })
+    expect(isInvalid).toBe(true)
+  })
+
+  test('email type validation passes for valid email', async ({ page }) => {
+    await page.locator('#nav-list a[href="#notifications"]').click()
+    var input = page.locator('[name="notifications.sender"]')
+    await input.fill('device@example.com')
+    await input.blur()
+    var isInvalid = await input.evaluate(function (el) { return el.matches(':invalid') })
+    expect(isInvalid).toBe(false)
+  })
+
+  test('number min constraint shows :invalid', async ({ page }) => {
+    await page.locator('#nav-list a[href="#gpio"]').click()
+    var input = page.locator('[name="gpio.pin"]')
+    await input.fill('-1')
+    await input.blur()
+    var isInvalid = await input.evaluate(function (el) { return el.matches(':invalid') })
+    expect(isInvalid).toBe(true)
+  })
+
+  test('number step constraint shows :invalid', async ({ page }) => {
+    await page.locator('#nav-list a[href="#mqtt"]').click()
+    var input = page.locator('[name="mqtt.keepalive"]')
+    await input.fill('62')
+    await input.blur()
+    var isInvalid = await input.evaluate(function (el) { return el.matches(':invalid') })
+    expect(isInvalid).toBe(true)
+  })
+
+  test('save button hidden when form has invalid fields', async ({ page }) => {
+    await page.locator('details#wifi summary').click()
+    await page.locator('[name="wifi.ssid"]').fill('MyNetwork')
+    await page.locator('[name="wifi.password"]').fill('secret123')
+    await page.locator('[name="wifi.ssid"]').focus()
+    // Wait for dirty=true via WS round-trip (button becomes visible)
+    var saveBtn = page.locator('#btn-save-apply')
+    await expect(saveBtn).toBeVisible({ timeout: 5000 })
+    // Now make form invalid by setting gpio.pin below minimum
+    await page.locator('#nav-list a[href="#gpio"]').click()
+    var pin = page.locator('[name="gpio.pin"]')
+    await pin.fill('-1')
+    await pin.blur()
+    await expect(saveBtn).toBeHidden()
+  })
+
+  test('save button visible when form is valid and dirty', async ({ page }) => {
+    await page.locator('details#wifi summary').click()
+    await page.locator('[name="wifi.ssid"]').fill('MyNetwork')
+    await page.locator('[name="wifi.password"]').fill('secret123')
+    await page.locator('[name="wifi.ssid"]').focus()
+    var saveBtn = page.locator('#btn-save-apply')
+    await expect(saveBtn).toBeVisible({ timeout: 5000 })
+  })
+})
+
 
