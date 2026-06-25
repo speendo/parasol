@@ -27,17 +27,26 @@ Lines 281-283 use 4-space indent while the enclosing `if` body on lines 279-280 
 
 ---
 
-## 3. `reportValidity()` not called on blur
+## 3. `aria-invalid` not set on form fields after validation
 
-**File:** `app.js:684`
+**File:** `app.js:684` (resolved in 2026-06-25)
 
 ```js
-if (!el.checkValidity()) { updateUI(); return; }
+// Before (fixed on 2026-06-25):
+if (!el.checkValidity()) { var d = el.closest('details'); if (d) d.open = true; updateUI(); return; }
+
+// Fixed:
+var valid = el.checkValidity();
+el.setAttribute('aria-invalid', valid ? 'false' : 'true');
+if (!valid) { var d = el.closest('details'); if (d) d.open = true; updateUI(); return; }
 ```
 
-The blur handler for text/password/email/tel/url fields calls `checkValidity()` to gate the auto-apply, but never calls `reportValidity()`. This means Pico CSS `:invalid` pseudo-class may not trigger on some browsers, and the user sees no visual feedback that a field is invalid.
-
-**Fix (from backlog triage item #1):** Call `el.reportValidity()` before/after `checkValidity()`.
+PicoCSS validation styling uses `aria-invalid` attributes (`"true"` for red,
+`"false"` for green), not just the native `:invalid` pseudo-class. The blur
+handler now sets `aria-invalid` after each `checkValidity()` call, and
+`renderForm()` initializes all fields to `aria-invalid="false"`.
+`reportValidity()` is intentionally NOT called to avoid browser-native
+validation pop-ups.
 
 ---
 

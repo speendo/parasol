@@ -13,17 +13,25 @@ cutting line: what this library provides vs what the developer's project provide
 
 ### 1. Fix form validation
 
-**Status:** Bug — required fields don't show `:invalid` styling (red borders)
+**Status:** Resolved — 2026-06-25
+
+**Symptom:** Required fields didn't show validation styling (red/green borders)
 after the WS + blur refactor.
 
-**Likely cause:** `bindChangeListeners` calls `el.checkValidity()` but never
-calls `el.reportValidity()`. Pico CSS relies on native `:invalid` pseudo-class,
-which may not trigger from `checkValidity()` alone on every browser. The
-original validation spec called for `reportValidity()` on blur but the
-implementation only checks validity and gates buttons — it never reports
-invalidity to the user or the CSS engine.
+**Root cause (two issues):**
+1. PicoCSS v2 validation styling is driven by `aria-invalid` attributes
+   (`"true"` = invalid/red, `"false"` = valid/green), not the native
+   `:invalid` pseudo-class. The code never set `aria-invalid` on any field.
+2. The `mqtt.topic_prefix` regex pattern `^[a-zA-Z0-9_/.#+\-]*$` had an
+   unescaped `/` inside the character class, which breaks in the `v`
+   (unicodeSets) flag used by modern browsers. This caused a console error
+   and prevented pattern validation.
 
-**Fix:** Add `el.reportValidity()` call in the blur/change handler.
+**Fix (two parts):**
+1. `renderForm()` now sets `aria-invalid="false"` on all named fields. The
+   blur/change handler sets `aria-invalid` based on `checkValidity()` result.
+   `reportValidity()` is intentionally NOT called (avoids native pop-ups).
+2. Escaped `/` as `\/` in the `topic_prefix` pattern character class.
 
 ### 2. ESP32 backend implementation
 

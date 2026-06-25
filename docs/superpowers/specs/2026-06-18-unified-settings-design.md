@@ -45,8 +45,8 @@ HTTP used only for persistence:
 {
   "_dirty": false,
   "wifi": {
-    "ssid":     ["text", "SSID",     {"value": "MyNetwork", "tooltip": "WiFi network name"}],
-    "password": ["password", "Password", {"value": "", "attrs": {"maxlength": 64}}],
+    "ssid":     ["text", "SSID",     {"value": "MyNetwork", "tooltip": "WiFi network name \u2014 required, 1\u201332 characters"}],
+    "password": ["password", "Password", {"value": "password", "attrs": {"maxlength": 64}, "tooltip": "WiFi password \u2014 required, up to 64 characters"}],
     "mode":     ["select", "Mode",   {"value": "station", "options": [["station","Station"],["ap","Access Point"]]}]
   },
   "gpio": {
@@ -71,7 +71,7 @@ Each key under a component group is a 3-element array:
 - `opts` — dictionary with keys:
   - `value` — current applied value (replaces `default` from old format)
   - `options` — for `select` and `radio`: `[["key1", "Label 1"], ...]`
-  - `attrs` — HTML attributes: `{min, max, maxlength, step, placeholder, required}`
+   - `attrs` — HTML attributes: `{min, max, maxlength, minlength, step, placeholder, required, pattern}`
   - `tooltip` — help text string
 
 ### Meta fields
@@ -285,16 +285,33 @@ button in the footer.
 
 Validation rules are declared as HTML attributes (`required`, `min`, `max`,
 `minlength`, `maxlength`, `pattern`, `step`) in the `attrs` field of component
-schemas. Pico CSS applies `:invalid` styling natively via the browser's
-Constraint Validation API — no custom CSS is needed.
+schemas. PicoCSS validation state styling is driven by the `aria-invalid`
+attribute: `"false"` shows green (valid) styling, `"true"` shows red (invalid)
+styling. The JS manages this attribute on every form field.
 
-**Blur gate:** When a user leaves a field, the handler calls `el.checkValidity()`.
-Invalid fields block the auto-apply WebSocket send and keep the field out of the
-Save-enabled state.
+**Initial state:** After `renderForm()` builds the DOM, all named form fields
+(`input`, `select`, `textarea`) receive `aria-invalid="false"` so they start
+with neutral styling. No fields appear invalid before user interaction.
+
+**Per-field validation:** On blur/change/click (determined by field type), the
+handler calls `el.checkValidity()` and sets `aria-invalid` to `"true"` or
+`"false"` based on the result. Invalid fields block the auto-apply WebSocket
+send and keep the field out of the Save-enabled state. The handler also forces
+the parent `<details>` accordion open so the user can see the invalid field
+even if they had closed the section. The `reportValidity()` method is NOT used
+(to avoid native browser validation pop-ups).
+
+**First-interaction gating:** On page load, required fields that have never been
+interacted with do NOT block the save button. A `formInteracted` flag starts
+`false` and is set to `true` on the first blur/change/click. `updateUI()` only
+runs `configForm.checkValidity()` when `formInteracted` is `true`; otherwise it
+treats the form as valid. This prevents a freshly loaded form from hiding the
+save button before the user has touched any field.
 
 **Button gating:** The Save button enables only when both conditions hold:
 1. `_dirty` is true (server has pending NVS writes)
-2. `configForm.checkValidity()` passes (all fields pass native validation)
+2. `formInteracted ? configForm.checkValidity() : true` (all fields pass native
+   validation after user interaction)
 
 Both checks happen in `updateUI()`.
 
