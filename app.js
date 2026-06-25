@@ -17,6 +17,7 @@
   var inFlight = {};
   var wsReconnectTimer = null;
   var wsRetries = 0;
+  var formInteracted = false;
 
   /** Show an error message in the status bar. @param {string} msg */
   function showError(msg) {
@@ -101,10 +102,10 @@
 
   /**
    * Determine whether the Save button should be visible.
-   * Visible when `dirty` is true and the form is valid.
+   * Gated by formInteracted — validity only checked after first user interaction.
    */
   function updateUI() {
-    var formOk = configForm.checkValidity();
+    var formOk = formInteracted ? configForm.checkValidity() : true;
     var showBtn = dirty && formOk;
     btnSaveApply.hidden = !showBtn;
     btnSaveApply.disabled = !showBtn;
@@ -184,7 +185,7 @@
     ws.onopen = function () {};
     ws.onmessage = onWSMessage;
     ws.onclose = onWSClose;
-    ws.onerror = function () { if (ws) ws.close(); };
+    ws.onerror = function () { ws.close(); };
   }
 
   /** Close the WebSocket and cancel any reconnect timer. */
@@ -258,9 +259,8 @@
 
   /**
    * Parse a status data payload into statusComponents and render.
-   * On first call (statusComponents empty) builds the full component tree.
-   * On subsequent calls (partial updates) merges changed field values and
-   * updates the DOM via populateFromComponents.
+   * First call builds the full component tree. Subsequent calls (partial updates)
+   * merge changed field values and update the DOM via populateFromComponents.
    * @param {Object} data - status payload keyed by component ID
    */
   function processStatus(data) {
@@ -278,9 +278,8 @@
       if (components.length > 0) {
         renderForm();
         populateFromComponents(statusComponents);
-    populateFromComponents();
-    if (statusComponents.length > 0) populateFromComponents(statusComponents);
-    setBaseline();
+        populateFromComponents();
+        setBaseline();
         updateUI();
       }
     } else {
@@ -519,11 +518,16 @@
     return el.value;
   }
 
+  /** Return a comma-separated list of labels from an array of field objects. @param {Array} fields @returns {string} */
+  function fieldLabels(fields) {
+    return fields.map(function (f) { return f.label; }).join(', ');
+  }
+
   /** Show the "Server settings changed" notification bar (external update, user idle). @param {Array} fields */
   function showExternalNotification(fields) {
     var bar = document.getElementById('server-changed');
     var text = document.getElementById('notif-text');
-    text.textContent = 'Server settings changed: ' + fields.map(function (f) { return f.label; }).join(', ');
+    text.textContent = 'Server settings changed: ' + fieldLabels(fields);
     document.getElementById('notif-load').hidden = false;
     document.getElementById('notif-keep').hidden = false;
     document.getElementById('notif-keep-local').hidden = true;
@@ -535,7 +539,7 @@
   function showConflictPrompt(conflicts) {
     var bar = document.getElementById('server-changed');
     var text = document.getElementById('notif-text');
-    text.textContent = 'Conflict: ' + conflicts.map(function (f) { return f.label; }).join(', ');
+    text.textContent = 'Conflict: ' + fieldLabels(conflicts);
     document.getElementById('notif-load').hidden = true;
     document.getElementById('notif-keep').hidden = true;
     document.getElementById('notif-keep-local').hidden = false;
@@ -586,25 +590,8 @@
   /** Render navigation links in #nav-list from statusComponents and components. */
   function renderNav() {
     navList.innerHTML = '';
-    for (var si = 0; si < statusComponents.length; si++) {
-      var comp = statusComponents[si];
-      var li = document.createElement('li');
-      var a = document.createElement('a');
-      a.href = '#' + comp.id;
-      a.className = 'secondary';
-      a.textContent = comp.label;
-      li.appendChild(a);
-      navList.appendChild(li);
-    }
-    for (var ci = 0; ci < components.length; ci++) {
-      var comp = components[ci];
-      var li = document.createElement('li');
-      var a = document.createElement('a');
-      a.href = '#' + comp.id;
-      a.textContent = comp.label;
-      li.appendChild(a);
-      navList.appendChild(li);
-    }
+    renderLinks(statusComponents, 'secondary');
+    renderLinks(components, null);
     if (navList._clickWired) return;
     navList._clickWired = true;
     navList.addEventListener('click', function (e) {
@@ -616,40 +603,46 @@
     });
   }
 
+  /** Append nav links for an array of components. @param {Array} comps @param {string|null} className */
+  function renderLinks(comps, className) {
+    for (var ci = 0; ci < comps.length; ci++) {
+      var comp = comps[ci];
+      var li = document.createElement('li');
+      var a = document.createElement('a');
+      a.href = '#' + comp.id;
+      if (className) a.className = className;
+      a.textContent = comp.label;
+      li.appendChild(a);
+      navList.appendChild(li);
+    }
+  }
+
   /** Render the accordion form in #config-form from statusComponents first, then components. */
   function renderForm() {
     configForm.innerHTML = '';
-    for (var si = 0; si < statusComponents.length; si++) {
-      var comp = statusComponents[si];
-      var details = document.createElement('details');
-      details.id = comp.id;
-      var summary = document.createElement('summary');
-      summary.className = 'secondary';
-      summary.textContent = comp.label;
-      details.appendChild(summary);
-      if (comp.fields) {
-        for (var fi = 0; fi < comp.fields.length; fi++) {
-          var fieldEl = createField(comp.id, comp.fields[fi], 1);
-          if (fieldEl) details.appendChild(fieldEl);
-        }
-      }
-      configForm.appendChild(details);
+    for (var si = 0; si < statusComponents.length; si++) renderSection(statusComponents[si], true);
+    for (var ci = 0; ci < components.length; ci++) renderSection(components[ci], false);
+    var fields = configForm.querySelectorAll('input, select, textarea');
+    for (var fi = 0; fi < fields.length; fi++) {
+      if (fields[fi].name) fields[fi].setAttribute('aria-invalid', 'false');
     }
-    for (var ci = 0; ci < components.length; ci++) {
-      var comp = components[ci];
-      var details = document.createElement('details');
-      details.id = comp.id;
-      var summary = document.createElement('summary');
-      summary.textContent = comp.label;
-      details.appendChild(summary);
-      if (comp.fields) {
-        for (var fi = 0; fi < comp.fields.length; fi++) {
-          var fieldEl = createField(comp.id, comp.fields[fi], 0);
-          if (fieldEl) details.appendChild(fieldEl);
-        }
+  }
+
+  /** Render a details/section block for a component. @param {Object} comp @param {boolean} isStatus */
+  function renderSection(comp, isStatus) {
+    var details = document.createElement('details');
+    details.id = comp.id;
+    var summary = document.createElement('summary');
+    if (isStatus) summary.className = 'secondary';
+    summary.textContent = comp.label;
+    details.appendChild(summary);
+    if (comp.fields) {
+      for (var fi = 0; fi < comp.fields.length; fi++) {
+        var fieldEl = createField(comp.id, comp.fields[fi], isStatus ? 1 : 0);
+        if (fieldEl) details.appendChild(fieldEl);
       }
-      configForm.appendChild(details);
     }
+    configForm.appendChild(details);
   }
 
   /** Bind hashchange listener and open the details section matching the current URL hash. */
@@ -666,8 +659,9 @@
 
   /**
    * Bind input/change/blur/click listeners on all form fields.
+   * Sets formInteracted on first interaction to gate validity checks.
+   * Opens ancestor details (accordion keep-open) on invalid input.
    * Text/password/email/tel/url use blur; radio uses click; everything else uses change.
-   * All fields get an `input` listener that calls updateUI for validation feedback.
    */
   function bindChangeListeners() {
     var els = configForm.querySelectorAll('input, select, textarea');
@@ -677,7 +671,10 @@
       if (!key) continue;
       (function (el, key) {
         var handler = function () {
-          if (!el.checkValidity()) { updateUI(); return; }
+          formInteracted = true;
+          var valid = el.checkValidity();
+          el.setAttribute('aria-invalid', valid ? 'false' : 'true');
+          if (!valid) { var d = el.closest('details'); if (d) d.open = true; updateUI(); return; }
           var val = (el.type === 'checkbox') ? el.checked :
                     (el.type === 'number' || el.type === 'range') ? parseFloat(el.value) : el.value;
           onUserInput(key, val);
@@ -896,5 +893,5 @@
     if (describedEl) describedEl.setAttribute('aria-describedby', helper.id);
     container.appendChild(helper);
   }
-  /* test-expose */if(window.__TEST_MODE){window.serialize=serialize;window.setBaseline=setBaseline;window.getPending=getPending;window.createField=createField;window.populateFromComponents=populateFromComponents;window.applyAttrs=applyAttrs;window.addHelperText=addHelperText;window.findField=findField;window.updateUI=updateUI;window.showError=showError;window.clearError=clearError;window.postJSON=postJSON;window.updateUI=updateUI;window.showError=showError;window.clearError=clearError;window.postJSON=postJSON;window.syncThen=syncThen;window.handleSaveApply=handleSaveApply;window.renderNav=renderNav;window.renderForm=renderForm;window.handleHash=handleHash;window.wireButtons=wireButtons;window.bindChangeListeners=bindChangeListeners;window.init=init;window.buildPatch=buildPatch;window.connectWS=connectWS;window.disconnectWS=disconnectWS;window.onWSClose=onWSClose;window.processSettings=processSettings;window.onWSMessage=onWSMessage;window.updateAV=updateAV;window.applyAV=applyAV;window.syncLS=syncLS;window.resolveNested=resolveNested;window.sendToServer=sendToServer;window.onUserInput=onUserInput;window.readFormValue=readFormValue;window.showExternalNotification=showExternalNotification;window.showConflictPrompt=showConflictPrompt;window.hideNotification=hideNotification;window.__test={};window.__test.receiveWSMessage=onWSMessage;window.__test.wsReady=function(){if(ws)ws.readyState=1};Object.defineProperty(window.__test,'components',{get:function(){return components},set:function(v){components=v}});Object.defineProperty(window.__test,'dirty',{get:function(){return dirty},set:function(v){dirty=v}});Object.defineProperty(window.__test,'lastSent',{get:function(){return lastSent},set:function(v){lastSent=v}});Object.defineProperty(window.__test,'inFlight',{get:function(){return inFlight},set:function(v){inFlight=v}});window.processStatus=processStatus;Object.defineProperty(window.__test,'statusComponents',{get:function(){return statusComponents},set:function(v){statusComponents=v}});}
+  /* test-expose */if(window.__TEST_MODE){window.serialize=serialize;window.setBaseline=setBaseline;window.getPending=getPending;window.createField=createField;window.populateFromComponents=populateFromComponents;window.applyAttrs=applyAttrs;window.addHelperText=addHelperText;window.findField=findField;window.updateUI=updateUI;window.showError=showError;window.clearError=clearError;window.postJSON=postJSON;window.syncThen=syncThen;window.handleSaveApply=handleSaveApply;window.renderNav=renderNav;window.renderForm=renderForm;window.handleHash=handleHash;window.wireButtons=wireButtons;window.bindChangeListeners=bindChangeListeners;window.init=init;window.buildPatch=buildPatch;window.connectWS=connectWS;window.disconnectWS=disconnectWS;window.onWSClose=onWSClose;window.processSettings=processSettings;window.onWSMessage=onWSMessage;window.updateAV=updateAV;window.applyAV=applyAV;window.syncLS=syncLS;window.resolveNested=resolveNested;window.sendToServer=sendToServer;window.onUserInput=onUserInput;window.readFormValue=readFormValue;window.showExternalNotification=showExternalNotification;window.showConflictPrompt=showConflictPrompt;window.hideNotification=hideNotification;window.__test={};window.__test.receiveWSMessage=onWSMessage;window.__test.wsReady=function(){if(ws)ws.readyState=1};Object.defineProperty(window.__test,'components',{get:function(){return components},set:function(v){components=v}});Object.defineProperty(window.__test,'dirty',{get:function(){return dirty},set:function(v){dirty=v}});Object.defineProperty(window.__test,'lastSent',{get:function(){return lastSent},set:function(v){lastSent=v}});Object.defineProperty(window.__test,'inFlight',{get:function(){return inFlight},set:function(v){inFlight=v}});Object.defineProperty(window.__test,'formInteracted',{get:function(){return formInteracted},set:function(v){formInteracted=v}});window.processStatus=processStatus;Object.defineProperty(window.__test,'statusComponents',{get:function(){return statusComponents},set:function(v){statusComponents=v}});}
 })();

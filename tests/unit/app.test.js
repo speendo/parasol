@@ -111,6 +111,7 @@ describe('updateUI', () => {
 
   it('disables and hides Save when form is invalid even if dirty', () => {
     window.__test.dirty = true
+    window.__test.formInteracted = true
     document.querySelector('[name="wifi.ssid"]').value = ''
     window.updateUI()
     expect(document.getElementById('btn-save-apply').hidden).toBe(true)
@@ -1374,15 +1375,15 @@ describe('form validation', () => {
     window.setBaseline()
   })
 
-  it('calls reportValidity on blur of an invalid field', () => {
-    var called = false
+  it('does not call reportValidity on blur (uses checkValidity instead)', () => {
     var input = document.querySelector('[name="mqtt.client_id"]')
-    var orig = input.reportValidity
-    input.reportValidity = function () { called = true; return false }
+    var reported = false
+    var origReport = input.reportValidity
+    input.reportValidity = function () { reported = true; return false }
     window.bindChangeListeners()
     input.dispatchEvent(new Event('blur', { bubbles: true }))
-    expect(called).toBe(true)
-    input.reportValidity = orig
+    expect(reported).toBe(false)
+    input.reportValidity = origReport
   })
 
   it('does not send WS when field is invalid on blur', () => {
@@ -1394,13 +1395,13 @@ describe('form validation', () => {
     var origSend = window.sendToServer
     window.sendToServer = function () { sendCalled = true }
     var input = document.querySelector('[name="mqtt.client_id"]')
-    var origReport = input.reportValidity
-    input.reportValidity = function () { return false }
+    var origCheck = input.checkValidity
+    input.checkValidity = function () { return false }
     window.bindChangeListeners()
     input.dispatchEvent(new Event('blur', { bubbles: true }))
     expect(sendCalled).toBe(false)
     window.sendToServer = origSend
-    input.reportValidity = origReport
+    input.checkValidity = origCheck
   })
 
   it('sends WS when field becomes valid on blur', () => {
@@ -1411,12 +1412,12 @@ describe('form validation', () => {
     window.__test.wsReady()
     var input = document.querySelector('[name="mqtt.client_id"]')
     input.value = 'my-device'
-    var origReport = input.reportValidity
-    input.reportValidity = function () { return true }
+    var origCheck = input.checkValidity
+    input.checkValidity = function () { return true }
     window.bindChangeListeners()
     input.dispatchEvent(new Event('blur', { bubbles: true }))
     expect(window.__test.wsSent).toEqual({ action: 'apply', data: { mqtt: { client_id: ['text', 'Client ID', { value: 'my-device' }] } } })
-    input.reportValidity = origReport
+    input.checkValidity = origCheck
   })
 
   it('hides save button when field violates minlength', () => {
@@ -1493,5 +1494,59 @@ describe('form validation', () => {
     document.querySelector('[name="mqtt.client_id"]').dispatchEvent(new Event('blur', { bubbles: true }))
     document.querySelector('[name="notifications.sender"]').dispatchEvent(new Event('blur', { bubbles: true }))
     expect(document.getElementById('btn-save-apply').hidden).toBe(false)
+  })
+
+  it('keeps details open when field is invalid on blur', () => {
+    document.querySelector('#config-form').innerHTML = '<details open><input name="mqtt.client_id" value="" required minlength="3" /></details>'
+    window.__test.components = [{ id: 'mqtt', fields: [{ key: 'client_id', type: 'text', label: 'Client ID', opts: {} }] }]
+    window.__test.dirty = false
+    window.bindChangeListeners()
+    var input = document.querySelector('[name="mqtt.client_id"]')
+    var details = input.closest('details')
+    details.open = false
+    input.dispatchEvent(new Event('blur', { bubbles: true }))
+    expect(details.open).toBe(true)
+  })
+
+  it('updateUI skips checkValidity before first field interaction', () => {
+    window.__test.formInteracted = false
+    document.querySelector('#config-form').innerHTML = '<input name="mqtt.client_id" value="" required minlength="3" />'
+    window.__test.components = [{ id: 'mqtt', fields: [{ key: 'client_id', type: 'text', label: 'Client ID', opts: {} }] }]
+    window.__test.dirty = true
+    window.updateUI()
+    expect(document.getElementById('btn-save-apply').hidden).toBe(false)
+  })
+})
+
+describe('aria-invalid', function () {
+  it('sets aria-invalid="false" on all named form fields after renderForm', function () {
+    window.__test.components = [{ id: 'wifi', label: 'WiFi', fields: [
+      { key: 'ssid', type: 'text', label: 'SSID', opts: {} }
+    ]}]
+    window.__test.statusComponents = []
+    window.renderForm()
+    var input = document.querySelector('[name="wifi.ssid"]')
+    expect(input.getAttribute('aria-invalid')).toBe('false')
+  })
+
+  it('sets aria-invalid="true" on invalid field, "false" on valid field', function () {
+    document.querySelector('#config-form').innerHTML = '<input name="mqtt.client_id" value="" required minlength="3" />'
+    window.__test.components = [{ id: 'mqtt', fields: [
+      { key: 'client_id', type: 'text', label: 'Client ID', opts: {} }
+    ]}]
+    window.__test.dirty = false
+    window.setBaseline()
+    window.bindChangeListeners()
+    var input = document.querySelector('[name="mqtt.client_id"]')
+
+    // Empty + required + minlength → invalid, aria-invalid should be "true"
+    input.value = ''
+    input.dispatchEvent(new Event('blur', { bubbles: true }))
+    expect(input.getAttribute('aria-invalid')).toBe('true')
+
+    // Fill with valid value → aria-invalid should become "false"
+    input.value = 'my-device'
+    input.dispatchEvent(new Event('blur', { bubbles: true }))
+    expect(input.getAttribute('aria-invalid')).toBe('false')
   })
 })
