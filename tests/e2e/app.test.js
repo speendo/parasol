@@ -9,6 +9,8 @@ test.describe('Form rendering', () => {
     await page.goto('/')
     await expect(page.locator('details#wifi')).toBeVisible()
     await expect(page.locator('details#gpio')).toBeVisible()
+    await expect(page.locator('details#mqtt')).toBeVisible()
+    await expect(page.locator('details#notifications')).toBeVisible()
   })
 
   test('renders correct field types', async ({ page }) => {
@@ -23,6 +25,8 @@ test.describe('Form rendering', () => {
     await page.goto('/')
     await expect(page.locator('#nav-list a[href="#wifi"]')).toBeVisible()
     await expect(page.locator('#nav-list a[href="#gpio"]')).toBeVisible()
+    await expect(page.locator('#nav-list a[href="#mqtt"]')).toBeVisible()
+    await expect(page.locator('#nav-list a[href="#notifications"]')).toBeVisible()
   })
 
   test('no pending changes initially', async ({ page }) => {
@@ -34,7 +38,7 @@ test.describe('Form rendering', () => {
     await page.goto('/')
     await page.locator('details#wifi summary').click()
     await expect(page.locator('[name="wifi.ssid"]')).toHaveAttribute('aria-describedby', 'wifi.ssid-helper')
-    await expect(page.locator('#wifi\\.ssid-helper')).toHaveText('WiFi network name')
+    await expect(page.locator('#wifi\\.ssid-helper')).toHaveText('WiFi network name — required, 1–32 characters')
   })
 
   test('removes aria-busy after settings loaded', async ({ page }) => {
@@ -252,8 +256,7 @@ test.describe('form validation UI', () => {
   test('required empty field shows :invalid after blur', async ({ page }) => {
     await page.locator('details#wifi summary').click()
     var input = page.locator('[name="wifi.ssid"]')
-    await input.focus()
-    await input.blur()
+    await input.fill('')
     var isInvalid = await input.evaluate(function (el) { return el.matches(':invalid') })
     expect(isInvalid).toBe(true)
   })
@@ -347,11 +350,12 @@ test.describe('form validation UI', () => {
     await page.locator('details#wifi summary').click()
     await page.locator('[name="wifi.ssid"]').fill('MyNetwork')
     await page.locator('[name="wifi.password"]').fill('secret123')
-    var channel = page.locator('[name="wifi.channel"]')
-    await channel.evaluate(function (el) { el.value = '0'; el.dispatchEvent(new Event('input', { bubbles: true })) })
-    await channel.blur()
-    var saveBtn = page.locator('#btn-save-apply')
-    await expect(saveBtn).toBeHidden()
+    await page.locator('[name="wifi.ssid"]').focus()
+    await expect(page.locator('#btn-save-apply')).toBeVisible({ timeout: 5000 })
+    await page.locator('#nav-list a[href="#notifications"]').click()
+    var port = page.locator('[name="notifications.port"]')
+    await port.evaluate(function (el) { el.value = '0'; el.dispatchEvent(new Event('change', { bubbles: true })) })
+    await expect(page.locator('#btn-save-apply')).toBeHidden()
   })
 
   test('save button visible when form is valid and dirty', async ({ page }) => {
@@ -361,6 +365,40 @@ test.describe('form validation UI', () => {
     await page.locator('[name="wifi.ssid"]').focus()
     var saveBtn = page.locator('#btn-save-apply')
     await expect(saveBtn).toBeVisible({ timeout: 5000 })
+  })
+
+  test('accordion stays open when field is invalid after blur', async ({ page }) => {
+    await page.locator('details#wifi summary').click()
+    var details = page.locator('details#wifi')
+    await page.locator('[name="wifi.ssid"]').focus()
+    await page.locator('[name="wifi.ssid"]').blur()
+    await expect(details).toHaveAttribute('open', '')
+  })
+
+  test('initially empty required fields do not block save button', async ({ page }) => {
+    // Fill all required fields
+    await page.locator('details#wifi summary').click()
+    await page.locator('[name="wifi.ssid"]').fill('Network')
+    await page.locator('[name="wifi.password"]').fill('password')
+    await page.locator('[name="wifi.ssid"]').focus()
+    await expect(page.locator('#btn-save-apply')).toBeVisible({ timeout: 5000 })
+  })
+
+  test('invalid field blocks WS send until corrected', async function ({ page }) {
+    // First fill required wifi fields to make the form valid
+    await page.locator('details#wifi summary').click()
+    await page.locator('[name="wifi.ssid"]').fill('MyNetwork')
+    await page.locator('[name="wifi.password"]').fill('secret123')
+    // Now test that an invalid mqtt field blocks WS send, and
+    // correcting it allows the save button to appear
+    await page.locator('#nav-list a[href="#mqtt"]').click()
+    var input = page.locator('[name="mqtt.client_id"]')
+    await input.fill('ab')
+    await input.blur()
+    await expect(page.locator('#btn-save-apply')).toBeHidden()
+    await input.fill('valid-device')
+    await input.blur()
+    await expect(page.locator('#btn-save-apply')).toBeVisible({ timeout: 5000 })
   })
 })
 
