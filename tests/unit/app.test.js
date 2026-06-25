@@ -10,6 +10,7 @@ describe('serialize', () => {
       </select>
       <input type="checkbox" name="wifi.hidden" role="switch" />
       <input type="range" name="wifi.channel" value="6" min="1" max="13" />
+      <input type="color" name="wifi.led_color" value="#ff9500" />
     `
     window.__test.components = [
       { id: 'wifi', fields: [
@@ -17,6 +18,7 @@ describe('serialize', () => {
         { key: 'mode', type: 'select', label: 'Mode', opts: {} },
         { key: 'hidden', type: 'switch', label: 'Hidden', opts: {} },
         { key: 'channel', type: 'range', label: 'Channel', opts: {} },
+        { key: 'led_color', type: 'color', label: 'LED Color', opts: {} },
       ]},
     ]
   })
@@ -28,6 +30,7 @@ describe('serialize', () => {
       'wifi.mode': 'station',
       'wifi.hidden': false,
       'wifi.channel': '6',
+      'wifi.led_color': '#ff9500',
     })
   })
 
@@ -35,12 +38,14 @@ describe('serialize', () => {
     document.querySelector('[name="wifi.ssid"]').value = 'MyNet'
     document.querySelector('[name="wifi.mode"]').value = 'ap'
     document.querySelector('[name="wifi.hidden"]').checked = true
+    document.querySelector('[name="wifi.led_color"]').value = '#00ff00'
     var data = window.serialize()
     expect(data).toEqual({
       'wifi.ssid': 'MyNet',
       'wifi.mode': 'ap',
       'wifi.hidden': true,
       'wifi.channel': '6',
+      'wifi.led_color': '#00ff00',
     })
   })
 })
@@ -197,6 +202,17 @@ describe('createField', () => {
     expect(input.max).toBe('39')
     expect(input.value).toBe('2')
     expect(input.id).toBe('gpio.pin')
+  })
+
+  it('creates color input', () => {
+    var field = window.createField('gpio', {
+      key: 'led_color', type: 'color', label: 'LED Color',
+      opts: { value: '#ff9500', tooltip: 'RGB LED color' },
+    })
+    expect(field.querySelector('label').getAttribute('for')).toBe('gpio.led_color')
+    var input = field.querySelector('input[type="color"]')
+    expect(input.value).toBe('#ff9500')
+    expect(input.id).toBe('gpio.led_color')
   })
 
   it('creates radio group', () => {
@@ -565,12 +581,16 @@ describe('processSettings', () => {
   it('builds components from settings data', () => {
     var data = {
       wifi: { ssid: ['text', 'SSID', { value: 'MyNet' }] },
-      gpio: { pin: ['number', 'Pin', { value: 5 }] },
+      gpio: { pin: ['number', 'Pin', { value: 5 }], led_color: ['color', 'LED Color', { value: '#ff9500' }] },
     }
     window.processSettings(data, false)
     expect(window.__test.components.length).toBe(2)
     expect(window.__test.components[0].id).toBe('wifi')
     expect(window.__test.components[1].id).toBe('gpio')
+    var colorField = window.__test.components[1].fields.find(function (f) { return f.key === 'led_color' })
+    expect(colorField).not.toBeUndefined()
+    expect(colorField.type).toBe('color')
+    expect(colorField.opts.value).toBe('#ff9500')
   })
 
   it('captures dirty flag', () => {
@@ -1158,6 +1178,14 @@ describe('readFormValue', () => {
     text.value = 'hello'
     document.querySelector('#config-form').appendChild(text)
     expect(window.readFormValue(['wifi', 'ssid'])).toBe('hello')
+  })
+
+  it('returns hex string for color input', () => {
+    document.querySelector('#config-form').innerHTML =
+      '<input type="color" name="gpio.led_color" value="#ff0000" />'
+    expect(window.readFormValue(['gpio', 'led_color'])).toBe('#ff0000')
+    document.querySelector('[name="gpio.led_color"]').value = '#00aa55'
+    expect(window.readFormValue(['gpio', 'led_color'])).toBe('#00aa55')
   })
 
   it('returns undefined when element not found', () => {

@@ -136,10 +136,10 @@ This would make it a real feature.
 - ESP32 backend: implement the reset endpoint (reload NVS → AV)
 - Test server: already exists
 
-### 7. Checkbox re-implementation (third "invalid" state)
+### 7. Checkbox re-implementation (third indeterminate state)
 
 **What:** Bring back `<input type="checkbox">` as a distinct field type from
-`switch`, justified by the third **invalid/indeterminate** state.
+`switch`, justified by the third **indeterminate** state.
 
 **Rationale:** A `<input type="checkbox" role="switch">` is always on or off.
 A plain checkbox can be `indeterminate` — a visual "not yet set" state that
@@ -148,8 +148,9 @@ as `null` on the wire, distinct from `true`/`false`.
 
 **Wire format:** `true` (checked), `false` (unchecked), `null` (indeterminate).
 
-**Validation:** `null` is treated as invalid, blocking form submission until
-the user makes an explicit choice.
+**Validation:** `null` (indeterminate) does not inherently block submission.
+It follows the standard `required` rule — if `required`, an indeterminate
+checkbox fails validation; otherwise `null` submits as-is.
 
 **Changes:**
 - Add `"checkbox"` to `createField()` field type dispatch

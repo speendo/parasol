@@ -26,6 +26,7 @@ SETTINGS = {
         "pull": ["radio", "Pull Resistor", {"options": [["none", "None"], ["up", "Pull Up"], ["down", "Pull Down"]], "value": "none", "tooltip": "Internal pull resistor: None, Pull Up, or Pull Down"}],
         "enabled": ["switch", "GPIO Enabled", {"value": True, "tooltip": "Enable this GPIO pin"}],
         "inverted": ["switch", "Inverted", {"value": False, "tooltip": "Invert GPIO signal level"}],
+        "led_color": ["color", "LED Color", {"value": "#ff9500", "tooltip": "RGB LED color"}],
         "initial": ["select", "Initial State", {"options": [["low", "Low"], ["high", "High"]], "value": "low", "tooltip": "Initial output state: Low or High"}],
     },
     "mqtt": {
