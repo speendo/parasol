@@ -14,8 +14,8 @@ BASE = Path(__file__).resolve().parent.parent
 # {field_key: [type, label, opts]}
 SETTINGS = {
     "wifi": {
-        "ssid": ["text", "SSID", {"attrs": {"maxlength": 32, "placeholder": "MyNetwork", "required": True}, "value": "", "tooltip": "WiFi network name"}],
-        "password": ["password", "Password", {"attrs": {"maxlength": 64, "placeholder": "Enter password", "required": True}, "value": "", "tooltip": "WiFi password"}],
+        "ssid": ["text", "SSID", {"attrs": {"maxlength": 32, "placeholder": "MyNetwork", "required": True}, "value": "MyNetwork", "tooltip": "WiFi network name"}],
+        "password": ["password", "Password", {"attrs": {"maxlength": 64, "placeholder": "Enter password", "required": True}, "value": "password", "tooltip": "WiFi password"}],
         "mode": ["select", "Mode", {"options": [["station", "Station"], ["ap", "Access Point"]], "value": "station", "tooltip": "WiFi operating mode"}],
         "hidden": ["switch", "Hidden SSID", {"value": False, "tooltip": "Hide network from scans"}],
         "channel": ["range", "Channel", {"attrs": {"min": 1, "max": 13, "step": 1}, "value": 6, "tooltip": "WiFi channel number"}],
