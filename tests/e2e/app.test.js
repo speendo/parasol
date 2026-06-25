@@ -400,6 +400,23 @@ test.describe('form validation UI', () => {
     await input.blur()
     await expect(page.locator('#btn-save-apply')).toBeVisible({ timeout: 5000 })
   })
+
+  test('password field shows invalid styling on load', async ({ page }) => {
+    await page.goto('/')
+    await page.locator('details#wifi summary').click()
+    var input = page.locator('[name="wifi.password"]')
+    await expect(input).toHaveAttribute('aria-invalid', 'true')
+  })
+
+  test('accordion with invalid field cannot be closed', async ({ page }) => {
+    await page.locator('details#wifi summary').click()
+    var details = page.locator('details#wifi')
+    await details.evaluate(function (el) {
+      el.open = false
+      el.dispatchEvent(new Event('toggle', { bubbles: false }))
+    })
+    await expect(details).toHaveAttribute('open', '')
+  })
 })
 
 

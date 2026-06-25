@@ -624,15 +624,15 @@
     for (var ci = 0; ci < components.length; ci++) renderSection(components[ci], false);
     var fields = configForm.querySelectorAll('input, select, textarea');
     for (var fi = 0; fi < fields.length; fi++) {
-      if (fields[fi].name) fields[fi].setAttribute('aria-invalid', 'false');
+      if (fields[fi].name) fields[fi].setAttribute('aria-invalid', fields[fi].checkValidity() ? 'false' : 'true');
     }
     if (!configForm._toggleGuardWired) {
       configForm._toggleGuardWired = true;
       configForm.addEventListener('toggle', function (e) {
         if (!e.target.open && e.target.tagName === 'DETAILS') {
-          if (e.target.querySelector(':invalid')) e.target.open = true;
+          if (e.target.querySelector('[aria-invalid="true"]')) e.target.open = true;
         }
-      });
+      }, true);
     }
   }
 

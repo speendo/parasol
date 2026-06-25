@@ -289,18 +289,18 @@ schemas. PicoCSS validation state styling is driven by the `aria-invalid`
 attribute: `"false"` shows green (valid) styling, `"true"` shows red (invalid)
 styling. The JS manages this attribute on every form field.
 
-**Initial state:** After `renderForm()` builds the DOM, all named form fields
-(`input`, `select`, `textarea`) receive `aria-invalid="false"` so they start
-with neutral styling. No fields appear invalid before user interaction.
+**Initial state:** After `renderForm()` builds the DOM, each named form field
+receives `aria-invalid` based on `checkValidity()`. Required fields that are
+empty and have no default value appear invalid immediately.
 
 **Per-field validation:** On blur/change/click (determined by field type), the
 handler calls `el.checkValidity()` and sets `aria-invalid` to `"true"` or
 `"false"` based on the result. Invalid fields block the auto-apply WebSocket
 send and keep the field out of the Save-enabled state. The handler also forces
 the parent `<details>` accordion open so the user can see the invalid field
-even if they had closed the section. A `toggle` event listener on `configForm`
-prevents closing any `<details>` section that still contains `:invalid` fields,
-keeping invalid fields visible at all times. The `reportValidity()` method is
+even if they had closed the section. A capture-phase `toggle` event listener on
+`configForm` prevents closing any `<details>` section that still contains
+`[aria-invalid="true"]` fields, keeping invalid fields visible at all times. The `reportValidity()` method is
 NOT used (to avoid native browser validation pop-ups).
 
 **First-interaction gating:** On page load, required fields that have never been
