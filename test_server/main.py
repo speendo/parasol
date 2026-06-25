@@ -29,15 +29,15 @@ SETTINGS = {
         "initial": ["select", "Initial State", {"options": [["low", "Low"], ["high", "High"]], "value": "low", "tooltip": "Initial output state"}],
     },
     "mqtt": {
-        "broker":      ["text", "Broker URL",   {"attrs": {"required": True, "pattern": r"^(mqtts?|tcp|ssl|ws|wss)://[a-zA-Z0-9_\-]+(:\d{1,5})?$", "placeholder": "mqtt://broker.local:1883"}, "value": "mqtt://broker.local:1883", "tooltip": "MQTT broker connection URL"}],
+        "broker":      ["text", "Broker URL",   {"attrs": {"required": True, "pattern": r"^(mqtts?|tcp|ssl|ws|wss)://[a-zA-Z0-9_\-]+(:\d{1,5})?$", "placeholder": "mqtt://broker.local:1883"}, "value": "mqtt://broker-local:1883", "tooltip": "MQTT broker connection URL"}],
         "client_id":   ["text", "Client ID",    {"attrs": {"required": True, "minlength": 3, "maxlength": 64, "pattern": r"^[a-zA-Z0-9_\-]+$"}, "value": "esp32-001", "tooltip": "Unique MQTT client identifier"}],
-        "topic_prefix":["text", "Topic Prefix",  {"attrs": {"maxlength": 128, "pattern": r"^[a-zA-Z0-9_/.#+\-]*$", "placeholder": "home/esp32"}, "value": "home/esp32", "tooltip": "Prefix for publish/subscribe topics"}],
+        "topic_prefix":["text", "Topic Prefix",  {"attrs": {"maxlength": 128, "pattern": r"^[a-zA-Z0-9_\/.#+\-]*$", "placeholder": "home/esp32"}, "value": "home/esp32", "tooltip": "Prefix for publish/subscribe topics"}],
         "keepalive":   ["number", "Keepalive (s)", {"attrs": {"min": 1, "max": 65535, "step": 5}, "value": 56, "tooltip": "MQTT keepalive interval in seconds"}],
         "qos":         ["select", "QoS Level",  {"options": [["0", "0 — At most once"], ["1", "1 — At least once"], ["2", "2 — Exactly once"]], "value": "1", "tooltip": "Quality of Service level"}],
         "retain":      ["switch", "Retain",     {"value": False, "tooltip": "Retain last message on broker"}],
     },
     "notifications": {
-        "host":         ["text", "SMTP Host",       {"attrs": {"required": True, "minlength": 5, "pattern": r"^[a-zA-Z0-9]([a-zA-Z0-9_\-]*[a-zA-Z0-9])?$", "placeholder": "smtp.gmail.com"}, "value": "smtp.example.com", "tooltip": "SMTP server hostname"}],
+        "host":         ["text", "SMTP Host",       {"attrs": {"required": True, "minlength": 5, "pattern": r"^[a-zA-Z0-9]([a-zA-Z0-9_\-]*[a-zA-Z0-9])?$", "placeholder": "smtp.gmail.com"}, "value": "smtp-example-com", "tooltip": "SMTP server hostname"}],
         "port":         ["number", "SMTP Port",     {"attrs": {"min": 1, "max": 65535}, "value": 587, "tooltip": "SMTP server port"}],
         "sender":       ["email", "Sender Email",   {"attrs": {"required": True, "placeholder": "esp32@example.com"}, "value": "esp32@example.com", "tooltip": "From address for alerts"}],
         "recipient":    ["email", "Recipient Email",{"attrs": {"required": True, "placeholder": "admin@example.com"}, "value": "admin@example.com", "tooltip": "Alert destination address"}],
