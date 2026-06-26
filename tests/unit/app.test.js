@@ -319,6 +319,34 @@ describe('createField', () => {
     })
     expect(field.querySelector('label').textContent).toContain('*')
   })
+
+  it('creates checkbox (input type=checkbox without role=switch)', () => {
+    var field = window.createField('gpio', {
+      key: 'confirm', type: 'checkbox', label: 'Confirm',
+      opts: { value: null },
+    })
+    expect(field.tagName).toBe('DIV')
+    expect(field.querySelector('label').getAttribute('for')).toBe('gpio.confirm')
+    var input = field.querySelector('input')
+    expect(input.type).toBe('checkbox')
+    expect(input.hasAttribute('role')).toBe(false)
+    expect(input.checked).toBe(false)
+    expect(input.indeterminate).toBe(false)
+    expect(input.id).toBe('gpio.confirm')
+    expect(input.disabled).toBe(false)
+  })
+
+  it('sets helper text on checkbox as small after label', () => {
+    var field = window.createField('gpio', {
+      key: 'confirm', type: 'checkbox', label: 'Confirm',
+      opts: { help: 'Make a choice' },
+    })
+    var small = field.querySelector('small')
+    expect(small).not.toBeNull()
+    expect(small.textContent).toBe('Make a choice')
+    expect(small.id).toBe('gpio.confirm-helper')
+    expect(field.querySelector('input').getAttribute('aria-describedby')).toBe('gpio.confirm-helper')
+  })
 })
 
 describe('addHelperText', function () {

@@ -759,10 +759,10 @@
     var required = opts.attrs && opts.attrs.required;
     var inputTypes = ['text', 'email', 'number', 'password', 'tel', 'url', 'color'];
 
-    if (type === 'switch') {
+    if (type === 'checkbox' || type === 'switch') {
       var input = document.createElement('input');
       input.type = 'checkbox';
-      input.role = 'switch';
+      if (type === 'switch') input.role = 'switch';
       input.name = input.id = namePrefix + '.' + key;
       if (opts.value) input.checked = true;
       applyAttrs(input, opts.attrs);
