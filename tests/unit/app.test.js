@@ -1191,6 +1191,14 @@ describe('readFormValue', () => {
   it('returns undefined when element not found', () => {
     expect(window.readFormValue(['wifi', 'missing'])).toBeUndefined()
   })
+
+  it('returns null for indeterminate checkbox', () => {
+    document.querySelector('#config-form').innerHTML =
+      '<input type="checkbox" name="gpio.confirm" />'
+    var el = document.querySelector('[name="gpio.confirm"]')
+    el.indeterminate = true
+    expect(window.readFormValue(['gpio', 'confirm'])).toBe(null)
+  })
 })
 
 describe('dirty flag survives dropped WS messages', () => {
