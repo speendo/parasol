@@ -30,6 +30,7 @@ Used for both **settings** and **status** messages over HTTP and WebSocket.
 | `textarea` | `<textarea>` | yes | settings only |
 | `select` | `<select>` | yes | settings, status |
 | `switch` | `<input type="checkbox" role="switch">` | yes | settings, status |
+| `checkbox` | `<input type="checkbox">` | yes | settings, status |
 | `radio` | `<input type="radio">` group | yes | settings, status |
 | `range` | `<input type="range">` | yes | settings, status |
 
@@ -43,13 +44,14 @@ WebSocket push — user interaction is blocked.
 | `value` | any | all | Current value (type-coerced by the client) |
 | `options` | `[["key","Label"],...]` | select, radio | Allowed options as `[value, label]` pairs |
 | `attrs` | object | all | HTML attributes e.g. `{min, max, step, maxlength, placeholder}` |
-| `tooltip` | string | all | Helper text shown below the field |
+| `help` | string | all | Helper text shown below the field |
 
 ### value Coercion
 
 | Type | JS Value |
 |------|----------|
 | `switch` | boolean (`el.checked`) |
+| `checkbox` | boolean or null (`el.indeterminate ? null : el.checked`) |
 | `radio` | string (selected option's value) |
 | `number`, `range` | number (`parseFloat`) |
 | all others | string (`el.value`) |
