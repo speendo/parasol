@@ -95,16 +95,16 @@ input[type="checkbox"] + label + small,
 fieldset + small {
   display: block;
   color: var(--pico-muted-color);
-  margin-top: 0;
   margin-bottom: var(--pico-spacing);
 }
 ```
 
-This overrides PicoCSS's negative `margin-top` on `<small>` when it follows an
-inline `<label>` (checkbox/switch) or `<fieldset>` (radio), and adds proper
-bottom spacing. `<select>`, text inputs, `<textarea>`, and
-`<input type="range">` are block elements in PicoCSS — the default negative
-margin works correctly for them.
+PicoCSS's global `small` rule includes a negative `margin-top` designed for
+the `<input> → <small>` helper text pattern. For checkbox/switch the
+`<small>` follows an inline `<label>`, so the negative margin doesn't apply
+cleanly — this rule adds bottom spacing via `margin-bottom` to separate the
+helper text from the next field. Radio helper text uses `<fieldset>` which is
+block-like enough that PicoCSS's default negative margin works correctly.
 
 ## Validation
 
