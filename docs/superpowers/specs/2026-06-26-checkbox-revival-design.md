@@ -12,11 +12,11 @@ attention.
 PicoCSS v2.1.1 styles `<small>` globally (`display: block; color:
 var(--pico-muted-color); margin-top: calc(var(--pico-spacing) * -0.75)`).
 This works well when `<small>` sits as a direct sibling after a block-level
-`<input>` or `<textarea>` (the documented helper text pattern). Inside our
-`<div>` wrappers, the `<small>` follows `<label>` (checkbox/switch),
-`<fieldset>` (radio), or `<select>` — the negative `margin-top` pulls it up
-awkwardly. A targeted CSS rule normalises the helper text for these element
-types.
+`<input>`, `<select>`, or `<textarea>` (the documented helper text pattern).
+Inside our `<div>` wrappers, the `<small>` follows an inline `<label>`
+(checkbox/switch) or `<fieldset>` (radio) — neither of which is a block
+input — and the negative `margin-top` pulls the helper text up awkwardly. A
+targeted CSS rule removes the negative margin for these element types.
 
 ## Wire format
 
@@ -40,7 +40,7 @@ The `checkbox` type uses the same structure as `switch` but without
 <div>
   <input type="checkbox" name="prefix.key" id="prefix.key">
   <label for="prefix.key"> Label*</label>
-  <small id="prefix.key-helper">tooltip text</small>
+  <small id="prefix.key-helper">helper text</small>
 </div>
 ```
 
@@ -54,13 +54,15 @@ The `checkbox` type uses the same structure as `switch` but without
 - Add `type === 'checkbox'` branch alongside the existing `type === 'switch'`
   branch, but omit `input.role = 'switch'`.
 
-### serialize (already has checkbox branch)
-- Change `el.checked` → `el.indeterminate ? null : el.checked`
+### serialize (currently matches `switch` only)
+- Add `type === 'checkbox'` alongside the existing `type === 'switch'` check
+  in the ternary, returning `el.indeterminate ? null : el.checked`
 
-### populateFromComponents (already has checkbox branch)
+### populateFromComponents (currently matches `switch` only)
+- Add `type === 'checkbox'` alongside the existing `type === 'switch'` check
 - When `fopts.value` is `null`: set `el.checked = false` and
   `el.indeterminate = true`
-- When truthy/falsy: keep current `el.checked = !!fopts.value` plus
+- When truthy/falsy: set `el.checked = !!fopts.value` and
   `el.indeterminate = false`
 
 ### readFormValue
@@ -68,16 +70,21 @@ The `checkbox` type uses the same structure as `switch` but without
   `el.indeterminate ? null : el.checked`
 
 ### bindChangeListeners
-- The blur/change handler for checkbox currently reads `el.checked` directly
-  in the inline ternary. This uses `readFormValue` instead (already the case
-  for radio), but the checkbox path in the handler uses a direct `el.checked`
-  — align it to use `readFormValue`.
+- The handler closure currently captures only `el` and `key`, and reads
+  value with a direct `el.checked` for all checkbox-type elements. Change
+  the value read to use `readFormValue` instead, so indeterminate checkboxes
+  produce `null`.
+- `readFormValue` is safe for both switch and checkbox: switches are never
+  set to indeterminate, so `el.indeterminate ? null : el.checked` always
+  returns `el.checked` for switches.
 
 ### Validation handler
-- Add a custom check: if field is `type === 'checkbox'` and `required` and
-  `el.indeterminate`, treat as invalid (`aria-invalid="true"`, block send).
-  Native `el.checkValidity()` does not flag indeterminate as invalid.
-- This is a small addition to the blur/change handler's validity check.
+- Add a custom check after `el.checkValidity()`: if `el.indeterminate` and
+  `el.required`, treat as invalid (`aria-invalid="true"`, block send). No
+  need to check the logical field type — our code never sets indeterminate
+  on a switch, so this check is a no-op for switches and fires only for
+  checkboxes. Native `el.checkValidity()` does not flag indeterminate as
+  invalid.
 
 ## CSS rule (index.html)
 
@@ -85,18 +92,19 @@ Add to the existing `<style>` block in `index.html`:
 
 ```css
 input[type="checkbox"] + label + small,
-fieldset + small,
-select + small,
-input[type="range"] + small {
+fieldset + small {
   display: block;
   color: var(--pico-muted-color);
+  margin-top: 0;
+  margin-bottom: var(--pico-spacing);
 }
 ```
 
-This overrides PicoCSS's global `small { margin-top: calc(...) }` for these
-element types where the negative margin creates visual gaps inside the `<div>`
-wrapper. The `color` and `font-size` still come from PicoCSS's global `small`
-rule.
+This overrides PicoCSS's negative `margin-top` on `<small>` when it follows an
+inline `<label>` (checkbox/switch) or `<fieldset>` (radio), and adds proper
+bottom spacing. `<select>`, text inputs, `<textarea>`, and
+`<input type="range">` are block elements in PicoCSS — the default negative
+margin works correctly for them.
 
 ## Validation
 
