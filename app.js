@@ -521,7 +521,7 @@
   function onUserInput(key, newValue) {
     if (inFlight[key]) return;
     var ls = lastSent[key];
-    if (JSON.stringify(newValue) === JSON.stringify(ls)) return;
+    if (String(newValue) === String(ls)) return;
     sendToServer(key, newValue);
   }
 
