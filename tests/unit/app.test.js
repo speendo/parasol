@@ -2000,3 +2000,161 @@ describe('checkbox indeterminate validation', function () {
     expect(window.__test.lastSent['notifications.confirm']).toBe(null)
   })
 })
+
+describe('falsey values through echo matching', function () {
+  beforeEach(function () {
+    document.querySelector('#config-form').innerHTML =
+      '<input type="number" name="wifi.channel" value="0" />'
+    window.__test.components = [
+      { id: 'wifi', fields: [
+        { key: 'channel', type: 'number', label: 'Channel', opts: { value: 0 } },
+      ]},
+    ]
+    window.__test.lastSent = {}
+    window.__test.inFlight = {}
+    window.__test.dirty = false
+  })
+
+  it('echo matches number 0 correctly', function () {
+    window.__test.lastSent['wifi.channel'] = 0
+    window.__test.inFlight['wifi.channel'] = true
+    window.__test.receiveWSMessage({
+      data: JSON.stringify({
+        _dirty: false,
+        wifi: { channel: ['number', 'Channel', { value: 0 }] },
+      }),
+    })
+    expect(window.__test.inFlight['wifi.channel']).toBe(false)
+  })
+
+  it('echo matches empty string correctly', function () {
+    document.querySelector('#config-form').innerHTML =
+      '<input name="wifi.ssid" value="" />'
+    window.__test.components[0].fields[0] =
+      { key: 'ssid', type: 'text', label: 'SSID', opts: { value: '' } }
+    window.__test.lastSent['wifi.ssid'] = ''
+    window.__test.inFlight['wifi.ssid'] = true
+    window.__test.receiveWSMessage({
+      data: JSON.stringify({
+        _dirty: false,
+        wifi: { ssid: ['text', 'SSID', { value: '' }] },
+      }),
+    })
+    expect(window.__test.inFlight['wifi.ssid']).toBe(false)
+  })
+
+  it('echo matches false boolean correctly', function () {
+    document.querySelector('#config-form').innerHTML =
+      '<input type="checkbox" name="gpio.enabled" />'
+    window.__test.components[0].fields[0] =
+      { key: 'enabled', type: 'switch', label: 'Enabled', opts: { value: false } }
+    window.__test.lastSent['gpio.enabled'] = false
+    window.__test.inFlight['gpio.enabled'] = true
+    window.__test.receiveWSMessage({
+      data: JSON.stringify({
+        _dirty: false,
+        gpio: { enabled: ['switch', 'Enabled', { value: false }] },
+      }),
+    })
+    expect(window.__test.inFlight['gpio.enabled']).toBe(false)
+  })
+
+  it('echo matches null correctly', function () {
+    document.querySelector('#config-form').innerHTML =
+      '<input type="checkbox" name="notifications.confirm" />'
+    var el = document.querySelector('[name="notifications.confirm"]')
+    el.indeterminate = true
+    window.__test.components[0].fields[0] =
+      { key: 'confirm', type: 'checkbox', label: 'Confirm', opts: { value: null } }
+    window.__test.lastSent['notifications.confirm'] = null
+    window.__test.inFlight['notifications.confirm'] = true
+    window.__test.receiveWSMessage({
+      data: JSON.stringify({
+        _dirty: false,
+        notifications: { confirm: ['checkbox', 'Confirm', { value: null }] },
+      }),
+    })
+    expect(window.__test.inFlight['notifications.confirm']).toBe(false)
+  })
+})
+
+describe('partial server update', function () {
+  beforeEach(function () {
+    document.querySelector('#config-form').innerHTML = [
+      '<input name="wifi.ssid" value="Net" />',
+      '<input name="wifi.password" value="" />',
+      '<input name="gpio.pin" value="2" />',
+    ].join('')
+    window.__test.components = [
+      { id: 'wifi', fields: [
+        { key: 'ssid', type: 'text', label: 'SSID', opts: { value: 'Net' } },
+        { key: 'password', type: 'password', label: 'Password', opts: { value: '' } },
+      ]},
+      { id: 'gpio', fields: [
+        { key: 'pin', type: 'number', label: 'Pin', opts: { value: 2 } },
+      ]},
+    ]
+    window.__test.lastSent = {}
+    window.__test.inFlight = {}
+    window.__test.dirty = false
+    document.getElementById('server-changed').hidden = true
+    document.getElementById('notif-load').hidden = true
+    document.getElementById('notif-keep').hidden = true
+    document.getElementById('notif-keep-local').hidden = true
+    document.getElementById('notif-accept-server').hidden = true
+  })
+
+  it('partial update only changes specified fields', function () {
+    // Server sends only wifi.ssid, not wifi.password or gpio.pin
+    window.__test.receiveWSMessage({
+      data: JSON.stringify({
+        _dirty: true,
+        wifi: { ssid: ['text', 'SSID', { value: 'NewNet' }] },
+      }),
+    })
+    expect(window.__test.components[0].fields[0].opts.value).toBe('NewNet')
+    expect(window.__test.components[0].fields[1].opts.value).toBe('')
+    expect(window.__test.components[1].fields[0].opts.value).toBe(2)
+  })
+})
+
+describe('rapid blur events across different fields', function () {
+  beforeEach(function () {
+    document.querySelector('#config-form').innerHTML = [
+      '<input name="wifi.ssid" value="Net" />',
+      '<input name="wifi.password" value="secret" />',
+    ].join('')
+    window.__test.components = [
+      { id: 'wifi', fields: [
+        { key: 'ssid', type: 'text', label: 'SSID', opts: { value: '' } },
+        { key: 'password', type: 'password', label: 'Password', opts: { value: '' } },
+      ]},
+    ]
+    window.__test.lastSent = {}
+    window.__test.inFlight = {}
+    window.__test.dirty = false
+    window.connectWS()
+    window.__test.wsReady()
+    window.__test.sentMessages = []
+    window.__test.onWSSend = function (data) {
+      window.__test.sentMessages.push(JSON.parse(data))
+    }
+  })
+
+  it('multiple fields can be in-flight simultaneously', function () {
+    window.onUserInput('wifi.ssid', 'NewNet')
+    window.onUserInput('wifi.password', 'p@ss')
+    expect(window.__test.inFlight['wifi.ssid']).toBe(true)
+    expect(window.__test.inFlight['wifi.password']).toBe(true)
+    expect(window.__test.sentMessages.length).toBe(2)
+    expect(window.__test.sentMessages[0].data.wifi.ssid[2].value).toBe('NewNet')
+    expect(window.__test.sentMessages[1].data.wifi.password[2].value).toBe('p@ss')
+  })
+
+  it('same field rapid blur does not send while in-flight', function () {
+    window.onUserInput('wifi.ssid', 'val1')
+    var count = window.__test.sentMessages.length
+    window.onUserInput('wifi.ssid', 'val2')
+    expect(window.__test.sentMessages.length).toBe(count)
+  })
+})
