@@ -157,10 +157,6 @@ async def status_broadcaster():
                 connected.discard(client)
 
 
-@app.get("/api/settings")
-async def get_settings():
-    return build_settings()
-
 
 @app.post("/api/settings/save")
 async def api_settings_save(request: Request):
@@ -183,26 +179,6 @@ async def api_settings_save(request: Request):
                 applied_store[store_key] = opts["value"]
     return {}
 
-
-@app.post("/api/settings/apply")
-async def api_settings_apply(request: Request):
-    try:
-        data = await request.json()
-    except Exception:
-        return PlainTextResponse("Invalid JSON", status_code=400)
-    if not isinstance(data, dict):
-        return PlainTextResponse("Body must be a JSON object", status_code=400)
-    for comp_id, fields in data.items():
-        if comp_id.startswith("_"):
-            continue
-        for key, field_def in fields.items():
-            if not isinstance(field_def, list) or len(field_def) < 3:
-                continue
-            opts = field_def[2]
-            if "value" in opts:
-                store_key = comp_id + "." + key
-                applied_store[store_key] = opts["value"]
-    return {}
 
 
 @app.websocket("/api/events")
