@@ -4,7 +4,7 @@
 
 **Goal:** Build the `pico-settings` ESP-IDF component — a reusable C library that implements the pico-website API contract (WS settings/status protocol, HTTP save/reset, embedded static files).
 
-**Architecture:** Four internal C modules (`pwui_store` — typed key-value store with dirty tracking, `pwui_json` — wire format builder/parser, `pwui_ws` — WebSocket protocol, `pwui.c` — builder API + init + HTTP routes) behind a single public header `pwui.h`. Host-testable modules (store, json) use ESP-IDF Unity on Linux target. ESP32-only modules (ws, pwui) tested via integration against the existing Playwright e2e suite.
+**Architecture:** Four internal modules (`pwui_store` — typed key-value store with dirty tracking, `pwui_json` — wire format builder/parser, `pwui_ws` — WebSocket protocol, `pwui` — builder API + init + HTTP routes) behind a single public header `pwui.h`. Host-testable modules (store.c, json.c) use ESP-IDF Unity on Linux target. ESP32-only modules (ws.cpp, pwui.cpp) tested via integration against the existing Playwright e2e suite.
 
 **Tech Stack:** C, ESP-IDF v5.x, ESPAsyncWebServer ~3.11, cJSON (vendored), Python 3 (assets script), ESP-IDF Unity (host tests)
 
@@ -21,8 +21,8 @@
 - Create: `components/pico-settings/src/pwui_ws.h`
 - Create: `components/pico-settings/src/pwui_store.c`
 - Create: `components/pico-settings/src/pwui_json.c`
-- Create: `components/pico-settings/src/pwui_ws.c`
-- Create: `components/pico-settings/src/pwui.c`
+- Create: `components/pico-settings/src/pwui_ws.cpp`
+- Create: `components/pico-settings/src/pwui.cpp`
 - Create: `components/pico-settings/examples/basic/main.c`
 
 - [ ] **Step 1: Create directory structure**
@@ -42,7 +42,7 @@ Write `components/pico-settings/CMakeLists.txt`:
 
 ```cmake
 idf_component_register(
-    SRCS "src/pwui.c" "src/pwui_store.c" "src/pwui_json.c" "src/pwui_ws.c"
+    SRCS "src/pwui_store.c" "src/pwui_json.c" "src/pwui.cpp" "src/pwui_ws.cpp"
     INCLUDE_DIRS "include" "src" "dependencies/cJSON"
     REQUIRES cJSON
     PRIV_REQUIRES AsyncTCP ESPAsyncWebServer
@@ -84,15 +84,15 @@ Write `components/pico-settings/src/pwui_json.c`:
 #include "pwui_json.h"
 ```
 
-Write `components/pico-settings/src/pwui_ws.c`:
+Write `components/pico-settings/src/pwui_ws.cpp`:
 
-```c
+```cpp
 #include "pwui_ws.h"
 ```
 
-Write `components/pico-settings/src/pwui.c`:
+Write `components/pico-settings/src/pwui.cpp`:
 
-```c
+```cpp
 #include "pwui.h"
 ```
 
@@ -294,15 +294,25 @@ typedef struct {
 } pwui_field_t;
 
 typedef struct {
+    const char *comp_id;
+    const char *label;
+} pwui_comp_meta_t;
+
+typedef struct {
     pwui_field_t *fields;
     int count;
     int capacity;
     bool dirty;
+    pwui_comp_meta_t *comps;
+    int comp_count;
+    int comp_capacity;
 } pwui_store_t;
 
 esp_err_t pwui_store_init(pwui_store_t *store);
 void pwui_store_deinit(pwui_store_t *store);
 esp_err_t pwui_store_add_field(pwui_store_t *store, const pwui_field_t *field);
+esp_err_t pwui_store_add_component(pwui_store_t *store, const char *comp_id, const char *label);
+const char *pwui_store_get_label(pwui_store_t *store, const char *comp_id);
 pwui_field_t *pwui_store_find(pwui_store_t *store, const char *comp_id, const char *key);
 esp_err_t pwui_store_set_value(pwui_store_t *store, const char *comp_id, const char *key, const char *value_str);
 cJSON *pwui_store_get_value(pwui_store_t *store, const char *comp_id, const char *key);
@@ -332,6 +342,12 @@ esp_err_t pwui_store_init(pwui_store_t *store) {
     store->capacity = 16;
     store->fields = calloc(store->capacity, sizeof(pwui_field_t));
     if (!store->fields) return ESP_ERR_NO_MEM;
+    store->comp_capacity = 4;
+    store->comps = calloc(store->comp_capacity, sizeof(pwui_comp_meta_t));
+    if (!store->comps) {
+        free(store->fields);
+        return ESP_ERR_NO_MEM;
+    }
     return ESP_OK;
 }
 
@@ -341,6 +357,7 @@ void pwui_store_deinit(pwui_store_t *store) {
         cJSON_Delete(store->fields[i].value);
     }
     free(store->fields);
+    free(store->comps);
     memset(store, 0, sizeof(*store));
 }
 ```
@@ -411,10 +428,6 @@ pwui_field_t *pwui_store_field_at(pwui_store_t *store, int i) {
 Append to `components/pico-settings/src/pwui_store.c`:
 
 ```c
-static bool is_switch_type(pwui_type_t t) {
-    return t == PWUI_SWITCH;
-}
-
 static bool is_bool_type(pwui_type_t t) {
     return t == PWUI_CHECKBOX || t == PWUI_SWITCH;
 }
@@ -475,6 +488,32 @@ void pwui_store_clear_dirty(pwui_store_t *store) {
 
 void pwui_store_lock(pwui_store_t *store) { (void)store; }
 void pwui_store_unlock(pwui_store_t *store) { (void)store; }
+
+esp_err_t pwui_store_add_component(pwui_store_t *store, const char *comp_id, const char *label) {
+    if (!store || !comp_id || !label) return ESP_ERR_INVALID_ARG;
+    for (int i = 0; i < store->comp_count; i++) {
+        if (strcmp(store->comps[i].comp_id, comp_id) == 0) return ESP_ERR_INVALID_STATE;
+    }
+    if (store->comp_count >= store->comp_capacity) {
+        int new_cap = store->comp_capacity * 2;
+        pwui_comp_meta_t *new_comps = realloc(store->comps, new_cap * sizeof(pwui_comp_meta_t));
+        if (!new_comps) return ESP_ERR_NO_MEM;
+        store->comps = new_comps;
+        store->comp_capacity = new_cap;
+    }
+    store->comps[store->comp_count].comp_id = comp_id;
+    store->comps[store->comp_count].label = label;
+    store->comp_count++;
+    return ESP_OK;
+}
+
+const char *pwui_store_get_label(pwui_store_t *store, const char *comp_id) {
+    if (!store || !comp_id) return NULL;
+    for (int i = 0; i < store->comp_count; i++) {
+        if (strcmp(store->comps[i].comp_id, comp_id) == 0) return store->comps[i].label;
+    }
+    return NULL;
+}
 ```
 
 - [ ] **Step 7: Implement pwui_store_populate (load from on_load/on_reset cJSON)**
@@ -761,10 +800,6 @@ Append to `components/pico-settings/src/pwui_json.c`:
 static cJSON *build_group(pwui_store_t *store, bool is_status) {
     cJSON *root = cJSON_CreateObject();
 
-    int count = pwui_store_settings_count(store);
-    if (is_status) count = pwui_store_status_count(store);
-
-    cJSON *current_group = NULL;
     const char *current_comp_id = NULL;
     cJSON *group_obj = NULL;
 
@@ -775,6 +810,10 @@ static cJSON *build_group(pwui_store_t *store, bool is_status) {
         if (!current_comp_id || strcmp(current_comp_id, f->comp_id) != 0) {
             current_comp_id = f->comp_id;
             group_obj = cJSON_CreateObject();
+            const char *label = pwui_store_get_label(store, f->comp_id);
+            if (label) {
+                cJSON_AddStringToObject(group_obj, "label", label);
+            }
             cJSON_AddItemToObject(root, f->comp_id, group_obj);
         }
 
@@ -823,6 +862,7 @@ static cJSON *build_group(pwui_store_t *store, bool is_status) {
             cJSON *attrs_json = cJSON_Parse(fixed);
             if (attrs_json && cJSON_IsObject(attrs_json)) {
                 cJSON_AddItemToObject(opts, "attrs", attrs_json);
+                free(fixed);
             } else {
                 free(fixed);
                 if (attrs_json) cJSON_Delete(attrs_json);
@@ -1118,7 +1158,7 @@ typedef struct {
 #define PWUI_HELP    ((const void*)2)
 #define PWUI_APPLY   ((const void*)3)
 #define PWUI_ATTRS   ((const void*)4)
-#define PWUI_NULL    ((const void*)0)
+#define PWUI_NULL    ((const void*)5)  /* creates null value — use standalone (not with PWUI_VALUE) */
 
 /* ── Lifecycle ──────────────────────────────────────────────── */
 
@@ -1168,7 +1208,7 @@ git commit -m "feat: define pwui.h public API header"
 
 **Files:**
 - Create: `components/pico-settings/src/pwui_ws.h`
-- Modify: `components/pico-settings/src/pwui_ws.c`
+- Modify: `components/pico-settings/src/pwui_ws.cpp`
 
 - [ ] **Step 1: Write internal header**
 
@@ -1184,7 +1224,7 @@ esp_err_t pwui_ws_init(AsyncWebSocket *ws, pwui_store_t *store);
 
 - [ ] **Step 2: Implement pwui_ws**
 
-Write `components/pico-settings/src/pwui_ws.c`:
+Write `components/pico-settings/src/pwui_ws.cpp`:
 
 ```c
 #include "pwui_ws.h"
@@ -1283,20 +1323,20 @@ esp_err_t pwui_ws_init(AsyncWebSocket *ws, pwui_store_t *store) {
 - [ ] **Step 3: Commit**
 
 ```bash
-git add components/pico-settings/src/pwui_ws.h components/pico-settings/src/pwui_ws.c
+git add components/pico-settings/src/pwui_ws.h components/pico-settings/src/pwui_ws.cpp
 git commit -m "feat: implement pwui_ws WebSocket protocol handler"
 ```
 
 ---
 
-### Task 8: pwui.c — builder API, init, HTTP handlers, static files
+### Task 8: pwui.cpp — builder API, init, HTTP handlers, static files
 
 **Files:**
-- Modify: `components/pico-settings/src/pwui.c`
+- Modify: `components/pico-settings/src/pwui.cpp`
 
 - [ ] **Step 1: Implement builder API**
 
-Write `components/pico-settings/src/pwui.c`:
+Write `components/pico-settings/src/pwui.cpp`:
 
 ```c
 #include "pwui.h"
@@ -1342,6 +1382,12 @@ esp_err_t pwui_begin_component(const char *id, const char *label, bool is_status
     g_current.comp_id = id;
     g_current.label = label;
     g_current.is_status = is_status;
+
+    esp_err_t err = pwui_store_add_component(&g_store, id, label);
+    if (err != ESP_OK) {
+        g_current.active = false;
+        return err;
+    }
     return ESP_OK;
 }
 
@@ -1377,6 +1423,7 @@ static esp_err_t add_field_internal(pwui_type_t type, const char *comp_id,
     }
 
     const char *default_value = NULL;
+    bool set_null = false;
     void *vp;
     while ((vp = va_arg(args, void *)) != PWUI_END) {
         if (vp == PWUI_VALUE) {
@@ -1387,13 +1434,17 @@ static esp_err_t add_field_internal(pwui_type_t type, const char *comp_id,
             f.on_apply = va_arg(args, pwui_apply_cb_t);
         } else if (vp == PWUI_ATTRS) {
             f.attrs = va_arg(args, const char *);
+        } else if (vp == PWUI_NULL) {
+            set_null = true;
         }
     }
 
     esp_err_t err = pwui_store_add_field(&g_store, &f);
     if (err != ESP_OK) return err;
 
-    if (default_value || f.is_status) {
+    if (set_null) {
+        pwui_store_set_value(&g_store, comp_id, key, NULL);
+    } else if (default_value || f.is_status) {
         pwui_store_set_value(&g_store, comp_id, key, default_value);
     }
 
@@ -1451,10 +1502,23 @@ const char *pwui_get(const char *path) {
     memcpy(comp_id, path, clen);
     comp_id[clen] = '\0';
     strncpy(key, dot + 1, sizeof(key) - 1);
+    key[sizeof(key) - 1] = '\0';
 
     cJSON *v = pwui_store_get_value(&g_store, comp_id, key);
     if (!v) return NULL;
-    return cJSON_GetStringValue(v);
+
+    if (cJSON_IsString(v)) return cJSON_GetStringValue(v);
+
+    static char buf[32];
+    if (cJSON_IsNumber(v)) {
+        snprintf(buf, sizeof(buf), "%g", cJSON_GetNumberValue(v));
+        return buf;
+    }
+    if (cJSON_IsBool(v)) {
+        snprintf(buf, sizeof(buf), "%s", cJSON_IsTrue(v) ? "true" : "false");
+        return buf;
+    }
+    return NULL;
 }
 
 /* ── Push / broadcast ───────────────────────────────────────── */
@@ -1555,17 +1619,45 @@ esp_err_t pwui_init(AsyncWebServer *server, const pwui_storage_t *storage) {
         [](AsyncWebServerRequest *req) {}, NULL,
         [storage](AsyncWebServerRequest *req, uint8_t *data, size_t len,
                   size_t index, size_t total) {
-            /* Accumulate body across chunks (ESPAsyncWebServer may split payload) */
-            static char body_buf[4096];
-            static size_t body_len = 0;
-            if (index == 0) body_len = 0;
-            if (body_len + len < sizeof(body_buf)) {
-                memcpy(body_buf + body_len, data, len);
-                body_len += len;
+            /* Per-request body buffer allocated on first chunk, freed at end.
+               Format: [size_t body_len][char body_buf[]] in a single malloc. */
+            char *body_buf;
+            size_t *body_len_ptr;
+
+            if (index == 0) {
+                if (total > 4096) {
+                    req->send(413, "text/plain", "Payload too large");
+                    return;
+                }
+                req->_tempObject = malloc(sizeof(size_t) + total + 1);
+                if (!req->_tempObject) {
+                    req->send(500, "text/plain", "Out of memory");
+                    return;
+                }
+                body_len_ptr = (size_t *)req->_tempObject;
+                *body_len_ptr = 0;
+            } else {
+                if (!req->_tempObject) return; /* Error on first chunk already sent */
+                body_len_ptr = (size_t *)req->_tempObject;
             }
+            body_buf = (char *)(body_len_ptr + 1);
+
+            if (*body_len_ptr + len >= total + 1) {
+                req->_tempObject = NULL;
+                free(body_len_ptr);
+                req->send(400, "text/plain", "Body size mismatch");
+                return;
+            }
+            memcpy(body_buf + *body_len_ptr, data, len);
+            *body_len_ptr += len;
+            body_buf[*body_len_ptr] = '\0';
+
             if (index + len < total) return;
 
-            cJSON *body = cJSON_ParseWithLength(body_buf, body_len);
+            cJSON *body = cJSON_Parse(body_buf);
+            free(body_len_ptr);
+            req->_tempObject = NULL;
+
             if (!body || !cJSON_IsObject(body)) {
                 if (body) cJSON_Delete(body);
                 req->send(400, "text/plain", "Invalid JSON");
@@ -1606,8 +1698,8 @@ esp_err_t pwui_start(void) {
 - [ ] **Step 2: Commit**
 
 ```bash
-git add components/pico-settings/src/pwui.c
-git commit -m "feat: implement pwui.c builder API, init, HTTP handlers, static files"
+git add components/pico-settings/src/pwui.cpp
+git commit -m "feat: implement pwui.cpp builder API, init, HTTP handlers, static files"
 ```
 
 ---

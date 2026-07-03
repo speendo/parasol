@@ -263,7 +263,7 @@ GitHub/docs ───────> (can be done anytime, best after features sta
 2. ~~Validation fix~~ ✅ (resolved 2026-06-25)
 3. ~~Group name labels~~ ✅ (completed 2026-06-26)
 4. Nav image/favicon (trivial, 5-minute change)
-5. Edge cases audit (important before backend, could catch JS protocol issues)
+5. Edge cases audit (important before backend, could catch JS protocol issues) ✅ (completed 2026-06-27)
 6. ~~Checkbox revival~~ ✅ (completed 2026-06-26)
 7. ESP32 backend (biggest item, enables everything else)
 8. Reset button (needs backend)

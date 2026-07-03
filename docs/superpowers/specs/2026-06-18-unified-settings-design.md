@@ -67,13 +67,15 @@ Each key under a component group is a 3-element array:
 ```
 
 - `type` — one of: `text`, `number`, `password`, `email`, `tel`, `url`, `color`,
-  `switch`, `radio`, `select`, `range`, `textarea`
+  `checkbox`, `switch`, `radio`, `select`, `range`, `textarea`
 - `label` — display name for the form field
 - `opts` — dictionary with keys:
   - `value` — current applied value (replaces `default` from old format)
   - `options` — for `select` and `radio`: `[["key1", "Label 1"], ...]`
    - `attrs` — HTML attributes: `{min, max, maxlength, minlength, step, placeholder, required, pattern}`
   - `tooltip` — help text string
+- `checkbox` has three wire values: `true` (checked), `false` (unchecked), `null`
+  (indeterminate/unset)
 
 ### Meta fields
 
@@ -331,8 +333,13 @@ Both checks happen in `updateUI()`.
 **Event types by field:**
 - `text`, `password`, `email`, `tel`, `url`, `textarea` — `blur` triggers validation + auto-apply
 - `select`, `range`, `number` — `change` triggers auto-apply
-- `radio`, `switch` — `click`/`change` triggers auto-apply
+- `radio`, `switch`, `checkbox` — `click`/`change` triggers auto-apply
 - All fields — `input` calls `updateUI()` for live pending count feedback
+
+**Checkbox indeterminate validation:** If `el.indeterminate` is `true` and the field
+has the `required` attribute, it is treated as invalid (`aria-invalid="true"`).
+Native `checkValidity()` does not flag indeterminate as invalid, so a custom check
+is added alongside the standard validation handler.
 
 ---
 
