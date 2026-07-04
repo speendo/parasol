@@ -134,7 +134,10 @@ void pwui_store_unlock(pwui_store_t *store) { (void)store; }
 esp_err_t pwui_store_add_component(pwui_store_t *store, const char *comp_id, const char *label) {
     if (!store || !comp_id || !label) return ESP_ERR_INVALID_ARG;
     for (int i = 0; i < store->comp_count; i++) {
-        if (strcmp(store->comps[i].comp_id, comp_id) == 0) return ESP_ERR_INVALID_STATE;
+        if (strcmp(store->comps[i].comp_id, comp_id) == 0) {
+            if (strcmp(store->comps[i].label, label) == 0) return ESP_OK;
+            return ESP_ERR_INVALID_STATE;
+        }
     }
     if (store->comp_count >= store->comp_capacity) {
         int new_cap = store->comp_capacity * 2;

@@ -10,36 +10,28 @@
 
 ## Phase 0: Prerequisites
 
-Before testing, two gaps must be closed.
+One fix and one verification before testing begins.
 
 ### P0-1 Fix `pwui_store_add_component` duplicate check
 
-**Bug:** The design spec (D7) says the same component ID may exist in both settings AND status registries (e.g., "WiFi" for settings + "WiFi" for signal strength status). But `pwui_store_add_component` rejects any duplicate comp_id regardless of type.
+**Bug:** The design spec (D7) says the same component ID may exist in both settings AND status registries (e.g., "WiFi" for settings + "WiFi" for signal strength status). The intended UX is that status fields render first in an accordion, then settings fields follow — same group label, single `<details>` section. But `pwui_store_add_component` rejected any duplicate comp_id regardless of type.
 
-**Fix:** Change the duplicate check to return `ESP_OK` (no-op) when the same comp_id and label already exist. The field-level check in `pwui_begin_component` already prevents same-type duplicates.
+**Fix:** Changed the duplicate check to return `ESP_OK` when the same `comp_id` AND `label` already exist (no-op — reuse the label). Only errors if same ID with a different label, which is a programming mistake.
 
 **Files:** `components/pico-settings/src/pwui_store.c`
 
-- [ ] **Step 1:** Change `pwui_store_add_component` duplicate detection from `return ESP_ERR_INVALID_STATE` to `return ESP_OK` when `strcmp(store->comps[i].label, label) == 0` (same comp_id + same label = no-op). Only error if same ID with different label.
+- [x] **Step 1:** Added label-aware duplicate check
 - [ ] **Step 2:** Commit: `fix: allow same comp_id across settings/status registries (D7)`
 
-### P0-2 Add client-side Reset button
+**Note:** The JS-side accordion merge (status fields first, then settings, in one `<details>`) is separate future work — tracked in the implementation plan's "Remaining Future Work" table. Backend testing does not depend on it.
 
-**Scope:** The C backend already implements `POST /api/settings/reset` (`handle_reset` in `pwui.cpp`). The test server already has it. The client needs a button.
-
-**Files:** `app.js`, `index.html`
-
-- [ ] **Step 1:** Add a Reset button in `<footer>` next to the Save button.
-- [ ] **Step 2:** Wire click handler: POST `/api/settings/reset`, on success clear dirty flag.
-- [ ] **Step 3:** Add unit test: click Reset → POST fires, WS settings push updates form.
-- [ ] **Step 4:** Add e2e test: click Reset → settings revert to defaults.
-- [ ] **Step 5:** Commit: `feat: add Reset button to restore NVS defaults`
-
-### P0-3 Verify all existing tests pass
+### P0-2 Verify all existing tests pass
 
 - [ ] **Step 1:** `npm run test:unit` — 160+ tests pass
 - [ ] **Step 2:** `npm run test:e2e` — 44 tests pass
 - [ ] **Step 3:** If failures, fix before proceeding
+
+**Deferred:** Reset button (client UI polish — `POST /api/settings/reset` already implemented in backend for programmatic testing), accordion merge (JS-side feature, separate spec).
 
 ---
 
