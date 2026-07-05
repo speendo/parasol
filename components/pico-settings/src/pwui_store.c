@@ -178,9 +178,18 @@ esp_err_t pwui_store_populate(pwui_store_t *store, cJSON *data) {
                 val = cJSON_GetObjectItem(opts, "value");
             }
             if (val) {
-                char *val_str = cJSON_PrintUnformatted(val);
-                pwui_store_set_value(store, group->string, field_json->string, val_str);
-                free(val_str);
+                const char *val_str = NULL;
+                char *printed = NULL;
+                if (cJSON_IsString(val)) {
+                    val_str = cJSON_GetStringValue(val);
+                } else {
+                    printed = cJSON_PrintUnformatted(val);
+                    val_str = printed;
+                }
+                if (val_str) {
+                    pwui_store_set_value(store, group->string, field_json->string, val_str);
+                }
+                free(printed);
             }
             field_json = field_json->next;
         }

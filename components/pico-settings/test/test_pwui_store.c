@@ -158,6 +158,114 @@ void test_capacity_growth(void) {
     TEST_ASSERT_GREATER_OR_EQUAL(32, store.capacity);
 }
 
+void test_deinit_empty_store(void) {
+    pwui_store_t s;
+    TEST_ASSERT_EQUAL(ESP_OK, pwui_store_init(&s));
+    pwui_store_deinit(&s);
+}
+
+void test_set_value_overwrite(void) {
+    pwui_field_t f = make_field("wifi", "ssid", PWUI_TEXT, false);
+    pwui_store_add_field(&store, &f);
+
+    pwui_store_set_value(&store, "wifi", "ssid", "first");
+    cJSON *v1 = pwui_store_get_value(&store, "wifi", "ssid");
+    TEST_ASSERT_EQUAL_STRING("first", cJSON_GetStringValue(v1));
+
+    pwui_store_set_value(&store, "wifi", "ssid", "second");
+    cJSON *v2 = pwui_store_get_value(&store, "wifi", "ssid");
+    TEST_ASSERT_EQUAL_STRING("second", cJSON_GetStringValue(v2));
+}
+
+void test_find_null_args(void) {
+    TEST_ASSERT_NULL(pwui_store_find(NULL, "x", "y"));
+    TEST_ASSERT_NULL(pwui_store_find(&store, NULL, "y"));
+    TEST_ASSERT_NULL(pwui_store_find(&store, "x", NULL));
+}
+
+void test_store_field_at_bounds(void) {
+    TEST_ASSERT_NULL(pwui_store_field_at(&store, -1));
+    TEST_ASSERT_NULL(pwui_store_field_at(&store, 0));
+
+    pwui_field_t f = make_field("a", "b", PWUI_TEXT, false);
+    pwui_store_add_field(&store, &f);
+
+    TEST_ASSERT_NULL(pwui_store_field_at(&store, 1));
+    TEST_ASSERT_NOT_NULL(pwui_store_field_at(&store, 0));
+}
+
+void test_populate_null_data(void) {
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, pwui_store_populate(&store, NULL));
+}
+
+void test_populate_non_object(void) {
+    cJSON *arr = cJSON_CreateArray();
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, pwui_store_populate(&store, arr));
+    cJSON_Delete(arr);
+}
+
+void test_add_component_same_id_label(void) {
+    TEST_ASSERT_EQUAL(ESP_OK, pwui_store_add_component(&store, "comp1", "label1"));
+    TEST_ASSERT_EQUAL(ESP_OK, pwui_store_add_component(&store, "comp1", "label1"));
+}
+
+void test_add_component_same_id_different_label(void) {
+    TEST_ASSERT_EQUAL(ESP_OK, pwui_store_add_component(&store, "comp1", "label1"));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, pwui_store_add_component(&store, "comp1", "label2"));
+}
+
+void test_get_label_nonexistent(void) {
+    TEST_ASSERT_NULL(pwui_store_get_label(&store, "unknown"));
+}
+
+void test_get_label_after_add(void) {
+    TEST_ASSERT_EQUAL(ESP_OK, pwui_store_add_component(&store, "wifi", "WiFi Settings"));
+    const char *label = pwui_store_get_label(&store, "wifi");
+    TEST_ASSERT_NOT_NULL(label);
+    TEST_ASSERT_EQUAL_STRING("WiFi Settings", label);
+}
+
+void test_capacity_growth_comps(void) {
+    TEST_ASSERT_EQUAL(ESP_OK, pwui_store_add_component(&store, "comp0", "label"));
+    TEST_ASSERT_EQUAL(ESP_OK, pwui_store_add_component(&store, "comp1", "label"));
+    TEST_ASSERT_EQUAL(ESP_OK, pwui_store_add_component(&store, "comp2", "label"));
+    TEST_ASSERT_EQUAL(ESP_OK, pwui_store_add_component(&store, "comp3", "label"));
+    TEST_ASSERT_EQUAL(ESP_OK, pwui_store_add_component(&store, "comp4", "label"));
+    TEST_ASSERT_EQUAL(ESP_OK, pwui_store_add_component(&store, "comp5", "label"));
+    TEST_ASSERT_EQUAL(ESP_OK, pwui_store_add_component(&store, "comp6", "label"));
+    TEST_ASSERT_EQUAL(ESP_OK, pwui_store_add_component(&store, "comp7", "label"));
+    TEST_ASSERT_EQUAL(8, store.comp_count);
+    TEST_ASSERT_GREATER_OR_EQUAL(8, store.comp_capacity);
+}
+
+void test_populate_with_group_label(void) {
+    pwui_field_t f = make_field("wifi", "ssid", PWUI_TEXT, false);
+    pwui_store_add_field(&store, &f);
+
+    cJSON *data = cJSON_Parse(
+        "{\"wifi\":{"
+        "\"label\":[\"text\",\"Label\",{}],"
+        "\"ssid\":[\"text\",\"SSID\",{\"value\":\"MyNet\"}]"
+        "}}"
+    );
+    TEST_ASSERT_NOT_NULL(data);
+    TEST_ASSERT_EQUAL(ESP_OK, pwui_store_populate(&store, data));
+    cJSON_Delete(data);
+
+    cJSON *v = pwui_store_get_value(&store, "wifi", "ssid");
+    TEST_ASSERT_TRUE(cJSON_IsString(v));
+    TEST_ASSERT_EQUAL_STRING("MyNet", cJSON_GetStringValue(v));
+}
+
+void test_store_init_null(void) {
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, pwui_store_init(NULL));
+}
+
+void test_add_field_null_store(void) {
+    pwui_field_t f = make_field("x", "y", PWUI_TEXT, false);
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, pwui_store_add_field(NULL, &f));
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_init_empty_store);
@@ -174,5 +282,19 @@ int main(void) {
     RUN_TEST(test_populate_from_cjson);
     RUN_TEST(test_set_unknown_field);
     RUN_TEST(test_capacity_growth);
+    RUN_TEST(test_deinit_empty_store);
+    RUN_TEST(test_set_value_overwrite);
+    RUN_TEST(test_find_null_args);
+    RUN_TEST(test_store_field_at_bounds);
+    RUN_TEST(test_populate_null_data);
+    RUN_TEST(test_populate_non_object);
+    RUN_TEST(test_add_component_same_id_label);
+    RUN_TEST(test_add_component_same_id_different_label);
+    RUN_TEST(test_get_label_nonexistent);
+    RUN_TEST(test_get_label_after_add);
+    RUN_TEST(test_capacity_growth_comps);
+    RUN_TEST(test_populate_with_group_label);
+    RUN_TEST(test_store_init_null);
+    RUN_TEST(test_add_field_null_store);
     return UNITY_END();
 }

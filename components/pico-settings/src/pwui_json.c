@@ -1,4 +1,5 @@
 #include "pwui_json.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -79,9 +80,7 @@ static cJSON *build_group(pwui_store_t *store, bool is_status) {
             cJSON *attrs_json = cJSON_Parse(fixed);
             if (attrs_json && cJSON_IsObject(attrs_json)) {
                 cJSON_AddItemToObject(opts, "attrs", attrs_json);
-                free(fixed);
             } else {
-                free(fixed);
                 if (attrs_json) cJSON_Delete(attrs_json);
             }
             free(fixed);
