@@ -543,7 +543,7 @@
   }
 
   /**
-   * Read a form field's value by grpound key path.
+   * Read a form field's value by compound key path.
    * Handles type coercion: radio→checked value, checkbox→boolean, number/range→float.
    * @param {string[]} parts - path segments, e.g. ["wifi", "ssid"]
    * @returns {(string|number|boolean|undefined)}
