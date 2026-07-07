@@ -75,14 +75,15 @@
    * Populate form elements from group field definitions' opts.value.
    * @param {Array} [grps] - optional group array, defaults to global `groups`
    */
-  function populateFromGroups(grps) {
+  function populateFromGroups(grps, domPrefix) {
     if (!grps) grps = groups;
+    var pfx = domPrefix || '';
     for (var ci = 0; ci < grps.length; ci++) {
       var grp = grps[ci];
       if (!grp.fields) continue;
       for (var fi = 0; fi < grp.fields.length; fi++) {
         var field = grp.fields[fi];
-        var el = configForm.querySelector('[name="' + grp.id + '.' + field.key + '"]');
+        var el = configForm.querySelector('[name="' + pfx + grp.id + '.' + field.key + '"]');
         if (!el) continue;
         var fopts = field.opts || {};
         if (field.type === 'checkbox') {
@@ -97,7 +98,7 @@
           el.checked = !!fopts.value;
           el.indeterminate = false;
         } else if (field.type === 'radio') {
-          var radios = configForm.querySelectorAll('[name="' + grp.id + '.' + field.key + '"]');
+          var radios = configForm.querySelectorAll('[name="' + pfx + grp.id + '.' + field.key + '"]');
           for (var ri = 0; ri < radios.length; ri++) {
             radios[ri].checked = fopts.value !== undefined && String(radios[ri].value) === String(fopts.value);
           }
@@ -287,7 +288,7 @@
       }
       if (groups.length > 0) {
         renderForm();
-        populateFromGroups(statusGroups);
+        populateFromGroups(statusGroups, 'st-');
         populateFromGroups();
         setBaseline();
         updateUI();
@@ -307,7 +308,7 @@
           }
         }
       }
-      populateFromGroups(statusGroups);
+      populateFromGroups(statusGroups, 'st-');
     }
   }
 
@@ -827,12 +828,13 @@
     var opts = field.opts || {};
     var required = opts.attrs && opts.attrs.required;
     var inputTypes = ['text', 'email', 'number', 'password', 'tel', 'url', 'color'];
+    var effectivePrefix = isStatus ? 'st-' + namePrefix : namePrefix;
 
     if (type === 'checkbox' || type === 'switch') {
       var input = document.createElement('input');
       input.type = 'checkbox';
       if (type === 'switch') input.role = 'switch';
-      input.name = input.id = namePrefix + '.' + key;
+      input.name = input.id = effectivePrefix + '.' + key;
       if (opts.value) input.checked = true;
       applyAttrs(input, opts.attrs);
       if (isStatus) input.disabled = true;
@@ -854,10 +856,10 @@
       if (opts.options) {
         for (var oi = 0; oi < opts.options.length; oi++) {
           var opt = opts.options[oi];
-          var radioId = namePrefix + '.' + key + '.' + opt[0];
+          var radioId = effectivePrefix + '.' + key + '.' + opt[0];
           var radio = document.createElement('input');
           radio.type = 'radio';
-          radio.name = namePrefix + '.' + key;
+          radio.name = effectivePrefix + '.' + key;
           radio.id = radioId;
           radio.value = opt[0];
           if (opts.value !== undefined && String(opt[0]) === String(opts.value)) {
@@ -885,14 +887,14 @@
     if (inputTypes.indexOf(type) !== -1) {
       input = document.createElement('input');
       input.type = type;
-      input.name = input.id = namePrefix + '.' + key;
+      input.name = input.id = effectivePrefix + '.' + key;
       if (opts.value !== undefined) input.value = opts.value;
       applyAttrs(input, opts.attrs);
       if (isStatus) input.disabled = true;
     } else if (type === 'range') {
       input = document.createElement('input');
       input.type = 'range';
-      input.name = input.id = namePrefix + '.' + key;
+      input.name = input.id = effectivePrefix + '.' + key;
       if (opts.value !== undefined) input.value = opts.value;
       applyAttrs(input, opts.attrs);
       if (isStatus) input.disabled = true;
@@ -905,7 +907,7 @@
       rangeOutput = valueDisplay;
     } else if (type === 'select') {
       input = document.createElement('select');
-      input.name = input.id = namePrefix + '.' + key;
+      input.name = input.id = effectivePrefix + '.' + key;
       if (opts.options) {
         for (var oi = 0; oi < opts.options.length; oi++) {
           var opt = opts.options[oi];
@@ -922,7 +924,7 @@
       if (isStatus) input.disabled = true;
     } else if (type === 'textarea') {
       input = document.createElement('textarea');
-      input.name = input.id = namePrefix + '.' + key;
+      input.name = input.id = effectivePrefix + '.' + key;
       if (opts.value !== undefined) input.value = opts.value;
       applyAttrs(input, opts.attrs);
       if (isStatus) input.disabled = true;
@@ -933,8 +935,8 @@
     labelEl.setAttribute('for', input.id);
     var container = document.createElement('div');
     container.appendChild(labelEl);
-      container.appendChild(input);
-      addHelperText(container, input.id, opts.help, input);
+    container.appendChild(input);
+    addHelperText(container, input.id, opts.help, input);
     if (rangeOutput) {
       container.appendChild(rangeOutput);
     }
