@@ -12,7 +12,7 @@ describe('serialize', () => {
       <input type="range" name="wifi.channel" value="6" min="1" max="13" />
       <input type="color" name="wifi.led_color" value="#ff9500" />
     `
-    window.__test.components = [
+    window.__test.groups = [
       { id: 'wifi', fields: [
         { key: 'ssid', type: 'text', label: 'SSID', opts: {} },
         { key: 'mode', type: 'select', label: 'Mode', opts: {} },
@@ -50,7 +50,7 @@ describe('serialize', () => {
   })
 
   it('returns null for indeterminate checkbox', () => {
-    window.__test.components[0].fields.push(
+    window.__test.groups[0].fields.push(
       { key: 'confirm', type: 'checkbox', label: 'Confirm', opts: {} }
     )
     var el = document.querySelector('[name="wifi.confirm"]')
@@ -69,7 +69,7 @@ describe('serialize', () => {
   it('returns number for number input (not string)', function () {
     document.querySelector('#config-form').innerHTML =
       '<input type="number" name="wifi.channel" value="7" />'
-    window.__test.components[0].fields[0] =
+    window.__test.groups[0].fields[0] =
       { key: 'channel', type: 'number', label: 'Channel', opts: {} }
     var data = window.serialize()
     expect(data['wifi.channel']).toBe(7)
@@ -78,7 +78,7 @@ describe('serialize', () => {
   it('returns number for range input (not string)', function () {
     document.querySelector('#config-form').innerHTML =
       '<input type="range" name="wifi.power" value="50" />'
-    window.__test.components[0].fields[0] =
+    window.__test.groups[0].fields[0] =
       { key: 'power', type: 'range', label: 'Power', opts: {} }
     var data = window.serialize()
     expect(data['wifi.power']).toBe(50)
@@ -91,7 +91,7 @@ describe('setBaseline / getPending', () => {
       <input name="wifi.ssid" value="" />
       <input name="wifi.channel" value="6" />
     `
-    window.__test.components = [
+    window.__test.groups = [
       { id: 'wifi', fields: [
         { key: 'ssid', type: 'text', label: 'SSID', opts: {} },
         { key: 'channel', type: 'range', label: 'Channel', opts: {} },
@@ -128,7 +128,7 @@ describe('updateUI', () => {
     document.querySelector('#config-form').innerHTML = `
       <input name="wifi.ssid" value="" required />
     `
-    window.__test.components = [
+    window.__test.groups = [
       { id: 'wifi', fields: [{ key: 'ssid', type: 'text', label: 'SSID', opts: {} }] },
     ]
     window.__test.dirty = false
@@ -436,7 +436,7 @@ describe('applyAttrs', () => {
   })
 })
 
-describe('populateFromComponents', () => {
+describe('populateFromGroups', () => {
   beforeEach(() => {
     document.querySelector('#config-form').innerHTML = `
       <input name="wifi.ssid" value="old" />
@@ -449,8 +449,8 @@ describe('populateFromComponents', () => {
     `
   })
 
-  it('sets form values from components data using opts.value', () => {
-    window.populateFromComponents([
+  it('sets form values from groups data using opts.value', () => {
+    window.populateFromGroups([
       {
         id: 'wifi',
         fields: [
@@ -475,7 +475,7 @@ describe('populateFromComponents', () => {
   })
 
   it('sets checkbox to indeterminate when value is null', () => {
-    window.populateFromComponents([
+    window.populateFromGroups([
       {
         id: 'gpio',
         fields: [
@@ -489,7 +489,7 @@ describe('populateFromComponents', () => {
   })
 
   it('sets checkbox to unchecked when value is false', () => {
-    window.populateFromComponents([
+    window.populateFromGroups([
       {
         id: 'gpio',
         fields: [
@@ -505,7 +505,7 @@ describe('populateFromComponents', () => {
   it('does not set indeterminate on switch', () => {
     var el = document.querySelector('[name="wifi.hidden"]')
     el.indeterminate = true
-    window.populateFromComponents([
+    window.populateFromGroups([
       {
         id: 'wifi',
         fields: [
@@ -520,8 +520,8 @@ describe('populateFromComponents', () => {
   })
 
   it('handles empty fields gracefully', () => {
-    expect(function () { window.populateFromComponents([]) }).not.toThrow()
-    expect(function () { window.populateFromComponents([{ id: 'x' }]) }).not.toThrow()
+    expect(function () { window.populateFromGroups([]) }).not.toThrow()
+    expect(function () { window.populateFromGroups([{ id: 'x' }]) }).not.toThrow()
   })
 })
 
@@ -584,7 +584,7 @@ describe('postJSON', () => {
 describe('renderNav', () => {
   beforeEach(() => {
     document.getElementById('nav-list').innerHTML = ''
-    window.__test.components = [
+    window.__test.groups = [
       { id: 'wifi', label: 'Wifi' },
       { id: 'gpio', label: 'Gpio' },
     ]
@@ -604,7 +604,7 @@ describe('renderNav', () => {
 describe('renderForm', () => {
   beforeEach(() => {
     document.getElementById('config-form').innerHTML = ''
-    window.__test.components = [
+    window.__test.groups = [
       {
         id: 'wifi',
         label: 'Wifi',
@@ -646,7 +646,7 @@ describe('handleHash', () => {
 describe('wireButtons / bindChangeListeners', () => {
   beforeEach(() => {
     document.querySelector('#config-form').innerHTML = '<input name="wifi.ssid" value="" />'
-    window.__test.components = [{ id: 'wifi', fields: [{ key: 'ssid', type: 'text', label: 'SSID' }] }]
+    window.__test.groups = [{ id: 'wifi', fields: [{ key: 'ssid', type: 'text', label: 'SSID' }] }]
     window.__test.dirty = false
     window.setBaseline()
   })
@@ -667,7 +667,7 @@ describe('wireButtons / bindChangeListeners', () => {
 describe('syncThen', () => {
   beforeEach(() => {
     document.querySelector('#config-form').innerHTML = '<input name="wifi.ssid" value="old" />'
-    window.__test.components = [{ id: 'wifi', fields: [{ key: 'ssid', type: 'text', label: 'SSID', opts: { value: 'new' } }] }]
+    window.__test.groups = [{ id: 'wifi', fields: [{ key: 'ssid', type: 'text', label: 'SSID', opts: { value: 'new' } }] }]
     window.setBaseline()
     document.getElementById('status-bar').textContent = 'old error'
     window.fetch = function () {
@@ -693,19 +693,19 @@ describe('processSettings', () => {
   beforeEach(() => {
     document.querySelector('#config-form').innerHTML = ''
     document.getElementById('nav-list').innerHTML = ''
-    window.__test.components = []
+    window.__test.groups = []
   })
 
-  it('builds components from settings data', () => {
+  it('builds groups from settings data', () => {
     var data = {
       wifi: { ssid: ['text', 'SSID', { value: 'MyNet' }] },
       gpio: { pin: ['number', 'Pin', { value: 5 }], led_color: ['color', 'LED Color', { value: '#ff9500' }] },
     }
     window.processSettings(data, false)
-    expect(window.__test.components.length).toBe(2)
-    expect(window.__test.components[0].id).toBe('wifi')
-    expect(window.__test.components[1].id).toBe('gpio')
-    var colorField = window.__test.components[1].fields.find(function (f) { return f.key === 'led_color' })
+    expect(window.__test.groups.length).toBe(2)
+    expect(window.__test.groups[0].id).toBe('wifi')
+    expect(window.__test.groups[1].id).toBe('gpio')
+    var colorField = window.__test.groups[1].fields.find(function (f) { return f.key === 'led_color' })
     expect(colorField).not.toBeUndefined()
     expect(colorField.type).toBe('color')
     expect(colorField.opts.value).toBe('#ff9500')
@@ -737,8 +737,8 @@ describe('processSettings', () => {
       wifi: { label: 'Wi-Fi', ssid: ['text', 'SSID', { value: 'MyNet' }] }
     }
     window.processSettings(data, false)
-    expect(window.__test.components.length).toBe(1)
-    expect(window.__test.components[0].label).toBe('Wi-Fi')
+    expect(window.__test.groups.length).toBe(1)
+    expect(window.__test.groups[0].label).toBe('Wi-Fi')
   })
 
   it('does not add label key as a field', function () {
@@ -750,16 +750,16 @@ describe('processSettings', () => {
       }
     }
     window.processSettings(data, false)
-    expect(window.__test.components.length).toBe(1)
-    var hasLabelField = window.__test.components[0].fields.some(function (f) { return f.key === 'label' })
+    expect(window.__test.groups.length).toBe(1)
+    var hasLabelField = window.__test.groups[0].fields.some(function (f) { return f.key === 'label' })
     expect(hasLabelField).toBe(false)
-    expect(window.__test.components[0].fields.length).toBe(2)
+    expect(window.__test.groups[0].fields.length).toBe(2)
   })
 })
 
 describe('findField', function () {
   beforeEach(function () {
-    window.__test.components = [
+    window.__test.groups = [
       { id: 'wifi', fields: [
         { key: 'ssid', type: 'text', label: 'SSID', opts: { value: 'MyNet' } },
         { key: 'channel', type: 'range', label: 'Channel', opts: { value: 6 } },
@@ -793,14 +793,14 @@ describe('findField', function () {
   })
 
   it('returns null for component with no fields', function () {
-    window.__test.components = [{ id: 'empty' }]
+    window.__test.groups = [{ id: 'empty' }]
     expect(window.findField('empty', 'x')).toBeNull()
   })
 })
 
 describe('buildPatch', () => {
   beforeEach(() => {
-    window.__test.components = [{ id: 'wifi', fields: [{ key: 'ssid', type: 'text', label: 'SSID', opts: {} }] }]
+    window.__test.groups = [{ id: 'wifi', fields: [{ key: 'ssid', type: 'text', label: 'SSID', opts: {} }] }]
   })
 
   it('converts flat changes to nested POST body', () => {
@@ -817,7 +817,7 @@ describe('buildPatch', () => {
 describe('handleSaveApply', () => {
   beforeEach(() => {
     document.querySelector('#config-form').innerHTML = '<input name="wifi.ssid" value="" />'
-    window.__test.components = [{ id: 'wifi', fields: [{ key: 'ssid', type: 'text', label: 'SSID' }] }]
+    window.__test.groups = [{ id: 'wifi', fields: [{ key: 'ssid', type: 'text', label: 'SSID' }] }]
     window.__test.dirty = false
     window.setBaseline()
   })
@@ -911,7 +911,7 @@ describe('onWSMessage — all 10 state machine cases', () => {
     document.getElementById('config-form').removeAttribute('aria-busy')
     document.querySelector('#config-form').innerHTML =
       '<input name="wifi.ssid" value="' + fv + '" />'
-    window.__test.components = [
+    window.__test.groups = [
       { id: 'wifi', fields: [
         { key: 'ssid', type: 'text', label: 'SSID', opts: { value: av } },
       ]},
@@ -931,7 +931,7 @@ describe('onWSMessage — all 10 state machine cases', () => {
   beforeEach(() => {
     document.getElementById('server-changed').hidden = true
     document.querySelector('#config-form').innerHTML = ''
-    window.__test.components = []
+    window.__test.groups = []
     window.__test.lastSent = {}
     window.__test.inFlight = {}
     document.getElementById('notif-load').hidden = true
@@ -943,14 +943,14 @@ describe('onWSMessage — all 10 state machine cases', () => {
   it('Case 1: no-op when everything is synced', () => {
     setupCase('hello', 'hello', 'hello', false)
     window.__test.receiveWSMessage({ data: serverPush('hello') })
-    expect(window.__test.components[0].fields[0].opts.value).toBe('hello')
+    expect(window.__test.groups[0].fields[0].opts.value).toBe('hello')
     expect(document.getElementById('server-changed').hidden).toBe(true)
   })
 
   it('Case 3: shows external notification when server pushes new value while idle', () => {
     setupCase('oldVal', 'oldVal', 'oldVal', false)
     window.__test.receiveWSMessage({ data: serverPush('newServerVal') })
-    expect(window.__test.components[0].fields[0].opts.value).toBe('newServerVal')
+    expect(window.__test.groups[0].fields[0].opts.value).toBe('newServerVal')
     expect(document.querySelector('[name="wifi.ssid"]').value).toBe('oldVal')
     expect(document.getElementById('server-changed').hidden).toBe(false)
     expect(document.getElementById('notif-load').hidden).toBe(false)
@@ -962,7 +962,7 @@ describe('onWSMessage — all 10 state machine cases', () => {
   it('Case 4: silent sync when FV matches server push', () => {
     setupCase('match', 'oldVal', 'oldVal', false)
     window.__test.receiveWSMessage({ data: serverPush('match') })
-    expect(window.__test.components[0].fields[0].opts.value).toBe('match')
+    expect(window.__test.groups[0].fields[0].opts.value).toBe('match')
     expect(window.__test.lastSent['wifi.ssid']).toBe('match')
     expect(document.getElementById('server-changed').hidden).toBe(true)
   })
@@ -970,7 +970,7 @@ describe('onWSMessage — all 10 state machine cases', () => {
   it('Case 5: shows conflict prompt when local and server both changed', () => {
     setupCase('myLocal', 'oldVal', 'oldVal', false)
     window.__test.receiveWSMessage({ data: serverPush('serverChanged') })
-    expect(window.__test.components[0].fields[0].opts.value).toBe('serverChanged')
+    expect(window.__test.groups[0].fields[0].opts.value).toBe('serverChanged')
     expect(document.querySelector('[name="wifi.ssid"]').value).toBe('myLocal')
     expect(document.getElementById('server-changed').hidden).toBe(false)
     expect(document.getElementById('notif-load').hidden).toBe(true)
@@ -983,7 +983,7 @@ describe('onWSMessage — all 10 state machine cases', () => {
     setupCase('sentVal', 'oldVal', 'sentVal', true)
     window.__test.receiveWSMessage({ data: serverPush('sentVal') })
     expect(window.__test.inFlight['wifi.ssid']).toBe(false)
-    expect(window.__test.components[0].fields[0].opts.value).toBe('sentVal')
+    expect(window.__test.groups[0].fields[0].opts.value).toBe('sentVal')
   })
 
   it('Case 7: sends queued input after echo arrives', () => {
@@ -1002,21 +1002,21 @@ describe('onWSMessage — all 10 state machine cases', () => {
   it('Case 8: ignores packet when inFlight and no echo match', () => {
     setupCase('local', 'oldVal', 'sentVal', true)
     window.__test.receiveWSMessage({ data: serverPush('unrelatedExternal') })
-    expect(window.__test.components[0].fields[0].opts.value).toBe('oldVal')
+    expect(window.__test.groups[0].fields[0].opts.value).toBe('oldVal')
     expect(window.__test.inFlight['wifi.ssid']).toBe(true)
   })
 
   it('Case 9: ignores packet while inFlight even if user reverted (FV == oldAV)', () => {
     setupCase('oldVal', 'oldVal', 'sentVal', true)
     window.__test.receiveWSMessage({ data: serverPush('someExternal') })
-    expect(window.__test.components[0].fields[0].opts.value).toBe('oldVal')
+    expect(window.__test.groups[0].fields[0].opts.value).toBe('oldVal')
     expect(window.__test.inFlight['wifi.ssid']).toBe(true)
   })
 
   it('Case 10: ignores packet while inFlight even with conflicting local change', () => {
     setupCase('userChange', 'oldVal', 'sentVal', true)
     window.__test.receiveWSMessage({ data: serverPush('yetAnotherExt') })
-    expect(window.__test.components[0].fields[0].opts.value).toBe('oldVal')
+    expect(window.__test.groups[0].fields[0].opts.value).toBe('oldVal')
     expect(window.__test.inFlight['wifi.ssid']).toBe(true)
   })
 })
@@ -1046,7 +1046,7 @@ describe('WS disconnect while in-flight', function () {
   beforeEach(function () {
     document.querySelector('#config-form').innerHTML =
       '<input name="wifi.ssid" value="userChange" />'
-    window.__test.components = [
+    window.__test.groups = [
       { id: 'wifi', fields: [
         { key: 'ssid', type: 'text', label: 'SSID', opts: { value: 'serverVal' } },
       ]},
@@ -1112,7 +1112,7 @@ describe('aria-busy lifecycle', function () {
   beforeEach(function () {
     document.querySelector('#config-form').innerHTML =
       '<input name="wifi.ssid" value="hello" />'
-    window.__test.components = [
+    window.__test.groups = [
       { id: 'wifi', fields: [
         { key: 'ssid', type: 'text', label: 'SSID', opts: { value: 'hello' } },
       ]},
@@ -1161,15 +1161,15 @@ describe('aria-busy lifecycle', function () {
 describe('null-guard: syncLS and updateAV', function () {
   var origComponents;
   beforeEach(function () {
-    origComponents = window.__test.components;
-    window.__test.components = [
+    origComponents = window.__test.groups;
+    window.__test.groups = [
       { id: 'wifi', fields: null },
     ]
     window.__test.lastSent = {}
     window.__test.inFlight = {}
   })
   afterEach(function () {
-    window.__test.components = origComponents;
+    window.__test.groups = origComponents;
   })
 
   it('syncLS does not throw when component has no fields', function () {
@@ -1183,14 +1183,14 @@ describe('null-guard: syncLS and updateAV', function () {
   })
 })
 
-describe('populateFromComponents null safety', () => {
+describe('populateFromGroups null safety', () => {
   beforeEach(() => {
     document.querySelector('#config-form').innerHTML = '<input name="wifi.ssid" value="" />'
   })
 
   it('handles field without opts gracefully', () => {
     expect(function () {
-      window.populateFromComponents([
+      window.populateFromGroups([
         { id: 'wifi', fields: [{ key: 'ssid', type: 'text', label: 'SSID' }] },
       ])
     }).not.toThrow()
@@ -1198,7 +1198,7 @@ describe('populateFromComponents null safety', () => {
 
   it('handles field with opts undefined gracefully', () => {
     expect(function () {
-      window.populateFromComponents([
+      window.populateFromGroups([
         { id: 'wifi', fields: [{ key: 'ssid', type: 'text', label: 'SSID', opts: undefined }] },
       ])
     }).not.toThrow()
@@ -1232,7 +1232,7 @@ describe('dirty flag propagation', () => {
 describe('sendToServer field lookup', () => {
   beforeEach(() => {
     document.querySelector('#config-form').innerHTML = '<input name="wifi.ssid" value="" />'
-    window.__test.components = [
+    window.__test.groups = [
       { id: 'wifi', fields: [{ key: 'ssid', type: 'text', label: 'SSID', opts: {} }] },
     ]
     window.__test.wsSent = null
@@ -1243,7 +1243,7 @@ describe('sendToServer field lookup', () => {
     window.connectWS()
   })
 
-  it('sends full field format with type and label from components', () => {
+  it('sends full field format with type and label from groups', () => {
     window.__test.wsReady()
     window.sendToServer('wifi.ssid', 'MyVal')
     expect(window.__test.wsSent).toEqual({
@@ -1260,7 +1260,7 @@ describe('radio event handling', () => {
       '<input type="radio" name="gpio.pull" id="gpio.pull.up" value="up">',
       '<input type="radio" name="gpio.pull" id="gpio.pull.down" value="down">',
     ].join('')
-    window.__test.components = [{
+    window.__test.groups = [{
       id: 'gpio', fields: [
         { key: 'pull', type: 'radio', label: 'Pull Resistor', opts: { value: 'none' } },
       ],
@@ -1316,7 +1316,7 @@ describe('radio createField structure', () => {
 describe('echo path — single field match', () => {
   beforeEach(() => {
     document.querySelector('#config-form').innerHTML = '<input name="wifi.ssid" value="newVal" />'
-    window.__test.components = [{
+    window.__test.groups = [{
       id: 'wifi', fields: [{ key: 'ssid', type: 'text', label: 'SSID', opts: { value: 'oldVal' } }],
     }]
     window.__test.lastSent = {}
@@ -1333,7 +1333,7 @@ describe('echo path — single field match', () => {
     })
     expect(window.__test.lastSent['wifi.ssid']).toBe('newVal')
     expect(window.__test.dirty).toBe(true)
-    expect(window.__test.components[0].fields[0].opts.value).toBe('newVal')
+    expect(window.__test.groups[0].fields[0].opts.value).toBe('newVal')
   })
 })
 
@@ -1343,7 +1343,7 @@ describe('echo path — partial match with multiple in-flight fields', () => {
       '<input name="wifi.ssid" value="DirtyTest" />',
       '<input name="wifi.password" value="secret" />',
     ].join('')
-    window.__test.components = [{
+    window.__test.groups = [{
       id: 'wifi', fields: [
         { key: 'ssid', type: 'text', label: 'SSID', opts: { value: '' } },
         { key: 'password', type: 'password', label: 'Password', opts: { value: '' } },
@@ -1493,7 +1493,7 @@ describe('dirty flag survives dropped WS messages', () => {
       '<input type="radio" name="gpio.pull" value="up" />',
       '<input type="radio" name="gpio.pull" value="down" />',
     ].join('')
-    window.__test.components = [{
+    window.__test.groups = [{
       id: 'gpio', fields: [
         { key: 'pull', type: 'radio', label: 'Pull Resistor', opts: { value: 'up' } },
       ],
@@ -1520,7 +1520,7 @@ describe('settings push during visible prompt', function () {
   beforeEach(function () {
     document.querySelector('#config-form').innerHTML =
       '<input name="wifi.ssid" value="myLocal" />'
-    window.__test.components = [
+    window.__test.groups = [
       { id: 'wifi', fields: [
         { key: 'ssid', type: 'text', label: 'SSID', opts: { value: 'oldVal' } },
       ]},
@@ -1549,7 +1549,7 @@ describe('settings push during visible prompt', function () {
         wifi: { ssid: ['text', 'SSID', { value: 'thirdVal' }] },
       }),
     })
-    expect(window.__test.components[0].fields[0].opts.value).toBe('thirdVal')
+    expect(window.__test.groups[0].fields[0].opts.value).toBe('thirdVal')
     expect(document.getElementById('notif-keep-local').hidden).toBe(false)
   })
 
@@ -1583,7 +1583,7 @@ describe('echo resolution with radio does not trigger spurious queued keys', () 
       '<input type="radio" name="gpio.pull" value="up" checked />',
       '<input type="radio" name="gpio.pull" value="down" />',
     ].join('')
-    window.__test.components = [{
+    window.__test.groups = [{
       id: 'gpio', fields: [
         { key: 'pull', type: 'radio', label: 'Pull Resistor', opts: { value: 'none' } },
       ],
@@ -1605,7 +1605,7 @@ describe('echo resolution with radio does not trigger spurious queued keys', () 
     })
     expect(window.__test.inFlight['gpio.pull']).toBe(false)
     expect(window.__test.dirty).toBe(true)
-    expect(window.__test.components[0].fields[0].opts.value).toBe('up')
+    expect(window.__test.groups[0].fields[0].opts.value).toBe('up')
   })
 })
 
@@ -1613,7 +1613,7 @@ describe('echo resolution with switch preserves dirty', () => {
   beforeEach(() => {
     document.querySelector('#config-form').innerHTML =
       '<input type="checkbox" name="gpio.enabled" checked />'
-    window.__test.components = [{
+    window.__test.groups = [{
       id: 'gpio', fields: [
         { key: 'enabled', type: 'switch', label: 'GPIO Enabled', opts: { value: false } },
       ],
@@ -1635,7 +1635,7 @@ describe('echo resolution with switch preserves dirty', () => {
     })
     expect(window.__test.inFlight['gpio.enabled']).toBe(false)
     expect(window.__test.dirty).toBe(true)
-    expect(window.__test.components[0].fields[0].opts.value).toBe(true)
+    expect(window.__test.groups[0].fields[0].opts.value).toBe(true)
   })
 })
 
@@ -1645,13 +1645,13 @@ describe('status rendering', () => {
   beforeEach(() => {
     document.querySelector('#config-form').innerHTML = ''
     document.getElementById('nav-list').innerHTML = ''
-    window.__test.components = [
+    window.__test.groups = [
       { id: 'wifi', label: 'Wifi', fields: [
         { key: 'ssid', type: 'text', label: 'SSID', opts: { value: 'Net' } },
       ]},
     ]
-    origStatus = window.__test.statusComponents
-    window.__test.statusComponents = [
+    origStatus = window.__test.statusGroups
+    window.__test.statusGroups = [
       { id: 'system', label: 'System', fields: [
         { key: 'uptime', type: 'text', label: 'Uptime', opts: { value: '1d 0h' } },
       ]},
@@ -1659,7 +1659,7 @@ describe('status rendering', () => {
   })
 
   afterEach(() => {
-    window.__test.statusComponents = origStatus
+    window.__test.statusGroups = origStatus
   })
 
   it('renders status sections before settings sections', () => {
@@ -1709,7 +1709,7 @@ describe('status message routing', () => {
     document.querySelector('#config-form').innerHTML = ''
     document.getElementById('nav-list').innerHTML = ''
     document.getElementById('status-bar').textContent = ''
-    window.__test.components = []
+    window.__test.groups = []
     window.__test.dirty = false
   })
 
@@ -1717,9 +1717,9 @@ describe('status message routing', () => {
     window.__test.receiveWSMessage({
       data: JSON.stringify({ type: 'status', data: { network: { signal: ['range', 'Signal', { value: '75' }] } } }),
     })
-    expect(window.__test.statusComponents.length).toBe(1)
-    expect(window.__test.statusComponents[0].id).toBe('network')
-    expect(window.__test.statusComponents[0].fields[0].key).toBe('signal')
+    expect(window.__test.statusGroups.length).toBe(1)
+    expect(window.__test.statusGroups[0].id).toBe('network')
+    expect(window.__test.statusGroups[0].fields[0].key).toBe('signal')
   })
 
   it('does not route status message to settings handling', () => {
@@ -1727,14 +1727,14 @@ describe('status message routing', () => {
       data: JSON.stringify({ type: 'status', data: { network: { signal: ['range', 'Signal', { value: '75' }] } } }),
     })
     expect(window.__test.dirty).toBe(false)
-    expect(window.__test.components.length).toBe(0)
+    expect(window.__test.groups.length).toBe(0)
   })
 
   it('routes type:settings messages correctly', () => {
     window.__test.receiveWSMessage({
       data: JSON.stringify({ type: 'settings', _dirty: true, data: { wifi: { ssid: ['text', 'SSID', { value: 'Net' }] } } }),
     })
-    expect(window.__test.components.length).toBeGreaterThan(0)
+    expect(window.__test.groups.length).toBeGreaterThan(0)
     expect(window.__test.dirty).toBe(true)
   })
 })
@@ -1746,7 +1746,7 @@ describe('form validation', () => {
       '<input name="mqtt.keepalive" value="60" type="number" min="1" max="65535" step="5" />',
       '<input name="notifications.sender" value="" type="email" required />',
     ].join('')
-    window.__test.components = [{ id: 'mqtt', fields: [
+    window.__test.groups = [{ id: 'mqtt', fields: [
       { key: 'client_id', type: 'text', label: 'Client ID', opts: {} },
       { key: 'keepalive', type: 'number', label: 'Keepalive', opts: {} },
     ]}, { id: 'notifications', fields: [
@@ -1879,7 +1879,7 @@ describe('form validation', () => {
 
   it('keeps details open when field is invalid on blur', () => {
     document.querySelector('#config-form').innerHTML = '<details open><input name="mqtt.client_id" value="" required minlength="3" /></details>'
-    window.__test.components = [{ id: 'mqtt', fields: [{ key: 'client_id', type: 'text', label: 'Client ID', opts: {} }] }]
+    window.__test.groups = [{ id: 'mqtt', fields: [{ key: 'client_id', type: 'text', label: 'Client ID', opts: {} }] }]
     window.__test.dirty = false
     window.bindChangeListeners()
     var input = document.querySelector('[name="mqtt.client_id"]')
@@ -1892,7 +1892,7 @@ describe('form validation', () => {
   it('updateUI skips checkValidity before first field interaction', () => {
     window.__test.formInteracted = false
     document.querySelector('#config-form').innerHTML = '<input name="mqtt.client_id" value="" required minlength="3" />'
-    window.__test.components = [{ id: 'mqtt', fields: [{ key: 'client_id', type: 'text', label: 'Client ID', opts: {} }] }]
+    window.__test.groups = [{ id: 'mqtt', fields: [{ key: 'client_id', type: 'text', label: 'Client ID', opts: {} }] }]
     window.__test.dirty = true
     window.updateUI()
     expect(document.getElementById('btn-save-apply').hidden).toBe(false)
@@ -1901,10 +1901,10 @@ describe('form validation', () => {
 
 describe('aria-invalid', function () {
   it('sets aria-invalid="false" on all named form fields after renderForm', function () {
-    window.__test.components = [{ id: 'wifi', label: 'WiFi', fields: [
+    window.__test.groups = [{ id: 'wifi', label: 'WiFi', fields: [
       { key: 'ssid', type: 'text', label: 'SSID', opts: {} }
     ]}]
-    window.__test.statusComponents = []
+    window.__test.statusGroups = []
     window.renderForm()
     var input = document.querySelector('[name="wifi.ssid"]')
     expect(input.getAttribute('aria-invalid')).toBe('false')
@@ -1912,7 +1912,7 @@ describe('aria-invalid', function () {
 
   it('sets aria-invalid="true" on invalid field, "false" on valid field', function () {
     document.querySelector('#config-form').innerHTML = '<input name="mqtt.client_id" value="" required minlength="3" />'
-    window.__test.components = [{ id: 'mqtt', fields: [
+    window.__test.groups = [{ id: 'mqtt', fields: [
       { key: 'client_id', type: 'text', label: 'Client ID', opts: {} }
     ]}]
     window.__test.dirty = false
@@ -1933,10 +1933,10 @@ describe('aria-invalid', function () {
 
   it('marks required-empty field as invalid on renderForm', function () {
     document.querySelector('#config-form').innerHTML = ''
-    window.__test.components = [{ id: 'wifi', label: 'WiFi', fields: [
+    window.__test.groups = [{ id: 'wifi', label: 'WiFi', fields: [
       { key: 'password', type: 'password', label: 'Password', opts: { attrs: { required: true }, value: '' } }
     ]}]
-    window.__test.statusComponents = []
+    window.__test.statusGroups = []
     window.renderForm()
     var input = document.querySelector('[name="wifi.password"]')
     expect(input.getAttribute('aria-invalid')).toBe('true')
@@ -1944,10 +1944,10 @@ describe('aria-invalid', function () {
 
   it('opens details section on renderForm when it has aria-invalid child', function () {
     document.querySelector('#config-form').innerHTML = ''
-    window.__test.components = [{ id: 'wifi', label: 'WiFi', fields: [
+    window.__test.groups = [{ id: 'wifi', label: 'WiFi', fields: [
       { key: 'password', type: 'password', label: 'Password', opts: { attrs: { required: true }, value: '' } }
     ]}]
-    window.__test.statusComponents = []
+    window.__test.statusGroups = []
     window.renderForm()
     var details = document.getElementById('wifi')
         expect(details.open).toBe(true)
@@ -1959,7 +1959,7 @@ describe('checkbox indeterminate validation', function () {
     document.querySelector('#config-form').innerHTML = [
       '<input type="checkbox" name="notifications.confirm" required />',
     ].join('')
-    window.__test.components = [{ id: 'notifications', fields: [
+    window.__test.groups = [{ id: 'notifications', fields: [
       { key: 'confirm', type: 'checkbox', label: 'Confirm Alerts', opts: { attrs: { required: true } } },
     ]}]
     window.__test.dirty = false
@@ -1984,7 +1984,7 @@ describe('checkbox indeterminate validation', function () {
     document.querySelector('#config-form').innerHTML = [
       '<input type="checkbox" name="notifications.confirm" />',
     ].join('')
-    window.__test.components = [{ id: 'notifications', fields: [
+    window.__test.groups = [{ id: 'notifications', fields: [
       { key: 'confirm', type: 'checkbox', label: 'Confirm Alerts', opts: {} },
     ]}]
     window.__test.lastSent = {}
@@ -2005,7 +2005,7 @@ describe('falsey values through echo matching', function () {
   beforeEach(function () {
     document.querySelector('#config-form').innerHTML =
       '<input type="number" name="wifi.channel" value="0" />'
-    window.__test.components = [
+    window.__test.groups = [
       { id: 'wifi', fields: [
         { key: 'channel', type: 'number', label: 'Channel', opts: { value: 0 } },
       ]},
@@ -2030,7 +2030,7 @@ describe('falsey values through echo matching', function () {
   it('echo matches empty string correctly', function () {
     document.querySelector('#config-form').innerHTML =
       '<input name="wifi.ssid" value="" />'
-    window.__test.components[0].fields[0] =
+    window.__test.groups[0].fields[0] =
       { key: 'ssid', type: 'text', label: 'SSID', opts: { value: '' } }
     window.__test.lastSent['wifi.ssid'] = ''
     window.__test.inFlight['wifi.ssid'] = true
@@ -2046,7 +2046,7 @@ describe('falsey values through echo matching', function () {
   it('echo matches false boolean correctly', function () {
     document.querySelector('#config-form').innerHTML =
       '<input type="checkbox" name="gpio.enabled" />'
-    window.__test.components[0].fields[0] =
+    window.__test.groups[0].fields[0] =
       { key: 'enabled', type: 'switch', label: 'Enabled', opts: { value: false } }
     window.__test.lastSent['gpio.enabled'] = false
     window.__test.inFlight['gpio.enabled'] = true
@@ -2064,7 +2064,7 @@ describe('falsey values through echo matching', function () {
       '<input type="checkbox" name="notifications.confirm" />'
     var el = document.querySelector('[name="notifications.confirm"]')
     el.indeterminate = true
-    window.__test.components[0].fields[0] =
+    window.__test.groups[0].fields[0] =
       { key: 'confirm', type: 'checkbox', label: 'Confirm', opts: { value: null } }
     window.__test.lastSent['notifications.confirm'] = null
     window.__test.inFlight['notifications.confirm'] = true
@@ -2085,7 +2085,7 @@ describe('partial server update', function () {
       '<input name="wifi.password" value="" />',
       '<input name="gpio.pin" value="2" />',
     ].join('')
-    window.__test.components = [
+    window.__test.groups = [
       { id: 'wifi', fields: [
         { key: 'ssid', type: 'text', label: 'SSID', opts: { value: 'Net' } },
         { key: 'password', type: 'password', label: 'Password', opts: { value: '' } },
@@ -2112,9 +2112,9 @@ describe('partial server update', function () {
         wifi: { ssid: ['text', 'SSID', { value: 'NewNet' }] },
       }),
     })
-    expect(window.__test.components[0].fields[0].opts.value).toBe('NewNet')
-    expect(window.__test.components[0].fields[1].opts.value).toBe('')
-    expect(window.__test.components[1].fields[0].opts.value).toBe(2)
+    expect(window.__test.groups[0].fields[0].opts.value).toBe('NewNet')
+    expect(window.__test.groups[0].fields[1].opts.value).toBe('')
+    expect(window.__test.groups[1].fields[0].opts.value).toBe(2)
   })
 })
 
@@ -2124,7 +2124,7 @@ describe('rapid blur events across different fields', function () {
       '<input name="wifi.ssid" value="Net" />',
       '<input name="wifi.password" value="secret" />',
     ].join('')
-    window.__test.components = [
+    window.__test.groups = [
       { id: 'wifi', fields: [
         { key: 'ssid', type: 'text', label: 'SSID', opts: { value: '' } },
         { key: 'password', type: 'password', label: 'Password', opts: { value: '' } },
