@@ -630,11 +630,18 @@
       .replace(/\b\w/g, function (c) { return c.toUpperCase(); });
   }
 
-  /** Render navigation links in #nav-list from statusGroups and groups. */
   function renderNav() {
     navList.innerHTML = '';
-    renderLinks(statusGroups, 'secondary');
-    renderLinks(groups, null);
+    var seen = {};
+    for (var si = 0; si < statusGroups.length; si++) {
+      seen[statusGroups[si].id] = true;
+      renderLink(statusGroups[si]);
+    }
+    for (var gi = 0; gi < groups.length; gi++) {
+      if (seen[groups[gi].id]) continue;
+      seen[groups[gi].id] = true;
+      renderLink(groups[gi]);
+    }
     if (navList._clickWired) return;
     navList._clickWired = true;
     navList.addEventListener('click', function (e) {
@@ -646,25 +653,33 @@
     });
   }
 
-  /** Append nav links for an array of groups. @param {Array} grps @param {string|null} className */
-  function renderLinks(grps, className) {
-    for (var ci = 0; ci < grps.length; ci++) {
-      var grp = grps[ci];
-      var li = document.createElement('li');
-      var a = document.createElement('a');
-      a.href = '#' + grp.id;
-      if (className) a.className = className;
-      a.textContent = grp.label;
-      li.appendChild(a);
-      navList.appendChild(li);
-    }
+  /** Append a single nav link for a group. */
+  function renderLink(grp) {
+    var li = document.createElement('li');
+    var a = document.createElement('a');
+    a.href = '#' + grp.id;
+    a.textContent = grp.label;
+    li.appendChild(a);
+    navList.appendChild(li);
   }
 
-  /** Render the accordion form in #config-form from statusGroups first, then groups. */
   function renderForm() {
     configForm.innerHTML = '';
-    for (var si = 0; si < statusGroups.length; si++) renderSection(statusGroups[si], true);
-    for (var ci = 0; ci < groups.length; ci++) renderSection(groups[ci], false);
+    var seen = {};
+    for (var si = 0; si < statusGroups.length; si++) {
+      var sgrp = statusGroups[si];
+      seen[sgrp.id] = true;
+      renderSection(sgrp.id, sgrp.label, sgrp.fields, true, null);
+    }
+    for (var gi = 0; gi < groups.length; gi++) {
+      var grp = groups[gi];
+      if (seen[grp.id]) {
+        renderSection(grp.id, null, grp.fields, false, grp.id);
+      } else {
+        seen[grp.id] = true;
+        renderSection(grp.id, grp.label, grp.fields, false, null);
+      }
+    }
     var fields = configForm.querySelectorAll('input, select, textarea');
     for (var fi = 0; fi < fields.length; fi++) {
       if (fields[fi].name) fields[fi].setAttribute('aria-invalid', fields[fi].checkValidity() ? 'false' : 'true');
@@ -675,21 +690,31 @@
     }
   }
 
-  /** Render a details/section block for a group. @param {Object} grp @param {boolean} isStatus */
-  function renderSection(grp, isStatus) {
-    var details = document.createElement('details');
-    details.id = grp.id;
-    var summary = document.createElement('summary');
-    if (isStatus) summary.className = 'secondary';
-    summary.textContent = grp.label;
-    details.appendChild(summary);
-    if (grp.fields) {
-      for (var fi = 0; fi < grp.fields.length; fi++) {
-        var fieldEl = createField(grp.id, grp.fields[fi], isStatus ? 1 : 0);
-        if (fieldEl) details.appendChild(fieldEl);
-      }
+  /**
+   * Render a details/section block for a group.
+   * @param {string} id - group DOM id
+   * @param {string|null} label - summary text (null = append to existing details)
+   * @param {Array} fields - field definitions
+   * @param {boolean} disabled - whether fields are read-only
+   * @param {string|null} appendToId - if set, append fields to existing details instead of creating new
+   */
+  function renderSection(id, label, fields, disabled, appendToId) {
+    var details;
+    if (appendToId) {
+      details = document.getElementById(appendToId);
+    } else {
+      details = document.createElement('details');
+      details.id = id;
+      var summary = document.createElement('summary');
+      summary.textContent = label;
+      details.appendChild(summary);
+      configForm.appendChild(details);
     }
-    configForm.appendChild(details);
+    if (!details || !fields) return;
+    for (var fi = 0; fi < fields.length; fi++) {
+      var fieldEl = createField(id, fields[fi], disabled ? 1 : 0);
+      if (fieldEl) details.appendChild(fieldEl);
+    }
   }
 
   /** Bind hashchange listener and open the details section matching the current URL hash. */
