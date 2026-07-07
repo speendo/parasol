@@ -674,7 +674,7 @@ describe('renderForm', () => {
       },
     ]
     window.renderForm()
-    var statusField = document.querySelector('[name="system.uptime"]')
+    var statusField = document.querySelector('[name="st-system.uptime"]')
     expect(statusField).not.toBeNull()
     expect(statusField.disabled).toBe(true)
   })
@@ -1746,7 +1746,7 @@ describe('status rendering', () => {
 
   it('status field is disabled', () => {
     window.renderForm()
-    var input = document.querySelector('[name="system.uptime"]')
+    var input = document.querySelector('[name="st-system.uptime"]')
     expect(input.disabled).toBe(true)
   })
 
