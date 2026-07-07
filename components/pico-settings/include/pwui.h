@@ -5,6 +5,8 @@
 
 #ifdef __cplusplus
 class AsyncWebServer;
+#else
+typedef struct AsyncWebServer AsyncWebServer;
 #endif
 
 #ifdef __cplusplus

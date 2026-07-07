@@ -3,14 +3,9 @@
 #include <stddef.h>
 #include "esp_err.h"
 #include "cJSON.h"
+#include "pwui.h"
 
 #define PWUI_MAX_PATH 128
-
-typedef enum {
-    PWUI_TEXT, PWUI_NUMBER, PWUI_PASSWORD, PWUI_EMAIL, PWUI_TEL,
-    PWUI_URL, PWUI_COLOR, PWUI_SWITCH, PWUI_CHECKBOX,
-    PWUI_RANGE, PWUI_TEXTAREA, PWUI_RADIO, PWUI_SELECT
-} pwui_type_t;
 
 typedef void (*pwui_apply_cb_t)(const char *comp_id, const char *key, const char *value);
 
@@ -43,6 +38,10 @@ typedef struct {
     int comp_capacity;
 } pwui_store_t;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 esp_err_t pwui_store_init(pwui_store_t *store);
 void pwui_store_deinit(pwui_store_t *store);
 esp_err_t pwui_store_add_field(pwui_store_t *store, const pwui_field_t *field);
@@ -60,3 +59,7 @@ int pwui_store_status_count(pwui_store_t *store);
 pwui_field_t *pwui_store_field_at(pwui_store_t *store, int i);
 void pwui_store_lock(pwui_store_t *store);
 void pwui_store_unlock(pwui_store_t *store);
+
+#ifdef __cplusplus
+}
+#endif
