@@ -588,16 +588,29 @@ describe('renderNav', () => {
       { id: 'wifi', label: 'Wifi' },
       { id: 'gpio', label: 'Gpio' },
     ]
+    window.__test.statusGroups = [
+      { id: 'system', label: 'System' },
+    ]
   })
 
-  it('renders nav links for each component', () => {
+  it('renders nav links for each group (status first, no secondary class)', () => {
     window.renderNav()
     var links = document.querySelectorAll('#nav-list a')
-    expect(links.length).toBe(2)
-    expect(links[0].textContent).toBe('Wifi')
-    expect(links[0].getAttribute('href')).toBe('#wifi')
-    expect(links[1].textContent).toBe('Gpio')
-    expect(links[1].getAttribute('href')).toBe('#gpio')
+    expect(links.length).toBe(3)
+    expect(links[0].textContent).toBe('System')
+    expect(links[0].getAttribute('href')).toBe('#system')
+    expect(links[0].hasAttribute('class')).toBe(false)
+    expect(links[1].textContent).toBe('Wifi')
+    expect(links[2].textContent).toBe('Gpio')
+  })
+
+  it('deduplicates nav links when status and settings share an ID', () => {
+    window.__test.statusGroups = [{ id: 'wifi', label: 'Wifi Status' }]
+    window.__test.groups = [{ id: 'wifi', label: 'Wifi Settings' }]
+    window.renderNav()
+    var links = document.querySelectorAll('#nav-list a')
+    expect(links.length).toBe(1)
+    expect(links[0].textContent).toBe('Wifi Status')
   })
 })
 
@@ -610,10 +623,16 @@ describe('renderForm', () => {
         label: 'Wifi',
         fields: [{ key: 'ssid', type: 'text', label: 'SSID', opts: { help: 'Network name' } }],
       },
+      {
+        id: 'system',
+        label: 'System',
+        fields: [{ key: 'uptime', type: 'text', label: 'Uptime' }],
+      },
     ]
+    window.__test.statusGroups = []
   })
 
-  it('renders accordion details for each component', () => {
+  it('renders accordion details for each group', () => {
     window.renderForm()
     var details = document.querySelector('#config-form details')
     expect(details).not.toBeNull()
@@ -625,6 +644,54 @@ describe('renderForm', () => {
     window.renderForm()
     var input = document.querySelector('#config-form input[name="wifi.ssid"]')
     expect(input).not.toBeNull()
+  })
+
+  it('merges status and settings group with same ID', () => {
+    window.__test.statusGroups = [
+      {
+        id: 'system',
+        label: 'System Status',
+        fields: [{ key: 'uptime', type: 'text', label: 'Uptime', opts: { value: '42h' } }],
+      },
+    ]
+    window.renderForm()
+    var details = document.querySelectorAll('#config-form details')
+    expect(details.length).toBe(2)
+    var sysDetails = document.getElementById('system')
+    expect(sysDetails.querySelector('summary').textContent).toBe('System Status')
+    var sysFields = sysDetails.querySelectorAll('input')
+    expect(sysFields.length).toBe(2)
+    expect(sysFields[0].disabled).toBe(true)
+    expect(sysFields[1].disabled).toBe(false)
+  })
+
+  it('status fields are disabled, settings fields are enabled', () => {
+    window.__test.statusGroups = [
+      {
+        id: 'system',
+        label: 'System',
+        fields: [{ key: 'uptime', type: 'text', label: 'Uptime', opts: { value: '42h' } }],
+      },
+    ]
+    window.renderForm()
+    var statusField = document.querySelector('[name="system.uptime"]')
+    expect(statusField).not.toBeNull()
+    expect(statusField.disabled).toBe(true)
+  })
+
+  it('status summary does not have secondary class', () => {
+    window.__test.statusGroups = [
+      {
+        id: 'network',
+        label: 'Network',
+        fields: [{ key: 'ip', type: 'text', label: 'IP' }],
+      },
+    ]
+    window.__test.groups = []
+    window.renderForm()
+    var summary = document.querySelector('#network summary')
+    expect(summary).not.toBeNull()
+    expect(summary.className).not.toContain('secondary')
   })
 })
 
@@ -1670,10 +1737,10 @@ describe('status rendering', () => {
     expect(details[1].id).toBe('wifi')
   })
 
-  it('status summary has secondary class', () => {
+  it('status summary does not have secondary class', () => {
     window.renderForm()
     var summary = document.querySelector('#system summary')
-    expect(summary.className).toBe('secondary')
+    expect(summary.className).toBe('')
     expect(document.querySelector('#wifi summary').className).toBe('')
   })
 
@@ -1710,6 +1777,7 @@ describe('status message routing', () => {
     document.getElementById('nav-list').innerHTML = ''
     document.getElementById('status-bar').textContent = ''
     window.__test.groups = []
+    window.__test.statusGroups = []
     window.__test.dirty = false
   })
 
