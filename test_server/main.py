@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse, PlainTextResponse
 app = FastAPI()
 
 BASE = Path(__file__).resolve().parent.parent
+FIXTURES = BASE / "test-deps" / "fixtures"
 
 # Schema definition — mirrors the Phase 4 settings format
 # Each top-level key is a component group. Each group has field definitions:
@@ -293,7 +294,8 @@ async def get_root():
 
 @app.get("/{name:path}")
 async def get_static(name: str):
-    p = BASE / name
-    if p.is_file():
-        return FileResponse(str(p))
+    for dir in [BASE, FIXTURES]:
+        p = dir / name
+        if p.is_file():
+            return FileResponse(str(p))
     return PlainTextResponse("Not Found", status_code=404)
