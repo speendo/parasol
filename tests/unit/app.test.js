@@ -679,7 +679,7 @@ describe('renderForm', () => {
     expect(statusField.disabled).toBe(true)
   })
 
-  it('status summary does not have secondary class', () => {
+  it('status summary has secondary class', () => {
     window.__test.statusGroups = [
       {
         id: 'network',
@@ -691,7 +691,7 @@ describe('renderForm', () => {
     window.renderForm()
     var summary = document.querySelector('#network summary')
     expect(summary).not.toBeNull()
-    expect(summary.className).not.toContain('secondary')
+    expect(summary.className).toContain('secondary')
   })
 })
 
@@ -1737,10 +1737,10 @@ describe('status rendering', () => {
     expect(details[1].id).toBe('wifi')
   })
 
-  it('status summary does not have secondary class', () => {
+  it('status summary has secondary class', () => {
     window.renderForm()
     var summary = document.querySelector('#system summary')
-    expect(summary.className).toBe('')
+    expect(summary.className).toBe('secondary')
     expect(document.querySelector('#wifi summary').className).toBe('')
   })
 

@@ -707,6 +707,7 @@
       details.id = id;
       var summary = document.createElement('summary');
       summary.textContent = label;
+      if (disabled) summary.className = 'secondary';
       details.appendChild(summary);
       configForm.appendChild(details);
     }
