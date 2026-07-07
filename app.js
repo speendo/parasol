@@ -8,9 +8,9 @@
   var btnSaveApply = document.getElementById('btn-save-apply');
 
   var baseline = null;
-  var components = [];
-  /** @type {Array} Read-only status component definitions, parallel to components. */
-  var statusComponents = [];
+  var groups = [];
+  /** @type {Array} Read-only status group definitions, parallel to groups. */
+  var statusGroups = [];
   var dirty = false;
   var ws = null;
   var lastSent = {};
@@ -33,18 +33,18 @@
 
   /**
    * Serialize all form field values into a flat key-value object.
-   * Keys are "compId.fieldKey", values are native types (string, boolean).
+   * Keys are "grpId.fieldKey", values are native types (string, boolean).
    * @returns {Object<string, (string|boolean)>}
    */
   function serialize() {
     var data = {};
-    for (var ci = 0; ci < components.length; ci++) {
-      var comp = components[ci];
-      if (!comp.fields) continue;
-      for (var fi = 0; fi < comp.fields.length; fi++) {
-        var field = comp.fields[fi];
-        var val = readFormValue([comp.id, field.key]);
-        data[comp.id + '.' + field.key] = val === undefined
+    for (var ci = 0; ci < groups.length; ci++) {
+      var grp = groups[ci];
+      if (!grp.fields) continue;
+      for (var fi = 0; fi < grp.fields.length; fi++) {
+        var field = grp.fields[fi];
+        var val = readFormValue([grp.id, field.key]);
+        data[grp.id + '.' + field.key] = val === undefined
           ? (field.type === 'radio' ? null : '')
           : val;
       }
@@ -72,17 +72,17 @@
   }
 
   /**
-   * Populate form elements from component field definitions' opts.value.
-   * @param {Array} [comps] - optional component array, defaults to global `components`
+   * Populate form elements from group field definitions' opts.value.
+   * @param {Array} [grps] - optional group array, defaults to global `groups`
    */
-  function populateFromComponents(comps) {
-    if (!comps) comps = components;
-    for (var ci = 0; ci < comps.length; ci++) {
-      var comp = comps[ci];
-      if (!comp.fields) continue;
-      for (var fi = 0; fi < comp.fields.length; fi++) {
-        var field = comp.fields[fi];
-        var el = configForm.querySelector('[name="' + comp.id + '.' + field.key + '"]');
+  function populateFromGroups(grps) {
+    if (!grps) grps = groups;
+    for (var ci = 0; ci < grps.length; ci++) {
+      var grp = grps[ci];
+      if (!grp.fields) continue;
+      for (var fi = 0; fi < grp.fields.length; fi++) {
+        var field = grp.fields[fi];
+        var el = configForm.querySelector('[name="' + grp.id + '.' + field.key + '"]');
         if (!el) continue;
         var fopts = field.opts || {};
         if (field.type === 'checkbox') {
@@ -97,7 +97,7 @@
           el.checked = !!fopts.value;
           el.indeterminate = false;
         } else if (field.type === 'radio') {
-          var radios = configForm.querySelectorAll('[name="' + comp.id + '.' + field.key + '"]');
+          var radios = configForm.querySelectorAll('[name="' + grp.id + '.' + field.key + '"]');
           for (var ri = 0; ri < radios.length; ri++) {
             radios[ri].checked = fopts.value !== undefined && String(radios[ri].value) === String(fopts.value);
           }
@@ -120,15 +120,15 @@
   }
 
   /**
-   * Find a field definition by component ID and field key.
-   * @param {string} compId - e.g. "wifi"
+   * Find a field definition by group ID and field key.
+   * @param {string} grpId - e.g. "wifi"
    * @param {string} fieldKey - e.g. "ssid"
    * @returns {Object|null} the field object {key, type, label, opts} or null if not found
    */
-  function findField(compId, fieldKey) {
-    for (var ci = 0; ci < components.length; ci++) {
-      if (components[ci].id !== compId) continue;
-      var fields = components[ci].fields;
+  function findField(grpId, fieldKey) {
+    for (var ci = 0; ci < groups.length; ci++) {
+      if (groups[ci].id !== grpId) continue;
+      var fields = groups[ci].fields;
       if (!fields) return null;
       for (var fi = 0; fi < fields.length; fi++) {
         if (fields[fi].key === fieldKey) return fields[fi];
@@ -149,11 +149,11 @@
     var data = {};
     for (var name in changes) {
       var dot = name.indexOf('.');
-      var compId = name.slice(0, dot);
+      var grpId = name.slice(0, dot);
       var fieldKey = name.slice(dot + 1);
-      if (!data[compId]) data[compId] = {};
-      var field = findField(compId, fieldKey);
-      if (field) data[compId][fieldKey] = [field.type, field.label, { value: changes[name] }];
+      if (!data[grpId]) data[grpId] = {};
+      var field = findField(grpId, fieldKey);
+      if (field) data[grpId][fieldKey] = [field.type, field.label, { value: changes[name] }];
     }
     return data;
   }
@@ -234,15 +234,15 @@
   }
 
   /**
-   * Parse the full settings JSON from the server into the `components` array,
+   * Parse the full settings JSON from the server into the `groups` array,
    * render nav + form, bind listeners, set baseline, handle hash navigation.
-   * Called on initial WebSocket load (when components is empty).
+   * Called on initial WebSocket load (when groups is empty).
    * @param {Object} data - settings payload (without _dirty)
    * @param {boolean} dirtyFlag - server `_dirty` flag
    */
   function processSettings(data, dirtyFlag) {
     dirty = dirtyFlag === true;
-    var comps = [];
+    var grps = [];
     for (var key in data) {
       if (key[0] === '_') continue;
       var group = data[key];
@@ -252,13 +252,13 @@
         var arr = group[fieldKey];
         fields.push({key: fieldKey, type: arr[0], label: arr[1], opts: arr[2]});
       }
-      comps.push({id: key, label: group.label || labelFromKey(key), fields: fields});
+      grps.push({id: key, label: group.label || labelFromKey(key), fields: fields});
     }
-    components = comps;
+    groups = grps;
     renderNav();
     renderForm();
     bindChangeListeners();
-    populateFromComponents();
+    populateFromGroups();
     setBaseline();
     configForm.removeAttribute('aria-busy');
     clearError();
@@ -267,13 +267,13 @@
   }
 
   /**
-   * Parse a status data payload into statusComponents and render.
-   * First call builds the full component tree. Subsequent calls (partial updates)
-   * merge changed field values and update the DOM via populateFromComponents.
-   * @param {Object} data - status payload keyed by component ID
+   * Parse a status data payload into statusGroups and render.
+   * First call builds the full group tree. Subsequent calls (partial updates)
+   * merge changed field values and update the DOM via populateFromGroups.
+   * @param {Object} data - status payload keyed by group ID
    */
   function processStatus(data) {
-    if (statusComponents.length === 0) {
+    if (statusGroups.length === 0) {
       for (var key in data) {
         if (key[0] === '_') continue;
         var group = data[key];
@@ -283,31 +283,31 @@
           var arr = group[fieldKey];
           fields.push({key: fieldKey, type: arr[0], label: arr[1], opts: arr[2]});
         }
-        statusComponents.push({id: key, label: group.label || labelFromKey(key), fields: fields});
+        statusGroups.push({id: key, label: group.label || labelFromKey(key), fields: fields});
       }
-      if (components.length > 0) {
+      if (groups.length > 0) {
         renderForm();
-        populateFromComponents(statusComponents);
-        populateFromComponents();
+        populateFromGroups(statusGroups);
+        populateFromGroups();
         setBaseline();
         updateUI();
       }
     } else {
       for (var cid in data) {
         if (cid[0] === '_') continue;
-        for (var sci = 0; sci < statusComponents.length; sci++) {
-          if (statusComponents[sci].id !== cid) continue;
-          var comp = statusComponents[sci];
+        for (var sci = 0; sci < statusGroups.length; sci++) {
+          if (statusGroups[sci].id !== cid) continue;
+          var grp = statusGroups[sci];
           for (var fk in data[cid]) {
-            for (var fi = 0; fi < comp.fields.length; fi++) {
-              if (comp.fields[fi].key === fk) {
-                comp.fields[fi].opts.value = data[cid][fk][2].value;
+            for (var fi = 0; fi < grp.fields.length; fi++) {
+              if (grp.fields[fi].key === fk) {
+                grp.fields[fi].opts.value = data[cid][fk][2].value;
               }
             }
           }
         }
       }
-      populateFromComponents(statusComponents);
+      populateFromGroups(statusGroups);
     }
   }
 
@@ -375,13 +375,13 @@
       updateAV(data);
       for (var sk in inFlight) { inFlight[sk] = false; }
       for (var sk in lastSent) { lastSent[sk] = undefined; }
-      for (var ci = 0; ci < components.length; ci++) {
-        var comp = components[ci];
-        if (!comp.fields) continue;
-        for (var fi = 0; fi < comp.fields.length; fi++) {
-          var field = comp.fields[fi];
-          var key = comp.id + '.' + field.key;
-          var fv = readFormValue([comp.id, field.key]);
+      for (var ci = 0; ci < groups.length; ci++) {
+        var grp = groups[ci];
+        if (!grp.fields) continue;
+        for (var fi = 0; fi < grp.fields.length; fi++) {
+          var field = grp.fields[fi];
+          var key = grp.id + '.' + field.key;
+          var fv = readFormValue([grp.id, field.key]);
           if (fv !== undefined && String(fv) !== String(field.opts.value)) {
             sendToServer(key, fv);
           }
@@ -395,27 +395,27 @@
 
     dirty = msg._dirty;
 
-    // Initial load — no components yet, process settings directly
-    if (components.length === 0) {
+    // Initial load — no groups yet, process settings directly
+    if (groups.length === 0) {
       processSettings(data, msg._dirty);
       return;
     }
 
     var changedFields = {};
-    for (var ci = 0; ci < components.length; ci++) {
-      var comp = components[ci];
-      var sGroup = data[comp.id];
+    for (var ci = 0; ci < groups.length; ci++) {
+      var grp = groups[ci];
+      var sGroup = data[grp.id];
       if (!sGroup) continue;
-      for (var fi = 0; fi < comp.fields.length; fi++) {
-        var field = comp.fields[fi];
+      for (var fi = 0; fi < grp.fields.length; fi++) {
+        var field = grp.fields[fi];
         var sField = sGroup[field.key];
         if (!sField) continue;
         var newAV = sField[2].value;
         var oldAV = field.opts.value;
         if (String(newAV) === String(oldAV)) continue;
-        var fv = readFormValue([comp.id, field.key]);
+        var fv = readFormValue([grp.id, field.key]);
         if (fv === undefined) continue;
-        changedFields[comp.id + '.' + field.key] = {newAV: newAV, oldAV: oldAV, fv: fv, label: field.label};
+        changedFields[grp.id + '.' + field.key] = {newAV: newAV, oldAV: oldAV, fv: fv, label: field.label};
       }
     }
 
@@ -453,17 +453,17 @@
 
   /**
    * Copy Applied Values from a server settings payload into
-   * the in-memory component field definitions (field.opts.value).
-   * @param {Object} data - settings payload keyed by component ID
+   * the in-memory group field definitions (field.opts.value).
+   * @param {Object} data - settings payload keyed by group ID
    */
   function updateAV(data) {
-    for (var ci = 0; ci < components.length; ci++) {
-      var comp = components[ci];
-      var sGroup = data[comp.id];
+    for (var ci = 0; ci < groups.length; ci++) {
+      var grp = groups[ci];
+      var sGroup = data[grp.id];
       if (!sGroup) continue;
-      if (!comp.fields) continue;
-      for (var fi = 0; fi < comp.fields.length; fi++) {
-        var field = comp.fields[fi];
+      if (!grp.fields) continue;
+      for (var fi = 0; fi < grp.fields.length; fi++) {
+        var field = grp.fields[fi];
         var sField = sGroup[field.key];
         if (!sField) continue;
         field.opts.value = sField[2].value;
@@ -473,7 +473,7 @@
 
   /** Write AV from in-memory fields into the DOM form and update baseline. */
   function applyAV() {
-    populateFromComponents();
+    populateFromGroups();
     setBaseline();
     updateUI();
   }
@@ -483,12 +483,12 @@
    * (so subsequent user changes are detected as new).
    */
   function syncLS() {
-    for (var ci = 0; ci < components.length; ci++) {
-      var fs = components[ci].fields;
+    for (var ci = 0; ci < groups.length; ci++) {
+      var fs = groups[ci].fields;
       if (!fs) continue;
       for (var fi = 0; fi < fs.length; fi++) {
-        var key = components[ci].id + '.' + components[ci].fields[fi].key;
-        lastSent[key] = components[ci].fields[fi].opts.value;
+        var key = groups[ci].id + '.' + groups[ci].fields[fi].key;
+        lastSent[key] = groups[ci].fields[fi].opts.value;
       }
     }
   }
@@ -496,7 +496,7 @@
   /**
    * Send a single field value to the server over WebSocket as an `apply` action.
    * Sets lastSent and inFlight tracking.
-   * @param {string} key - "compId.fieldKey"
+   * @param {string} key - "grpId.fieldKey"
    * @param {*} value
    */
   function sendToServer(key, value) {
@@ -504,20 +504,20 @@
     lastSent[key] = value;
     inFlight[key] = true;
     var parts = key.split('.');
-    var compId = parts[0];
+    var grpId = parts[0];
     var fieldKey = parts[1];
-    var field = findField(compId, fieldKey);
+    var field = findField(grpId, fieldKey);
     if (!field) return;
     var patch = {};
-    patch[compId] = {};
-    patch[compId][fieldKey] = [field.type, field.label, { value: value }];
+    patch[grpId] = {};
+    patch[grpId][fieldKey] = [field.type, field.label, { value: value }];
     ws.send(JSON.stringify({action: 'apply', data: patch}));
   }
 
   /**
    * Fire-and-forget a user-initiated field change to the server.
    * No-ops if inFlight, or if the value matches lastSent.
-   * @param {string} key - "compId.fieldKey"
+   * @param {string} key - "grpId.fieldKey"
    * @param {*} newValue
    */
   function onUserInput(key, newValue) {
@@ -543,7 +543,7 @@
   }
 
   /**
-   * Read a form field's value by compound key path.
+   * Read a form field's value by grpound key path.
    * Handles type coercion: radio→checked value, checkbox→boolean, number/range→float.
    * @param {string[]} parts - path segments, e.g. ["wifi", "ssid"]
    * @returns {(string|number|boolean|undefined)}
@@ -630,11 +630,11 @@
       .replace(/\b\w/g, function (c) { return c.toUpperCase(); });
   }
 
-  /** Render navigation links in #nav-list from statusComponents and components. */
+  /** Render navigation links in #nav-list from statusGroups and groups. */
   function renderNav() {
     navList.innerHTML = '';
-    renderLinks(statusComponents, 'secondary');
-    renderLinks(components, null);
+    renderLinks(statusGroups, 'secondary');
+    renderLinks(groups, null);
     if (navList._clickWired) return;
     navList._clickWired = true;
     navList.addEventListener('click', function (e) {
@@ -646,25 +646,25 @@
     });
   }
 
-  /** Append nav links for an array of components. @param {Array} comps @param {string|null} className */
-  function renderLinks(comps, className) {
-    for (var ci = 0; ci < comps.length; ci++) {
-      var comp = comps[ci];
+  /** Append nav links for an array of groups. @param {Array} grps @param {string|null} className */
+  function renderLinks(grps, className) {
+    for (var ci = 0; ci < grps.length; ci++) {
+      var grp = grps[ci];
       var li = document.createElement('li');
       var a = document.createElement('a');
-      a.href = '#' + comp.id;
+      a.href = '#' + grp.id;
       if (className) a.className = className;
-      a.textContent = comp.label;
+      a.textContent = grp.label;
       li.appendChild(a);
       navList.appendChild(li);
     }
   }
 
-  /** Render the accordion form in #config-form from statusComponents first, then components. */
+  /** Render the accordion form in #config-form from statusGroups first, then groups. */
   function renderForm() {
     configForm.innerHTML = '';
-    for (var si = 0; si < statusComponents.length; si++) renderSection(statusComponents[si], true);
-    for (var ci = 0; ci < components.length; ci++) renderSection(components[ci], false);
+    for (var si = 0; si < statusGroups.length; si++) renderSection(statusGroups[si], true);
+    for (var ci = 0; ci < groups.length; ci++) renderSection(groups[ci], false);
     var fields = configForm.querySelectorAll('input, select, textarea');
     for (var fi = 0; fi < fields.length; fi++) {
       if (fields[fi].name) fields[fi].setAttribute('aria-invalid', fields[fi].checkValidity() ? 'false' : 'true');
@@ -675,17 +675,17 @@
     }
   }
 
-  /** Render a details/section block for a component. @param {Object} comp @param {boolean} isStatus */
-  function renderSection(comp, isStatus) {
+  /** Render a details/section block for a group. @param {Object} grp @param {boolean} isStatus */
+  function renderSection(grp, isStatus) {
     var details = document.createElement('details');
-    details.id = comp.id;
+    details.id = grp.id;
     var summary = document.createElement('summary');
     if (isStatus) summary.className = 'secondary';
-    summary.textContent = comp.label;
+    summary.textContent = grp.label;
     details.appendChild(summary);
-    if (comp.fields) {
-      for (var fi = 0; fi < comp.fields.length; fi++) {
-        var fieldEl = createField(comp.id, comp.fields[fi], isStatus ? 1 : 0);
+    if (grp.fields) {
+      for (var fi = 0; fi < grp.fields.length; fi++) {
+        var fieldEl = createField(grp.id, grp.fields[fi], isStatus ? 1 : 0);
         if (fieldEl) details.appendChild(fieldEl);
       }
     }
@@ -750,11 +750,11 @@
     });
     document.getElementById('notif-keep').addEventListener('click', function () {
       hideNotification();
-      for (var ci = 0; ci < components.length; ci++) {
-        var comp = components[ci];
-        for (var fi = 0; fi < comp.fields.length; fi++) {
-          var field = comp.fields[fi];
-          var fv = readFormValue([comp.id, field.key]);
+      for (var ci = 0; ci < groups.length; ci++) {
+        var grp = groups[ci];
+        for (var fi = 0; fi < grp.fields.length; fi++) {
+          var field = grp.fields[fi];
+          var fv = readFormValue([grp.id, field.key]);
           if (fv === undefined) continue;
           field.opts.value = fv;
         }
@@ -789,7 +789,7 @@
 
   /**
    * Create a DOM element for a settings field.
-   * @param {string} namePrefix - component ID (e.g. "wifi")
+   * @param {string} namePrefix - group ID (e.g. "wifi")
    * @param {Object} field - { key, type, label, opts }
    * @returns {HTMLElement|null}
    */
@@ -940,5 +940,5 @@
     if (describedEl) describedEl.setAttribute('aria-describedby', helper.id);
     container.appendChild(helper);
   }
-  /* test-expose */if(window.__TEST_MODE){window.serialize=serialize;window.setBaseline=setBaseline;window.getPending=getPending;window.createField=createField;window.populateFromComponents=populateFromComponents;window.applyAttrs=applyAttrs;window.addHelperText=addHelperText;window.findField=findField;window.updateUI=updateUI;window.showError=showError;window.clearError=clearError;window.postJSON=postJSON;window.syncThen=syncThen;window.handleSaveApply=handleSaveApply;window.renderNav=renderNav;window.renderForm=renderForm;window.handleHash=handleHash;window.wireButtons=wireButtons;window.bindChangeListeners=bindChangeListeners;window.init=init;window.buildPatch=buildPatch;window.connectWS=connectWS;window.disconnectWS=disconnectWS;window.onWSClose=onWSClose;window.processSettings=processSettings;window.onWSMessage=onWSMessage;window.updateAV=updateAV;window.applyAV=applyAV;window.syncLS=syncLS;window.resolveNested=resolveNested;window.sendToServer=sendToServer;window.onUserInput=onUserInput;window.readFormValue=readFormValue;window.showExternalNotification=showExternalNotification;window.showConflictPrompt=showConflictPrompt;window.hideNotification=hideNotification;window.__test={};window.__test.receiveWSMessage=onWSMessage;window.__test.wsReady=function(){if(ws)ws.readyState=1};Object.defineProperty(window.__test,'components',{get:function(){return components},set:function(v){components=v}});Object.defineProperty(window.__test,'dirty',{get:function(){return dirty},set:function(v){dirty=v}});Object.defineProperty(window.__test,'lastSent',{get:function(){return lastSent},set:function(v){lastSent=v}});Object.defineProperty(window.__test,'inFlight',{get:function(){return inFlight},set:function(v){inFlight=v}});Object.defineProperty(window.__test,'formInteracted',{get:function(){return formInteracted},set:function(v){formInteracted=v}});window.processStatus=processStatus;Object.defineProperty(window.__test,'statusComponents',{get:function(){return statusComponents},set:function(v){statusComponents=v}});}
+  /* test-expose */if(window.__TEST_MODE){window.serialize=serialize;window.setBaseline=setBaseline;window.getPending=getPending;window.createField=createField;window.populateFromGroups=populateFromGroups;window.applyAttrs=applyAttrs;window.addHelperText=addHelperText;window.findField=findField;window.updateUI=updateUI;window.showError=showError;window.clearError=clearError;window.postJSON=postJSON;window.syncThen=syncThen;window.handleSaveApply=handleSaveApply;window.renderNav=renderNav;window.renderForm=renderForm;window.handleHash=handleHash;window.wireButtons=wireButtons;window.bindChangeListeners=bindChangeListeners;window.init=init;window.buildPatch=buildPatch;window.connectWS=connectWS;window.disconnectWS=disconnectWS;window.onWSClose=onWSClose;window.processSettings=processSettings;window.onWSMessage=onWSMessage;window.updateAV=updateAV;window.applyAV=applyAV;window.syncLS=syncLS;window.resolveNested=resolveNested;window.sendToServer=sendToServer;window.onUserInput=onUserInput;window.readFormValue=readFormValue;window.showExternalNotification=showExternalNotification;window.showConflictPrompt=showConflictPrompt;window.hideNotification=hideNotification;window.__test={};window.__test.receiveWSMessage=onWSMessage;window.__test.wsReady=function(){if(ws)ws.readyState=1};Object.defineProperty(window.__test,'groups',{get:function(){return groups},set:function(v){groups=v}});Object.defineProperty(window.__test,'dirty',{get:function(){return dirty},set:function(v){dirty=v}});Object.defineProperty(window.__test,'lastSent',{get:function(){return lastSent},set:function(v){lastSent=v}});Object.defineProperty(window.__test,'inFlight',{get:function(){return inFlight},set:function(v){inFlight=v}});Object.defineProperty(window.__test,'formInteracted',{get:function(){return formInteracted},set:function(v){formInteracted=v}});window.processStatus=processStatus;Object.defineProperty(window.__test,'statusGroups',{get:function(){return statusGroups},set:function(v){statusGroups=v}});}
 })();
