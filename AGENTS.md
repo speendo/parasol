@@ -67,3 +67,17 @@ Playwright config auto-starts uvicorn on port 8765 and stops it when done.
 - **Port 8765 in use:** `kill $(ps aux | grep 'uvicorn test_server' | grep -v grep | awk '{print $2}')`
 - **uvicorn not found:** venv not activated — re-run `. .venv/bin/activate`
 - **Playwright "Executable doesn't exist":** re-run `npx playwright install chromium`
+
+# Version Bumping
+
+When a change merits a new release, bump `components/pico-settings/library.json`
+and tag accordingly:
+
+- **Major (X.0.0):** Breaking changes to wire format, WS protocol, or public API
+- **Minor (0.X.0):** New features, new field types, new UI elements
+- **Patch (0.0.X):** Bug fixes, edge case hardening, indentation, doc updates
+
+Bump the version yourself when the change clearly fits one of these buckets.
+Ask the user on borderline cases.
+
+The tag (`git tag vX.Y.Z`) must match the version in `library.json`.
