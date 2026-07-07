@@ -200,13 +200,13 @@ test.describe('Status variables', () => {
 
   test('status fields are disabled', async ({ page }) => {
     await page.goto('/')
-    await expect(page.locator('[name="system.uptime"]')).toBeDisabled()
-    await expect(page.locator('[name="system.fw_version"]')).toBeDisabled()
-    await expect(page.locator('[name="system.led"]')).toBeDisabled()
-    await expect(page.locator('[name="network.mode"]').first()).toBeDisabled()
-    await expect(page.locator('[name="network.signal"]')).toBeDisabled()
-    await expect(page.locator('[name="network.connection"]')).toBeDisabled()
-    await expect(page.locator('[name="sensors.temperature"]')).toBeDisabled()
+    await expect(page.locator('[name="st-system.uptime"]')).toBeDisabled()
+    await expect(page.locator('[name="st-system.fw_version"]')).toBeDisabled()
+    await expect(page.locator('[name="st-system.led"]')).toBeDisabled()
+    await expect(page.locator('[name="st-network.mode"]').first()).toBeDisabled()
+    await expect(page.locator('[name="st-network.signal"]')).toBeDisabled()
+    await expect(page.locator('[name="st-network.connection"]')).toBeDisabled()
+    await expect(page.locator('[name="st-sensors.temperature"]')).toBeDisabled()
   })
 
   test('settings fields are not disabled', async ({ page }) => {
@@ -216,9 +216,9 @@ test.describe('Status variables', () => {
 
   test('status shows computed values', async ({ page }) => {
     await page.goto('/')
-    await expect(page.locator('[name="system.uptime"]')).not.toHaveValue('')
-    await expect(page.locator('[name="network.signal"]')).not.toHaveValue('')
-    await expect(page.locator('[name="sensors.temperature"]')).not.toHaveValue('')
+    await expect(page.locator('[name="st-system.uptime"]')).not.toHaveValue('')
+    await expect(page.locator('[name="st-network.signal"]')).not.toHaveValue('')
+    await expect(page.locator('[name="st-sensors.temperature"]')).not.toHaveValue('')
   })
 
   test('status nav links are present', async ({ page }) => {
@@ -230,9 +230,9 @@ test.describe('Status variables', () => {
   test('status values update over time', async ({ page }) => {
     await page.goto('/')
     await page.waitForTimeout(500)
-    var val1 = await page.locator('[name="network.signal"]').inputValue()
+    var val1 = await page.locator('[name="st-network.signal"]').inputValue()
     await page.waitForTimeout(4000)
-    var val2 = await page.locator('[name="network.signal"]').inputValue()
+    var val2 = await page.locator('[name="st-network.signal"]').inputValue()
     expect(val1).not.toBe(val2)
   })
 })
@@ -393,4 +393,30 @@ test.describe('form validation UI', () => {
   })
 })
 
+test.describe('Navbar image and favicon', () => {
+  test('favicon link is present in head', async ({ page }) => {
+    await page.goto('/')
+    var favicon = page.locator('link[rel="icon"]')
+    await expect(favicon).toHaveAttribute('href', '/favicon.ico')
+  })
+
+  test('logo image is present in navbar', async ({ page }) => {
+    await page.goto('/')
+    var logo = page.locator('#nav-logo')
+    await expect(logo).toBeVisible()
+    await expect(logo).toHaveAttribute('src', '/logo.png')
+    await expect(logo).toHaveAttribute('alt', 'Logo')
+    var nw = await logo.evaluate(function (el) { return el.naturalWidth })
+    expect(nw).toBeGreaterThan(0)
+  })
+
+  test('logo image hides on load error', async ({ page }) => {
+    await page.route('**/logo.png', function (route) { return route.abort('failed') })
+    await page.goto('/')
+    var logo = page.locator('#nav-logo')
+    await expect(logo).toHaveCount(1)
+    var display = await logo.evaluate(function (el) { return el.style.display })
+    expect(display).toBe('none')
+  })
+})
 
