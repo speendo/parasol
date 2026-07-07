@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "build": "./build.sh",
-    "test": "vitest run && playwright test",
+    "test": "npm run build && vitest run && playwright test",
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
     "test:watch": "vitest"

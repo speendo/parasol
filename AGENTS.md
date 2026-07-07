@@ -18,6 +18,13 @@ to minimize server load.
 See `docs/superpowers/specs/2026-06-18-unified-settings-design.md` for the
 current architecture and API design.
 
+# Before Committing
+
+**Embedded awareness** — when changing `app.js`, `index.html`, or `pico.jade.min.css`, ask:
+- Does this add duplicate logic that runs on the device? (build scripts don't count)
+- Does the net byte change in minified output justify the feature?
+- Are there any new runtime allocations (strings, objects, closures) without explicit need?
+
 # Commands
 
 Node.js is at `/config/.nvm/versions/node/v24.17.0/bin/`. Source nvm first:
@@ -28,7 +35,7 @@ export PATH="/config/.nvm/versions/node/v24.17.0/bin:$PATH"
 ```
 
 - `npm run build` — minify `app.js` → `app.min.js` via terser
-- `npm test` — run all tests (unit + e2e)
+- \`npm test\` — build minified JS, then run all tests (unit + e2e)
 - `npm run test:unit` — vitest unit tests only
 - `npm run test:e2e` — Playwright e2e tests only
 - `npm run test:watch` — vitest in watch mode
