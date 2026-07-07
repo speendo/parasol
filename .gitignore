@@ -6,3 +6,7 @@ test-deps/debs/
 test-deps/_extract/
 test-deps/*.bak/
 test-results/
+
+# Generated asset files (cmake/generate_assets.cmake)
+components/pico-settings/src/pwui_assets.c
+components/pico-settings/src/pwui_assets.h
