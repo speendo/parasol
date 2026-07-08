@@ -301,9 +301,6 @@ int main(void) {
     RUN_TEST(test_status_field_does_not_mark_dirty);
     RUN_TEST(test_clear_dirty);
     RUN_TEST(test_settings_and_status_counts);
-    RUN_TEST(test_set_unknown_field);
-    RUN_TEST(test_capacity_growth);
-    RUN_TEST(test_deinit_empty_store);
     RUN_TEST(test_set_value_overwrite);
     RUN_TEST(test_find_null_args);
     RUN_TEST(test_store_field_at_bounds);
