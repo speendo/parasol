@@ -120,50 +120,6 @@ void test_settings_and_status_counts(void) {
     TEST_ASSERT_EQUAL(1, pwui_store_status_count(&store));
 }
 
-void test_populate_from_cjson(void) {
-    pwui_field_t f1 = make_field("wifi", "ssid", PWUI_TEXT, false);
-    pwui_field_t f2 = make_field("wifi", "pass", PWUI_PASSWORD, false);
-    pwui_store_add_field(&store, &f1);
-    pwui_store_add_field(&store, &f2);
-
-    cJSON *data = cJSON_Parse(
-        "{\"wifi\":{"
-        "\"ssid\":[\"text\",\"SSID\",{\"value\":\"LoadedSSID\"}],"
-        "\"pass\":[\"password\",\"Pass\",{\"value\":\"secret\"}]"
-        "}}"
-    );
-    TEST_ASSERT_NOT_NULL(data);
-    TEST_ASSERT_EQUAL(ESP_OK, pwui_store_populate(&store, data));
-    cJSON_Delete(data);
-
-    cJSON *v = pwui_store_get_value(&store, "wifi", "ssid");
-    TEST_ASSERT_TRUE(cJSON_IsString(v));
-    TEST_ASSERT_EQUAL_STRING("LoadedSSID", cJSON_GetStringValue(v));
-
-    TEST_ASSERT_FALSE(pwui_store_is_dirty(&store));
-}
-
-void test_set_unknown_field(void) {
-    esp_err_t err = pwui_store_set_value(&store, "nope", "nope", "x");
-    TEST_ASSERT_EQUAL(ESP_ERR_NOT_FOUND, err);
-}
-
-void test_capacity_growth(void) {
-    pwui_field_t f = make_field("a", "a", PWUI_TEXT, false);
-    for (int i = 0; i < 32; i++) {
-        esp_err_t err = pwui_store_add_field(&store, &f);
-        TEST_ASSERT_EQUAL(ESP_OK, err);
-    }
-    TEST_ASSERT_GREATER_OR_EQUAL(32, store.count);
-    TEST_ASSERT_GREATER_OR_EQUAL(32, store.capacity);
-}
-
-void test_deinit_empty_store(void) {
-    pwui_store_t s;
-    TEST_ASSERT_EQUAL(ESP_OK, pwui_store_init(&s));
-    pwui_store_deinit(&s);
-}
-
 void test_set_value_overwrite(void) {
     pwui_field_t f = make_field("wifi", "ssid", PWUI_TEXT, false);
     pwui_store_add_field(&store, &f);
@@ -192,16 +148,6 @@ void test_store_field_at_bounds(void) {
 
     TEST_ASSERT_NULL(pwui_store_field_at(&store, 1));
     TEST_ASSERT_NOT_NULL(pwui_store_field_at(&store, 0));
-}
-
-void test_populate_null_data(void) {
-    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, pwui_store_populate(&store, NULL));
-}
-
-void test_populate_non_object(void) {
-    cJSON *arr = cJSON_CreateArray();
-    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, pwui_store_populate(&store, arr));
-    cJSON_Delete(arr);
 }
 
 void test_add_component_same_id_label(void) {
@@ -238,25 +184,6 @@ void test_capacity_growth_comps(void) {
     TEST_ASSERT_GREATER_OR_EQUAL(8, store.comp_capacity);
 }
 
-void test_populate_with_group_label(void) {
-    pwui_field_t f = make_field("wifi", "ssid", PWUI_TEXT, false);
-    pwui_store_add_field(&store, &f);
-
-    cJSON *data = cJSON_Parse(
-        "{\"wifi\":{"
-        "\"label\":[\"text\",\"Label\",{}],"
-        "\"ssid\":[\"text\",\"SSID\",{\"value\":\"MyNet\"}]"
-        "}}"
-    );
-    TEST_ASSERT_NOT_NULL(data);
-    TEST_ASSERT_EQUAL(ESP_OK, pwui_store_populate(&store, data));
-    cJSON_Delete(data);
-
-    cJSON *v = pwui_store_get_value(&store, "wifi", "ssid");
-    TEST_ASSERT_TRUE(cJSON_IsString(v));
-    TEST_ASSERT_EQUAL_STRING("MyNet", cJSON_GetStringValue(v));
-}
-
 void test_store_init_null(void) {
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, pwui_store_init(NULL));
 }
@@ -264,6 +191,101 @@ void test_store_init_null(void) {
 void test_add_field_null_store(void) {
     pwui_field_t f = make_field("x", "y", PWUI_TEXT, false);
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, pwui_store_add_field(NULL, &f));
+}
+
+static const char *test_load_ssid(void) { return "LoadedSSID"; }
+static const char *test_load_pass(void) { return "secret"; }
+static const char *test_load_null(void) { return NULL; }
+static const char *test_load_default(void) { return "MyNetwork"; }
+
+void test_load_values_calls_on_load(void) {
+    pwui_field_t f = make_field("wifi", "ssid", PWUI_TEXT, false);
+    f.on_load = test_load_ssid;
+    pwui_store_add_field(&store, &f);
+
+    TEST_ASSERT_EQUAL(ESP_OK, pwui_store_load_values(&store));
+
+    cJSON *v = pwui_store_get_value(&store, "wifi", "ssid");
+    TEST_ASSERT_TRUE(cJSON_IsString(v));
+    TEST_ASSERT_EQUAL_STRING("LoadedSSID", cJSON_GetStringValue(v));
+    TEST_ASSERT_FALSE(pwui_store_is_dirty(&store));
+}
+
+void test_load_values_multiple_fields(void) {
+    pwui_field_t f1 = make_field("wifi", "ssid", PWUI_TEXT, false);
+    f1.on_load = test_load_ssid;
+    pwui_store_add_field(&store, &f1);
+
+    pwui_field_t f2 = make_field("wifi", "pass", PWUI_PASSWORD, false);
+    f2.on_load = test_load_pass;
+    pwui_store_add_field(&store, &f2);
+
+    TEST_ASSERT_EQUAL(ESP_OK, pwui_store_load_values(&store));
+
+    cJSON *v1 = pwui_store_get_value(&store, "wifi", "ssid");
+    TEST_ASSERT_TRUE(cJSON_IsString(v1));
+    TEST_ASSERT_EQUAL_STRING("LoadedSSID", cJSON_GetStringValue(v1));
+
+    cJSON *v2 = pwui_store_get_value(&store, "wifi", "pass");
+    TEST_ASSERT_TRUE(cJSON_IsString(v2));
+    TEST_ASSERT_EQUAL_STRING("secret", cJSON_GetStringValue(v2));
+}
+
+void test_load_values_null_on_load_skipped(void) {
+    pwui_field_t f = make_field("wifi", "ssid", PWUI_TEXT, false);
+    f.on_load = NULL;
+    pwui_store_add_field(&store, &f);
+    TEST_ASSERT_EQUAL(ESP_OK, pwui_store_load_values(&store));
+    cJSON *v = pwui_store_get_value(&store, "wifi", "ssid");
+    TEST_ASSERT_NULL(v);
+}
+
+void test_load_values_on_load_returns_null(void) {
+    pwui_field_t f = make_field("gpio", "confirm", PWUI_CHECKBOX, false);
+    f.on_load = test_load_null;
+    pwui_store_add_field(&store, &f);
+    TEST_ASSERT_EQUAL(ESP_OK, pwui_store_load_values(&store));
+    cJSON *v = pwui_store_get_value(&store, "gpio", "confirm");
+    TEST_ASSERT_TRUE(cJSON_IsNull(v));
+}
+
+void test_reset_values_reloads_all(void) {
+    pwui_field_t f = make_field("wifi", "ssid", PWUI_TEXT, false);
+    f.on_load = test_load_ssid;
+    pwui_store_add_field(&store, &f);
+
+    pwui_store_load_values(&store);
+    cJSON *v1 = pwui_store_get_value(&store, "wifi", "ssid");
+    TEST_ASSERT_EQUAL_STRING("LoadedSSID", cJSON_GetStringValue(v1));
+
+    pwui_store_set_value(&store, "wifi", "ssid", "ChangedValue");
+    TEST_ASSERT_TRUE(pwui_store_is_dirty(&store));
+
+    TEST_ASSERT_EQUAL(ESP_OK, pwui_store_reset_values(&store));
+    cJSON *v2 = pwui_store_get_value(&store, "wifi", "ssid");
+    TEST_ASSERT_EQUAL_STRING("LoadedSSID", cJSON_GetStringValue(v2));
+    TEST_ASSERT_FALSE(pwui_store_is_dirty(&store));
+}
+
+void test_reset_values_null_on_load(void) {
+    pwui_field_t f = make_field("wifi", "ssid", PWUI_TEXT, false);
+    f.on_load = NULL;
+    pwui_store_add_field(&store, &f);
+    pwui_store_set_value(&store, "wifi", "ssid", "SomeValue");
+    cJSON *v1 = pwui_store_get_value(&store, "wifi", "ssid");
+    TEST_ASSERT_TRUE(cJSON_IsString(v1));
+
+    TEST_ASSERT_EQUAL(ESP_OK, pwui_store_reset_values(&store));
+    cJSON *v2 = pwui_store_get_value(&store, "wifi", "ssid");
+    TEST_ASSERT_NULL(v2);
+}
+
+void test_reset_values_null_store(void) {
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, pwui_store_reset_values(NULL));
+}
+
+void test_load_values_null_store(void) {
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, pwui_store_load_values(NULL));
 }
 
 int main(void) {
@@ -279,22 +301,26 @@ int main(void) {
     RUN_TEST(test_status_field_does_not_mark_dirty);
     RUN_TEST(test_clear_dirty);
     RUN_TEST(test_settings_and_status_counts);
-    RUN_TEST(test_populate_from_cjson);
     RUN_TEST(test_set_unknown_field);
     RUN_TEST(test_capacity_growth);
     RUN_TEST(test_deinit_empty_store);
     RUN_TEST(test_set_value_overwrite);
     RUN_TEST(test_find_null_args);
     RUN_TEST(test_store_field_at_bounds);
-    RUN_TEST(test_populate_null_data);
-    RUN_TEST(test_populate_non_object);
     RUN_TEST(test_add_component_same_id_label);
     RUN_TEST(test_add_component_same_id_different_label);
     RUN_TEST(test_get_label_nonexistent);
     RUN_TEST(test_get_label_after_add);
     RUN_TEST(test_capacity_growth_comps);
-    RUN_TEST(test_populate_with_group_label);
     RUN_TEST(test_store_init_null);
     RUN_TEST(test_add_field_null_store);
+    RUN_TEST(test_load_values_calls_on_load);
+    RUN_TEST(test_load_values_multiple_fields);
+    RUN_TEST(test_load_values_null_on_load_skipped);
+    RUN_TEST(test_load_values_on_load_returns_null);
+    RUN_TEST(test_reset_values_reloads_all);
+    RUN_TEST(test_reset_values_null_on_load);
+    RUN_TEST(test_reset_values_null_store);
+    RUN_TEST(test_load_values_null_store);
     return UNITY_END();
 }
