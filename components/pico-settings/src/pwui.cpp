@@ -88,7 +88,6 @@ esp_err_t pwui_init(AsyncWebServer *server, pwui_commit_cb_t on_commit) {
                                     }
                                 }
                                 pwui_store_set_value(&g_store, group->string, field->string, val_str);
-                                pwui_store_clear_dirty(&g_store);
                             }
                             field = field->next;
                         }
@@ -96,10 +95,11 @@ esp_err_t pwui_init(AsyncWebServer *server, pwui_commit_cb_t on_commit) {
                     group = group->next;
                 }
 
+                enum { MAX_PAIRS = 64 };
+                const char *pairs[MAX_PAIRS][2];
+                char paths[MAX_PAIRS][128];
+                int pair_count = 0;
                 if (g_on_commit) {
-                    #define MAX_PAIRS 64
-                    const char *pairs[MAX_PAIRS][2];
-                    int pair_count = 0;
                     group = body->child;
                     while (group && pair_count < MAX_PAIRS) {
                         if (cJSON_IsObject(group) && group->string[0] != '_') {
@@ -111,7 +111,6 @@ esp_err_t pwui_init(AsyncWebServer *server, pwui_commit_cb_t on_commit) {
                                     if (val) {
                                         cJSON *sv = pwui_store_get_value(&g_store, group->string, field->string);
                                         if (sv && cJSON_IsString(sv)) {
-                                            static char paths[MAX_PAIRS][128];
                                             snprintf(paths[pair_count], sizeof(paths[0]), "%s.%s", group->string, field->string);
                                             pairs[pair_count][0] = paths[pair_count];
                                             pairs[pair_count][1] = cJSON_GetStringValue(sv);
@@ -124,10 +123,11 @@ esp_err_t pwui_init(AsyncWebServer *server, pwui_commit_cb_t on_commit) {
                         }
                         group = group->next;
                     }
-                    if (pair_count > 0) {
-                        g_on_commit((const char *(*)[2])pairs, pair_count);
-                    }
                 }
+                if (pair_count > 0 && g_on_commit) {
+                    g_on_commit(pairs, pair_count);
+                }
+                pwui_store_clear_dirty(&g_store);
             }
             cJSON_Delete(msg);
             req->send(200, "text/plain", "OK");
@@ -138,7 +138,7 @@ esp_err_t pwui_init(AsyncWebServer *server, pwui_commit_cb_t on_commit) {
 }
 
 esp_err_t pwui_start(void) {
-    if (!g_initialized) return ESP_ERR_INVALID_STATE;
+    if (!g_server) return ESP_ERR_INVALID_STATE;
 
     pwui_ws_init(&g_ws, &g_store);
     g_server->addHandler(&g_ws);
@@ -229,7 +229,9 @@ esp_err_t pwui_set(const char *path, const char *value) {
     size_t clen = dot - path;
     if (clen >= PWUI_MAX_PATH) return ESP_ERR_INVALID_ARG;
     memcpy(comp_id, path, clen);
+    comp_id[clen] = '\0';
     strncpy(key, dot + 1, PWUI_MAX_PATH - 1);
+    key[PWUI_MAX_PATH - 1] = '\0';
     return pwui_store_set_value(&g_store, comp_id, key, value);
 }
 
@@ -241,7 +243,9 @@ const char *pwui_get(const char *path) {
     size_t clen = dot - path;
     if (clen >= PWUI_MAX_PATH) return NULL;
     memcpy(comp_id, path, clen);
+    comp_id[clen] = '\0';
     strncpy(key, dot + 1, PWUI_MAX_PATH - 1);
+    key[PWUI_MAX_PATH - 1] = '\0';
     cJSON *v = pwui_store_get_value(&g_store, comp_id, key);
     if (!v || !cJSON_IsString(v)) return NULL;
     return cJSON_GetStringValue(v);

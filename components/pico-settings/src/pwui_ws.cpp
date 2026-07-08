@@ -27,7 +27,7 @@ static void on_event(AsyncWebSocket *server, AsyncWebSocketClient *client,
     } else if (type == WS_EVT_DATA) {
         AwsFrameInfo *info = (AwsFrameInfo *)arg;
         if (info->final && info->index == 0 && info->len == len
-            && info->opcode == WS_TEXT) {
+            && info->opcode == WS_TEXT && len > 0) {
             data[len] = '\0';
 
             cJSON *msg = cJSON_Parse((const char *)data);
@@ -79,6 +79,12 @@ static void on_event(AsyncWebSocket *server, AsyncWebSocketClient *client,
                             }
                         } else if (f) {
                             pwui_store_set_value(g_store, group->string, field->string, val_str);
+                            cJSON *resp = cJSON_CreateObject();
+                            cJSON_AddStringToObject(resp, "type", "settings");
+                            cJSON_AddItemToObject(resp, "data", pwui_json_build_settings(g_store));
+                            char *out = cJSON_PrintUnformatted(resp);
+                            cJSON_Delete(resp);
+                            if (out) { server->textAll(out); free(out); }
                         }
                         field = field->next;
                     }
