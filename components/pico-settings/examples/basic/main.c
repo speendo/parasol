@@ -3,60 +3,118 @@
 #include "ESPAsyncWebServer.h"
 #include "nvs_flash.h"
 #include <stdio.h>
+#include <string.h>
 
-static esp_err_t load_from_nvs(cJSON *root) {
-    cJSON *wifi = cJSON_CreateObject();
-    cJSON_AddItemToObject(wifi, "ssid",
-        cJSON_Parse("[\"text\",\"SSID\",{\"value\":\"MyNetwork\"}]"));
-    cJSON_AddItemToObject(wifi, "pass",
-        cJSON_Parse("[\"password\",\"Password\",{\"value\":\"\"}]"));
-    cJSON_AddItemToObject(root, "wifi", wifi);
+/* ── Per-field load callbacks ─────────────────────────────────
+ * Called at pwui_init time. Return persisted value (or factory default)
+ * from NVS. Return NULL if no value stored yet.
+ */
+
+static const char *load_ssid(void) {
+    nvs_handle_t h;
+    static char buf[64];
+    if (nvs_open("pwui", NVS_READONLY, &h) == ESP_OK) {
+        size_t len = sizeof(buf);
+        if (nvs_get_str(h, "wifi.ssid", buf, &len) == ESP_OK) {
+            nvs_close(h);
+            return buf;
+        }
+        nvs_close(h);
+    }
+    return "MyNetwork";
+}
+
+static const char *load_pass(void) {
+    nvs_handle_t h;
+    static char buf[64];
+    if (nvs_open("pwui", NVS_READONLY, &h) == ESP_OK) {
+        size_t len = sizeof(buf);
+        if (nvs_get_str(h, "wifi.pass", buf, &len) == ESP_OK) {
+            nvs_close(h);
+            return buf;
+        }
+        nvs_close(h);
+    }
+    return "";
+}
+
+/* ── Apply callback ───────────────────────────────────────────
+ * on_apply fires on blur/change AND on Save.
+ * Return ESP_OK to accept. Return anything else to reject (Save aborts).
+ */
+
+static esp_err_t on_ssid_change(const char *comp_id, const char *key,
+                                 const char *value) {
+    printf("%s.%s changed to: %s\n", comp_id, key, value);
+    if (value && strlen(value) > 32) return ESP_ERR_INVALID_ARG;
     return ESP_OK;
 }
 
-static esp_err_t save_to_nvs(cJSON *root) {
-    printf("Save called\n");
-    return ESP_OK;
+/* ── Commit callback ──────────────────────────────────────────
+ * Called once per Save, after all on_apply have returned ESP_OK.
+ * All changed pairs are passed as a flat array. Do ONE nvs_open /
+ * write loop / nvs_commit / nvs_close to minimize flash wear.
+ *
+ * Compare against current NVS value before writing — skip if unchanged.
+ */
+
+static void commit_to_nvs(const char *pairs[][2], int count) {
+    nvs_handle_t h;
+    if (nvs_open("pwui", NVS_READWRITE, &h) != ESP_OK) return;
+
+    for (int i = 0; i < count; i++) {
+        char current[64];
+        size_t len = sizeof(current);
+        if (nvs_get_str(h, pairs[i][0], current, &len) == ESP_OK
+            && strcmp(current, pairs[i][1]) == 0) continue;
+        nvs_set_str(h, pairs[i][0], pairs[i][1]);
+    }
+
+    nvs_commit(h);
+    nvs_close(h);
+    printf("Saved %d changed field(s) to NVS\n", count);
 }
 
-static esp_err_t reset_defaults(cJSON *root) {
-    printf("Reset called\n");
-    return ESP_OK;
-}
-
-static void on_ssid_change(const char *comp_id, const char *key, const char *value) {
-    printf("SSID changed to: %s\n", value);
-}
+/* ── Main ───────────────────────────────────────────────────── */
 
 void app_main(void) {
     nvs_flash_init();
     WiFi.mode(WIFI_AP);
     WiFi.softAP("pico-config", NULL);
-
     AsyncWebServer server(80);
+
+    /* Register components and fields BEFORE pwui_init */
 
     pwui_begin_component("wifi", "Wi-Fi Setup", false);
     pwui_add_field(PWUI_TEXT, "wifi", "ssid", "SSID",
-                   PWUI_VALUE, "MyNetwork",
-                   PWUI_APPLY, on_ssid_change,
-                   PWUI_END);
+        &(pwui_field_opts_t){
+            .on_load  = load_ssid,
+            .on_apply = on_ssid_change,
+            .help     = "Network name - 1-32 characters",
+            .attrs    = "{\"required\":true,\"maxlength\":32}",
+        });
     pwui_add_field(PWUI_PASSWORD, "wifi", "pass", "Password",
-                   PWUI_HELP, "At least 8 characters", PWUI_END);
+        &(pwui_field_opts_t){
+            .on_load  = load_pass,
+            .on_apply = NULL,
+            .help     = "At least 8 characters",
+        });
     pwui_end_component("wifi");
 
+    /* Status component: on_load = NULL (ignored, values come from runtime loop) */
     pwui_begin_component("system", "System Status", true);
-    pwui_add_field(PWUI_TEXT, "system", "uptime", "Uptime", PWUI_VALUE, "", PWUI_END);
+    pwui_add_field(PWUI_TEXT, "system", "uptime", "Uptime",
+        &(pwui_field_opts_t){
+            .on_load  = NULL,
+            .on_apply = NULL,
+        });
     pwui_end_component("system");
 
-    pwui_storage_t storage = {
-        .on_load = load_from_nvs,
-        .on_save = save_to_nvs,
-        .on_reset = reset_defaults,
-    };
-
-    pwui_init(&server, &storage);
+    /* init + start */
+    pwui_init(&server, commit_to_nvs);
     pwui_start();
 
+    /* Runtime loop */
     int seconds = 0;
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(3000));
