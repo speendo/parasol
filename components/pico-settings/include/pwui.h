@@ -21,28 +21,54 @@ typedef enum {
     PWUI_RANGE, PWUI_TEXTAREA, PWUI_RADIO, PWUI_SELECT
 } pwui_type_t;
 
-typedef void (*pwui_apply_cb_t)(const char *comp_id, const char *key, const char *value);
-typedef esp_err_t (*pwui_storage_cb_t)(cJSON *data);
+/** @brief Called once per field at pwui_init time.
+ *  @return Persisted value string, or NULL.
+ *          For PWUI_CHECKBOX: NULL = indeterminate (third state).
+ *          For all other types: NULL = start empty. */
+typedef const char *(*pwui_load_cb_t)(void);
 
+/** @brief Called on every value change (blur/change) and on Save.
+ *  @param comp_id Component ID, e.g. "wifi".
+ *  @param key     Field key, e.g. "ssid".
+ *  @param value   New value string, or NULL if cleared/indeterminate.
+ *  @return ESP_OK to accept, anything else to reject (Save aborts). */
+typedef esp_err_t (*pwui_apply_cb_t)(const char *comp_id, const char *key, const char *value);
+
+/** @brief Called once per Save, after all on_apply callbacks have returned ESP_OK.
+ *  @param pairs  Array of [path, value] pairs. pairs[i][0] = "comp_id.key", pairs[i][1] = "value".
+ *  @param count  Number of pairs.
+ *  Use for single-cycle NVS persistence (one open/write/commit). */
+typedef void (*pwui_commit_cb_t)(const char *pairs[][2], int count);
+
+/** @brief Per-field options. All fields are required; pass NULL to opt out.
+ *  @var on_load  NULL = type-dependent (checkbox→indeterminate, else empty).
+ *                  For status fields: always NULL (runtime loop provides values).
+ *  @var on_apply NULL = auto-accept any value (returns ESP_OK).
+ *                  For status fields: always NULL (fields are read-only in browser).
+ *  @var help     NULL = no tooltip rendered.
+ *  @var attrs    NULL = no HTML validation attributes. */
 typedef struct {
-    pwui_storage_cb_t on_load;
-    pwui_storage_cb_t on_save;
-    pwui_storage_cb_t on_reset;
-} pwui_storage_t;
-
-/* ── Varargs sentinels ──────────────────────────────────────── */
-
-#define PWUI_END     ((const void*)0)
-#define PWUI_VALUE   ((const void*)1)
-#define PWUI_HELP    ((const void*)2)
-#define PWUI_APPLY   ((const void*)3)
-#define PWUI_ATTRS   ((const void*)4)
-#define PWUI_NULL    ((const void*)5)  /* creates null value — use standalone (not with PWUI_VALUE) */
+    pwui_load_cb_t  on_load;
+    pwui_apply_cb_t on_apply;
+    const char     *help;
+    const char     *attrs;
+} pwui_field_opts_t;
 
 /* ── Lifecycle ──────────────────────────────────────────────── */
 
-esp_err_t pwui_init(AsyncWebServer *server, const pwui_storage_t *storage);
+/** @brief Initialize pwui with a web server and commit callback.
+ *  @param server     Initialized AsyncWebServer (port 80).
+ *  @param on_commit  Called on Save after all on_apply pass. NULL = no persistence.
+ *  @return ESP_OK on success.
+ *  @warning All components and fields MUST be registered BEFORE calling this. */
+esp_err_t pwui_init(AsyncWebServer *server, pwui_commit_cb_t on_commit);
+
+/** @brief Start the async web server. */
 esp_err_t pwui_start(void);
+
+/** @brief Re-load all persisted values from on_load callbacks and push to browser.
+ *  Resets applied values to stored values, discarding unsaved changes. */
+esp_err_t pwui_reset(void);
 
 /* ── Component registration ─────────────────────────────────── */
 
@@ -51,13 +77,15 @@ esp_err_t pwui_end_component(const char *id);
 
 /* ── Field registration ─────────────────────────────────────── */
 
+/** @brief Register a field. opts may be NULL for no callbacks/help/attrs. */
 esp_err_t pwui_add_field(pwui_type_t type, const char *comp_id, const char *key,
-                         const char *label, ...);
+                         const char *label, const pwui_field_opts_t *opts);
 
+/** @brief Register a select or radio field with options. */
 esp_err_t pwui_add_field_opts(pwui_type_t type, const char *comp_id, const char *key,
                               const char *label,
                               const char *options[][2], int option_count,
-                              ...);
+                              const pwui_field_opts_t *opts);
 
 /* ── Runtime value access ───────────────────────────────────── */
 
