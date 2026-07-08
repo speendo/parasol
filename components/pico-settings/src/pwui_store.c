@@ -160,40 +160,28 @@ const char *pwui_store_get_label(pwui_store_t *store, const char *comp_id) {
     return NULL;
 }
 
-esp_err_t pwui_store_populate(pwui_store_t *store, cJSON *data) {
-    if (!store || !data) return ESP_ERR_INVALID_ARG;
-    if (!cJSON_IsObject(data)) return ESP_ERR_INVALID_ARG;
+esp_err_t pwui_store_load_values(pwui_store_t *store) {
+    if (!store) return ESP_ERR_INVALID_ARG;
+    for (int i = 0; i < store->count; i++) {
+        pwui_field_t *f = &store->fields[i];
+        if (!f->on_load) continue;
+        const char *val = f->on_load();
+        pwui_store_set_value(store, f->comp_id, f->key, val);
+    }
+    store->dirty = false;
+    return ESP_OK;
+}
 
-    cJSON *group = data->child;
-    while (group) {
-        if (!cJSON_IsObject(group)) { group = group->next; continue; }
-        cJSON *field_json = group->child;
-        while (field_json) {
-            if (!cJSON_IsArray(field_json) || cJSON_GetArraySize(field_json) < 3) {
-                field_json = field_json->next; continue;
-            }
-            cJSON *opts = cJSON_GetArrayItem(field_json, 2);
-            cJSON *val = NULL;
-            if (cJSON_IsObject(opts)) {
-                val = cJSON_GetObjectItem(opts, "value");
-            }
-            if (val) {
-                const char *val_str = NULL;
-                char *printed = NULL;
-                if (cJSON_IsString(val)) {
-                    val_str = cJSON_GetStringValue(val);
-                } else {
-                    printed = cJSON_PrintUnformatted(val);
-                    val_str = printed;
-                }
-                if (val_str) {
-                    pwui_store_set_value(store, group->string, field_json->string, val_str);
-                }
-                free(printed);
-            }
-            field_json = field_json->next;
+esp_err_t pwui_store_reset_values(pwui_store_t *store) {
+    if (!store) return ESP_ERR_INVALID_ARG;
+    for (int i = 0; i < store->count; i++) {
+        pwui_field_t *f = &store->fields[i];
+        if (!f->on_load) {
+            pwui_store_set_value(store, f->comp_id, f->key, NULL);
+            continue;
         }
-        group = group->next;
+        const char *val = f->on_load();
+        pwui_store_set_value(store, f->comp_id, f->key, val);
     }
     store->dirty = false;
     return ESP_OK;
