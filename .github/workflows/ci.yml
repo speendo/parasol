@@ -30,7 +30,9 @@ jobs:
           . .venv/bin/activate
           pip install -r test_server/requirements.txt -q
       - name: Build and test
-        run: npm test
+        run: |
+          . .venv/bin/activate
+          npm test
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
