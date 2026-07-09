@@ -812,6 +812,7 @@
     if (!configForm || !navList || !statusBar || !footer || !btnSaveApply) return;
     wireButtons();
     connectWS();
+    window.addEventListener('beforeunload', disconnectWS);
   }
 
   /**

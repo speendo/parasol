@@ -7,6 +7,7 @@ test.beforeEach(async ({ request }) => {
 test.describe('Form rendering', () => {
   test('renders accordion sections from settings', async ({ page }) => {
     await page.goto('/')
+    await expect(page.locator('#config-form')).not.toHaveAttribute('aria-busy', 'true')
     await expect(page.locator('details#wifi')).toBeVisible()
     await expect(page.locator('details#gpio')).toBeVisible()
     await expect(page.locator('details#mqtt')).toBeVisible()
