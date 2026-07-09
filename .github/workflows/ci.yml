@@ -30,6 +30,8 @@ jobs:
           . .venv/bin/activate
           pip install -r test_server/requirements.txt -q
       - name: Build and test
+        env:
+          LD_LIBRARY_PATH: test-deps/lib
         run: |
           . .venv/bin/activate
           npm test
