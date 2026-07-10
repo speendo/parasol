@@ -14,14 +14,18 @@ and rename the commit callback.
    embedded contexts (ESP-IDF components, hardware components). "Group" is
    unambiguous: it's a named collection of related fields in the UI.
 
-3. **`begin`/`end` pair was awkward** — `pwui_end_component` was a no-op.
-   `pwui_begin_component` only registered a label and tracked the `is_status`
-   flag for subsequent fields. Moving `is_status` into the field opts struct
-   and requiring `prsl_add_group` before fields simplifies the API and
-   allows fields to be added in any order.
+ 3. **`begin`/`end` pair was awkward** — `pwui_end_component` was a no-op.
+    `pwui_begin_component` only registered a label and tracked the `is_status`
+    flag for subsequent fields. Moving `is_status` into the field opts struct
+    and requiring `prsl_add_group` before fields simplifies the API and
+    allows fields to be added in any order.
 
-4. **`commit_cb` was vague** — `prsl_save_cb_t` / `on_save` directly maps
-   to the "Save" button and the act of persisting settings.
+ 4. **`commit_cb` was vague** — `prsl_save_cb_t` / `on_save` directly maps
+    to the "Save" button and the act of persisting settings.
+
+ 5. **Dirty tracking was opaque** — the library blindly set `_dirty=true` on
+    any value change and `_dirty=false` after Save. No way for firmware to
+    check dirty state, and Save assumed success without verifying against NVS.
 
 ## API Renames
 
@@ -67,6 +71,12 @@ typedef esp_err_t (*prsl_apply_cb_t)(const char *group_id, const char *key,
                                       const char *value);
 
 typedef void (*prsl_save_cb_t)(const char *pairs[][2], int count);
+
+/** @brief Developer hook: compare current value against persisted storage.
+ *  @return true if current_value differs from NVS/EEPROM (dirty),
+ *          false if they match (clean). */
+typedef bool (*prsl_is_dirty_cb_t)(const char *group_id, const char *key,
+                                    const char *current_value);
 
 typedef struct {
     bool            is_status;  /* false by default via designated init */
@@ -128,6 +138,41 @@ esp_err_t prsl_broadcast_status(void);
 
 Paths remain `"group_id.key"`, e.g. `"wifi.ssid"`.
 
+### Dirty Check
+
+```c
+void prsl_set_dirty_check(prsl_is_dirty_cb_t is_dirty);
+bool prsl_is_dirty(void);
+```
+
+The dirty check hook replaces blind `_dirty` toggling with developer-controlled
+comparison against persisted storage. Register before `prsl_init`. NULL = any
+change is dirty (legacy behavior).
+
+**When the hook fires:**
+
+| Trigger | Behavior |
+|---|---|
+| WS apply / `prsl_set` | Call hook for changed field. `true` → set dirty |
+| After Save | Call hook for **all** fields. Any `true` → `_dirty` stays true |
+| `prsl_is_dirty()` | Returns cached state, updated by events above |
+
+**Example hook:**
+```c
+static bool check_dirty(const char *group_id, const char *key,
+                         const char *current_value) {
+    nvs_handle_t h;
+    if (nvs_open("parasol", NVS_READONLY, &h) != ESP_OK) return true;
+    char saved[64]; size_t len = sizeof(saved);
+    char path[128];
+    snprintf(path, sizeof(path), "%s.%s", group_id, key);
+    bool differs = (nvs_get_str(h, path, saved, &len) != ESP_OK ||
+                    strcmp(saved, current_value ? current_value : ""));
+    nvs_close(h);
+    return differs;
+}
+```
+
 ### Example
 
 ```c
@@ -135,6 +180,9 @@ Paths remain `"group_id.key"`, e.g. `"wifi.ssid"`.
 
 void app_main(void) {
     AsyncWebServer server(80);
+
+    // Dirty check: compare against NVS
+    prsl_set_dirty_check(check_dirty);
 
     // Declare groups
     prsl_add_group("wifi", "Wi-Fi Setup");
@@ -216,5 +264,7 @@ and naming refactor.
 This is a **major version bump** — all public API names change:
 - `pwui_init` → `prsl_init`
 - `pwui_begin_component` / `pwui_end_component` → removed
+- `pwui_commit_cb_t` / `on_commit` → `prsl_save_cb_t` / `on_save`
 - All type names, callback types, enum values
 - All `#include` paths
+- `prsl_set_dirty_check` and `prsl_is_dirty_cb_t` are new additions
