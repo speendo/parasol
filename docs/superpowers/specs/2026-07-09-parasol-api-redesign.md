@@ -44,6 +44,10 @@ configuration (title, logo, favicon).
 | `pwui_commit_cb_t` | `prsl_save_cb_t` |
 | `on_commit` | `on_save` |
 | `pwui_comp_meta_t` | `prsl_group_meta_t` |
+| `pwui_load_cb_t` | `prsl_get_cb_t` |
+| `on_load` | `on_get` |
+| `pwui_apply_cb_t` | `prsl_set_cb_t` |
+| `on_apply` | `on_set` |
 
 ## File Renames
 
@@ -70,9 +74,9 @@ typedef enum {
     PRSL_RANGE, PRSL_TEXTAREA, PRSL_RADIO, PRSL_SELECT
 } prsl_type_t;
 
-typedef const char *(*prsl_load_cb_t)(void);
+typedef const char *(*prsl_get_cb_t)(void);
 
-typedef esp_err_t (*prsl_apply_cb_t)(const char *group_id, const char *key,
+typedef esp_err_t (*prsl_set_cb_t)(const char *group_id, const char *key,
                                       const char *value);
 
 typedef void (*prsl_save_cb_t)(const char *pairs[][2], int count);
@@ -84,11 +88,11 @@ typedef bool (*prsl_is_dirty_cb_t)(const char *group_id, const char *key,
                                     const char *current_value);
 
 typedef struct {
-    bool            is_status;  /* false by default via designated init */
-    prsl_load_cb_t  on_load;
-    prsl_apply_cb_t on_apply;
-    const char     *help;       /* NULL = no tooltip */
-    const char     *attrs;      /* NULL = no HTML validation */
+    bool           is_status;  /* false by default via designated init */
+    prsl_get_cb_t  on_get;
+    prsl_set_cb_t  on_set;
+    const char    *help;       /* NULL = no tooltip */
+    const char    *attrs;      /* NULL = no HTML validation */
 } prsl_field_opts_t;
 ```
 
@@ -237,13 +241,13 @@ void app_main(void) {
 
     // Fields in any order
     prsl_add_field(PRSL_TEXT, "wifi", "ssid", "SSID",
-        &(prsl_field_opts_t){ .on_load = load_ssid, .on_apply = on_ssid_change });
+        &(prsl_field_opts_t){ .on_get = load_ssid, .on_set = on_ssid_change });
 
     prsl_add_field(PRSL_NUMBER, "gpio", "pin", "Pin Number",
-        &(prsl_field_opts_t){ .on_load = load_pin, .help = "0-39" });
+        &(prsl_field_opts_t){ .on_get = load_pin, .help = "0-39" });
 
     prsl_add_field(PRSL_PASSWORD, "wifi", "pass", "Password",
-        &(prsl_field_opts_t){ .on_load = load_pass });
+        &(prsl_field_opts_t){ .on_get = load_pass });
 
     // Status field
     prsl_add_field(PRSL_TEXT, "system", "uptime", "Uptime",
@@ -315,6 +319,8 @@ This is a **major version bump** — all public API names change:
 - `pwui_init` → `prsl_init`
 - `pwui_begin_component` / `pwui_end_component` → removed
 - `pwui_commit_cb_t` / `on_commit` → `prsl_save_cb_t` / `on_save`
+- `pwui_load_cb_t` / `on_load` → `prsl_get_cb_t` / `on_get`
+- `pwui_apply_cb_t` / `on_apply` → `prsl_set_cb_t` / `on_set`
 - All type names, callback types, enum values
 - All `#include` paths
 - `prsl_set_dirty_check` and `prsl_is_dirty_cb_t` are new additions
