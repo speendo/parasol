@@ -2,7 +2,8 @@
 
 Rename the project from "pico-settings" (pwui) to "PARASOL" (prsl), rename
 "components" to "groups" throughout the API, simplify group registration,
-and rename the commit callback.
+rename the commit callback, add dirty-check hooks, and add build-time page
+configuration (title, logo, favicon).
 
 ## Motivation
 
@@ -24,8 +25,12 @@ and rename the commit callback.
     to the "Save" button and the act of persisting settings.
 
  5. **Dirty tracking was opaque** — the library blindly set `_dirty=true` on
-    any value change and `_dirty=false` after Save. No way for firmware to
-    check dirty state, and Save assumed success without verifying against NVS.
+     any value change and `_dirty=false` after Save. No way for firmware to
+     check dirty state, and Save assumed success without verifying against NVS.
+
+ 6. **Page metadata was hardcoded** — title (`"ESP32 Config"`), logo path, and
+    favicon path were baked into `index.html`. Build-time JSON config lets
+    developers set these without editing HTML.
 
 ## API Renames
 
@@ -173,6 +178,47 @@ static bool check_dirty(const char *group_id, const char *key,
 }
 ```
 
+### Page Configuration
+
+A build-time JSON config file defines the page title, logo, and favicon.
+The CMake build reads this file, replaces template placeholders in
+`index.html`, gzips it, and embeds it into the firmware.
+
+**`parasol_config.json`** (in project root, next to `platformio.ini`):
+```json
+{
+  "title": "My Thermostat",
+  "logo": "/logo.png",
+  "favicon": "/favicon.ico"
+}
+```
+
+All fields are optional — defaults are `"PARASOL"`, `"/logo.png"`, `"/favicon.ico"`.
+
+**`index.html` template placeholders:**
+```html
+<title>{{TITLE}}</title>
+<link rel="icon" href="{{FAVICON}}">
+...
+<li><img id="nav-logo" src="{{LOGO}}" alt="Logo"
+         style="height:2rem;vertical-align:middle;margin-right:0.5rem"
+         onerror="this.style.display='none'"><h1>{{TITLE}}</h1></li>
+```
+
+The logo image has an `onerror` handler — if `/logo.png` doesn't exist on
+the ESP32 flash, the image is hidden. The favicon falls back to the
+browser default on 404.
+
+**CMake build** (`cmake/generate_assets.cmake`) reads the JSON with
+`file(READ "${CONFIG_FILE}" ...)` and `string(JSON ... GET ... title)`
+for each field, then `string(REPLACE "{{TITLE}}" ...)` etc. into the HTML
+before gzipping. If `parasol_config.json` doesn't exist or a field is
+missing, the default value is used.
+
+This is a **build-time** configuration — no runtime C API. The developer
+places `logo.png` and `favicon.ico` on the ESP32 flash at the configured
+paths.
+
 ### Example
 
 ```c
@@ -227,8 +273,11 @@ void app_main(void) {
 
 ### Build
 - `components/parasol/CMakeLists.txt`
+- `components/parasol/cmake/generate_assets.cmake`
 - `components/parasol/library.json`
 - `components/parasol/scripts/generate_assets.py`
+- `parasol_config.json` (new — example template)
+- `index.html` (replace hardcoded title/favicon/logo with template placeholders)
 
 ### Tests
 - `components/parasol/test/test_prsl_store.c`
@@ -248,7 +297,7 @@ void app_main(void) {
   "pico-settings" → "parasol", "pwui" → "prsl"
 
 ### Not changing
-- `app.js` / `index.html` — already use "groups", zero "pwui" references
+- `app.js` — already uses "groups", zero "pwui" references
 - JS e2e tests — already clean
 - `dependencies/cJSON/` — third-party
 - `docs/superpowers/plans/` — historical implementation plans, not current docs
@@ -256,8 +305,9 @@ void app_main(void) {
 ## Wire Protocol
 
 No changes to the JSON format or WebSocket protocol. Group IDs still map to
-top-level JSON keys. The wire format is unchanged — this is purely a C API
-and naming refactor.
+top-level JSON keys. Page configuration (title, logo, favicon) is build-time
+only and does not affect the wire protocol. This is purely a C API and naming
+refactor.
 
 ## Breaking Changes
 
