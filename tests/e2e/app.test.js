@@ -93,14 +93,11 @@ test.describe('Save & Apply button', () => {
 
   test('Save stays visible after multiple radio changes', async ({ page }) => {
     await page.goto('/')
-    await page.waitForTimeout(500)
-    // Fill required wifi fields so the form stays valid
         await page.locator('[name="wifi.ssid"]').fill('MyNet')
-    await page.keyboard.press('Tab')
-    await page.keyboard.type('secret')
-    await page.keyboard.press('Tab')
-    // Wait for WS echoes: button becomes visible when dirty=true and form valid
-    await expect(page.locator('#btn-save-apply')).toBeVisible({ timeout: 10000 })
+    await page.locator('[name="wifi.password"]').fill('secret')
+    await page.locator('[name="wifi.ssid"]').focus()
+    await page.waitForSelector('#config-form:not([aria-busy])', { timeout: 5000 })
+    await expect(page.locator('#btn-save-apply')).toBeVisible({ timeout: 5000 })
     await page.locator('details#gpio summary').click()
     await page.locator('#gpio\\.pull\\.up').check()
     await expect(page.locator('#btn-save-apply')).toBeVisible({ timeout: 5000 })
@@ -110,17 +107,17 @@ test.describe('Save & Apply button', () => {
 
   test('Save appears after toggling switch', async ({ page }) => {
     await page.goto('/')
-    await page.waitForTimeout(500)
-    // Fill required wifi fields so the form stays valid
         await page.locator('[name="wifi.ssid"]').fill('MyNet')
-    await page.keyboard.press('Tab')
-    await page.keyboard.type('secret')
-    await page.keyboard.press('Tab')
-    // Wait for WS echoes: button becomes visible when dirty=true and form valid
-    await expect(page.locator('#btn-save-apply')).toBeVisible({ timeout: 10000 })
+    await page.locator('[name="wifi.password"]').fill('secret')
+    await page.locator('[name="wifi.ssid"]').focus()
+    await page.waitForSelector('#config-form:not([aria-busy])', { timeout: 5000 })
+    await expect(page.locator('#btn-save-apply')).toBeVisible({ timeout: 5000 })
     await page.locator('details#gpio summary').click()
     await expect(page.locator('[name="gpio.enabled"]')).toBeChecked()
     await page.locator('[name="gpio.enabled"]').uncheck()
+    await page.waitForSelector('#config-form:not([aria-busy])', { timeout: 5000 })
+    await expect(page.locator('#btn-save-apply')).toBeVisible({ timeout: 5000 })
+    await page.locator('[name="gpio.enabled"]').check()
     await expect(page.locator('#btn-save-apply')).toBeVisible({ timeout: 5000 })
   })
 })
@@ -165,14 +162,13 @@ test.describe('WebSocket notifications', () => {
 
   test('Keep button preserves local value', async ({ page }) => {
     await page.goto('/')
-    await page.waitForTimeout(500)
         await page.locator('[name="wifi.ssid"]').fill('LocalVal')
     await page.locator('[name="wifi.password"]').focus()
-    await page.waitForTimeout(500)
+    await page.waitForSelector('#config-form:not([aria-busy])', { timeout: 5000 })
     await page.request.post('/api/settings/external-change', {
       data: { wifi: { ssid: ['text', 'SSID', { value: 'ExtVal' }] } },
     })
-    await page.waitForTimeout(500)
+    await page.waitForSelector('#server-changed:not([hidden])', { timeout: 5000 })
     await page.locator('#notif-keep').click()
     await expect(page.locator('[name="wifi.ssid"]')).toHaveValue('LocalVal')
   })
