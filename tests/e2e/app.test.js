@@ -376,9 +376,11 @@ test.describe('form validation UI', () => {
     var input = page.locator('[name="mqtt.client_id"]')
     await input.fill('ab')
     await input.blur()
+    await page.waitForSelector('#config-form:not([aria-busy])', { timeout: 5000 })
     await expect(page.locator('#btn-save-apply')).toBeHidden()
     await input.fill('valid-device')
     await input.blur()
+    await page.waitForSelector('#config-form:not([aria-busy])', { timeout: 5000 })
     await expect(page.locator('#btn-save-apply')).toBeVisible({ timeout: 5000 })
   })
 
