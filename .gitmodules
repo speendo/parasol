@@ -1,3 +1,3 @@
 [submodule "components/pico-settings/dependencies/cJSON"]
-	path = components/pico-settings/dependencies/cJSON
+	path = components/parasol/dependencies/cJSON
 	url = https://github.com/DaveGamble/cJSON.git
