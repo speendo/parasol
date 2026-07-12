@@ -1,9 +1,19 @@
-#include "pwui_json.h"
+#include "prsl_json.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-char *pwui_json_fix_attrs_quotes(const char *attrs_str) {
+const char *prsl_json_value_str(cJSON *val) {
+    static char buf[64];
+    if (!val) return NULL;
+    if (cJSON_IsString(val)) return val->valuestring;
+    if (cJSON_IsNumber(val)) { snprintf(buf, sizeof(buf), "%g", cJSON_GetNumberValue(val)); return buf; }
+    if (cJSON_IsTrue(val)) return "true";
+    if (cJSON_IsFalse(val)) return "false";
+    return NULL;
+}
+
+char *prsl_json_fix_attrs_quotes(const char *attrs_str) {
     if (!attrs_str || attrs_str[0] == '\0') return strdup("{}");
     size_t len = strlen(attrs_str);
     char *fixed = malloc(len + 1);
@@ -15,40 +25,43 @@ char *pwui_json_fix_attrs_quotes(const char *attrs_str) {
     return fixed;
 }
 
-static cJSON *build_group(pwui_store_t *store, bool is_status) {
+static cJSON *build_group(prsl_store_t *store, bool is_status) {
     cJSON *root = cJSON_CreateObject();
 
-    const char *current_comp_id = NULL;
+    const char *current_group_id = NULL;
     cJSON *group_obj = NULL;
 
     for (int i = 0; i < store->count; i++) {
-        pwui_field_t *f = pwui_store_field_at(store, i);
+        prsl_field_t *f = prsl_store_field_at(store, i);
         if (f->is_status != is_status) continue;
 
-        if (!current_comp_id || strcmp(current_comp_id, f->comp_id) != 0) {
-            current_comp_id = f->comp_id;
-            group_obj = cJSON_CreateObject();
-            const char *label = pwui_store_get_label(store, f->comp_id);
-            if (label) {
-                cJSON_AddStringToObject(group_obj, "label", label);
+        if (!current_group_id || strcmp(current_group_id, f->group_id) != 0) {
+            current_group_id = f->group_id;
+            group_obj = cJSON_GetObjectItem(root, f->group_id);
+            if (!group_obj) {
+                group_obj = cJSON_CreateObject();
+                const char *label = prsl_store_get_label(store, f->group_id);
+                if (label) {
+                    cJSON_AddStringToObject(group_obj, "label", label);
+                }
+                cJSON_AddItemToObject(root, f->group_id, group_obj);
             }
-            cJSON_AddItemToObject(root, f->comp_id, group_obj);
         }
 
         cJSON *field_arr = cJSON_CreateArray();
         cJSON_AddItemToArray(field_arr, cJSON_CreateString(
-            f->type == PWUI_TEXT ? "text" :
-            f->type == PWUI_NUMBER ? "number" :
-            f->type == PWUI_PASSWORD ? "password" :
-            f->type == PWUI_EMAIL ? "email" :
-            f->type == PWUI_TEL ? "tel" :
-            f->type == PWUI_URL ? "url" :
-            f->type == PWUI_COLOR ? "color" :
-            f->type == PWUI_SWITCH ? "switch" :
-            f->type == PWUI_CHECKBOX ? "checkbox" :
-            f->type == PWUI_RANGE ? "range" :
-            f->type == PWUI_TEXTAREA ? "textarea" :
-            f->type == PWUI_RADIO ? "radio" : "select"
+            f->type == PRSL_TEXT ? "text" :
+            f->type == PRSL_NUMBER ? "number" :
+            f->type == PRSL_PASSWORD ? "password" :
+            f->type == PRSL_EMAIL ? "email" :
+            f->type == PRSL_TEL ? "tel" :
+            f->type == PRSL_URL ? "url" :
+            f->type == PRSL_COLOR ? "color" :
+            f->type == PRSL_SWITCH ? "switch" :
+            f->type == PRSL_CHECKBOX ? "checkbox" :
+            f->type == PRSL_RANGE ? "range" :
+            f->type == PRSL_TEXTAREA ? "textarea" :
+            f->type == PRSL_RADIO ? "radio" : "select"
         ));
         cJSON_AddItemToArray(field_arr, cJSON_CreateString(f->label));
 
@@ -76,7 +89,7 @@ static cJSON *build_group(pwui_store_t *store, bool is_status) {
         }
 
         if (f->attrs && f->attrs[0]) {
-            char *fixed = pwui_json_fix_attrs_quotes(f->attrs);
+            char *fixed = prsl_json_fix_attrs_quotes(f->attrs);
             cJSON *attrs_json = cJSON_Parse(fixed);
             if (attrs_json && cJSON_IsObject(attrs_json)) {
                 cJSON_AddItemToObject(opts, "attrs", attrs_json);
@@ -93,16 +106,16 @@ static cJSON *build_group(pwui_store_t *store, bool is_status) {
     return root;
 }
 
-cJSON *pwui_json_build_settings(pwui_store_t *store) {
+cJSON *prsl_json_build_settings(prsl_store_t *store) {
     return build_group(store, false);
 }
 
-cJSON *pwui_json_build_status(pwui_store_t *store) {
+cJSON *prsl_json_build_status(prsl_store_t *store) {
     return build_group(store, true);
 }
 
-int pwui_json_parse_apply(pwui_store_t *store, const char *json_str,
-                          char comps[][32], char keys[][32],
+int prsl_json_parse_apply(prsl_store_t *store, const char *json_str,
+                          char groups[][32], char keys[][32],
                           char values[][256], int max_changes) {
     if (!store || !json_str) return 0;
 
@@ -131,9 +144,9 @@ int pwui_json_parse_apply(pwui_store_t *store, const char *json_str,
             if (cJSON_IsObject(opts)) {
                 val = cJSON_GetObjectItem(opts, "value");
             }
-            if (val && pwui_store_find(store, group->string, field->string)) {
-                strncpy(comps[count], group->string, 31);
-                comps[count][31] = '\0';
+            if (val && prsl_store_find(store, group->string, field->string)) {
+                strncpy(groups[count], group->string, 31);
+                groups[count][31] = '\0';
                 strncpy(keys[count], field->string, 31);
                 keys[count][31] = '\0';
                 if (cJSON_IsString(val)) {
