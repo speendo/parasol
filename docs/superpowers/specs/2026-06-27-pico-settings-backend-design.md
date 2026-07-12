@@ -25,8 +25,8 @@ status value updates.
 | HTTP/WS lib | ESP32Async/AsyncTCP ~3.4 + ESPAsyncWebServer ~3.11 |
 | JSON lib | cJSON (vendored) |
 | Static files | Embedded gzipped C byte arrays (not SPIFFS) |
-| Library name | `pico-settings` (may change) |
-| C prefix | `pwui_` |
+| Library name | `parasol` (may change) |
+| C prefix | `prsl_` |
 
 ---
 
@@ -76,35 +76,35 @@ Status-kind fields do not affect `_dirty`.
 ### 4.1 Lifecycle
 
 ```c
-esp_err_t pwui_init(AsyncWebServer *server, const pwui_storage_t *storage);
-esp_err_t pwui_start(void);
+esp_err_t prsl_init(AsyncWebServer *server, const prsl_storage_t *storage);
+esp_err_t prsl_start(void);
 ```
 
-`pwui_init` registers routes with the supplied server, wires up WS, and calls
+`prsl_init` registers routes with the supplied server, wires up WS, and calls
 `storage.on_load()` to populate the AV store. Must be called after all
-`pwui_begin_component` / `pwui_end_component` calls.
+`prsl_begin_component` / `prsl_end_component` calls.
 
 ### 4.2 Storage Callbacks
 
 ```c
-typedef esp_err_t (*pwui_storage_cb_t)(cJSON *data);
+typedef esp_err_t (*prsl_storage_cb_t)(cJSON *data);
 
 typedef struct {
-    pwui_storage_cb_t on_load;   // populate cJSON from storage
-    pwui_storage_cb_t on_save;   // persist cJSON from AV
-    pwui_storage_cb_t on_reset;  // reset to factory defaults (populate cJSON)
-} pwui_storage_t;
+    prsl_storage_cb_t on_load;   // populate cJSON from storage
+    prsl_storage_cb_t on_save;   // persist cJSON from AV
+    prsl_storage_cb_t on_reset;  // reset to factory defaults (populate cJSON)
+} prsl_storage_t;
 ```
 
 Library does NOT own NVS. Developer implements these callbacks. `on_load` is called
-once during `pwui_init`. `on_save` is called on POST `/api/settings/save`.
+once during `prsl_init`. `on_save` is called on POST `/api/settings/save`.
 `on_reset` is called on POST `/api/settings/reset`.
 
 ### 4.3 Component Registration
 
 ```c
-esp_err_t pwui_begin_component(const char *id, const char *label, bool is_status);
-esp_err_t pwui_end_component(const char *id);
+esp_err_t prsl_begin_component(const char *id, const char *label, bool is_status);
+esp_err_t prsl_end_component(const char *id);
 ```
 
 - `is_status=false` → settings component, fields affect `_dirty`
@@ -115,37 +115,37 @@ esp_err_t pwui_end_component(const char *id);
 ### 4.4 Field Registration
 
 ```c
-typedef void (*pwui_apply_cb_t)(const char *comp_id, const char *key, const char *value);
+typedef void (*prsl_apply_cb_t)(const char *group_id, const char *key, const char *value);
 
 // For text, number, password, email, tel, url, color, switch, checkbox, range, textarea
-esp_err_t pwui_add_field(pwui_type_t type, const char *comp_id, const char *key,
+esp_err_t prsl_add_field(prsl_type_t type, const char *group_id, const char *key,
                          const char *label, ...);
 
 // For radio, select (takes options array)
-esp_err_t pwui_add_field_opts(pwui_type_t type, const char *comp_id, const char *key,
+esp_err_t prsl_add_field_opts(prsl_type_t type, const char *group_id, const char *key,
                               const char *label,
                               const char *options[][2], int option_count,
                               ...);
 ```
 
 Varargs keys:
-- `PWUI_VALUE` → `const char *` (default/initial value)
-- `PWUI_HELP` → `const char *` (help text)
-- `PWUI_APPLY` → `pwui_apply_cb_t` (called per-field on WS apply — settings only)
-- `PWUI_ATTRS` → `const char *` (single-quoted JSON, library converts `'` to `"` before parsing)
-- `PWUI_NULL` → `(const char*)0` (null value for checkbox indeterminate, status None)
-- `PWUI_END` → sentinel, ends varargs
+- `PRSL_VALUE` → `const char *` (default/initial value)
+- `PRSL_HELP` → `const char *` (help text)
+- `PRSL_APPLY` → `prsl_apply_cb_t` (called per-field on WS apply — settings only)
+- `PRSL_ATTRS` → `const char *` (single-quoted JSON, library converts `'` to `"` before parsing)
+- `PRSL_NULL` → `(const char*)0` (null value for checkbox indeterminate, status None)
+- `PRSL_END` → sentinel, ends varargs
 
-`pwui_apply_cb_t` fires per field when a WS apply message touches that field.
+`prsl_apply_cb_t` fires per field when a WS apply message touches that field.
 The developer receives the path (e.g. `"wifi.ssid"`) and the new value. Status
-fields never receive apply messages, so `PWUI_APPLY` is only meaningful for
-settings fields. If `PWUI_APPLY` is absent, the value updates in AV with no
+fields never receive apply messages, so `PRSL_APPLY` is only meaningful for
+settings fields. If `PRSL_APPLY` is absent, the value updates in AV with no
 callback.
 
 ### 4.5 Error Handling
 
-All registration functions (`pwui_begin_component`, `pwui_end_component`,
-`pwui_add_field`, `pwui_add_field_opts`) return `esp_err_t`. Errors are
+All registration functions (`prsl_begin_component`, `prsl_end_component`,
+`prsl_add_field`, `prsl_add_field_opts`) return `esp_err_t`. Errors are
 programming mistakes and should be caught during integration.
 
 **Builder errors:**
@@ -185,7 +185,7 @@ programming mistakes and should be caught during integration.
 | Apply to unknown field | Skip that field, process valid ones |
 | OOM during build/push | Send empty `{}`, log error |
 
-**Runtime errors (pwui_set/pwui_get):**
+**Runtime errors (prsl_set/prsl_get):**
 
 | Error | Return |
 |---|---|
@@ -195,23 +195,23 @@ programming mistakes and should be caught during integration.
 **Concurrency:** The AV store is protected by a FreeRTOS mutex. All store
 access (get/set) acquires the mutex internally. WS callbacks (running in
 AsyncWebServer's task) and developer code (running in app_main or another task)
-can safely call `pwui_set`/`pwui_get` concurrently.
+can safely call `prsl_set`/`prsl_get` concurrently.
 
 ### 4.6 Types
 
 ```c
 typedef enum {
-    PWUI_TEXT, PWUI_NUMBER, PWUI_PASSWORD, PWUI_EMAIL, PWUI_TEL,
-    PWUI_URL, PWUI_COLOR, PWUI_SWITCH, PWUI_CHECKBOX,
-    PWUI_RANGE, PWUI_TEXTAREA, PWUI_RADIO, PWUI_SELECT
-} pwui_type_t;
+    PRSL_TEXT, PRSL_NUMBER, PRSL_PASSWORD, PRSL_EMAIL, PRSL_TEL,
+    PRSL_URL, PRSL_COLOR, PRSL_SWITCH, PRSL_CHECKBOX,
+    PRSL_RANGE, PRSL_TEXTAREA, PRSL_RADIO, PRSL_SELECT
+} prsl_type_t;
 ```
 
 ### 4.7 Runtime Value Access
 
 ```c
-esp_err_t pwui_set(const char *path, const char *value);  // "wifi.ssid"
-const char *pwui_get(const char *path);
+esp_err_t prsl_set(const char *path, const char *value);  // "wifi.ssid"
+const char *prsl_get(const char *path);
 ```
 
 - Status values are set by the developer (e.g., in their own timer callback)
@@ -220,28 +220,28 @@ const char *pwui_get(const char *path);
 ### 4.8 Push / Broadcast
 
 ```c
-esp_err_t pwui_push(void);              // broadcast settings to all WS clients
-esp_err_t pwui_broadcast_status(void);  // broadcast status to all WS clients
+esp_err_t prsl_push(void);              // broadcast settings to all WS clients
+esp_err_t prsl_broadcast_status(void);  // broadcast status to all WS clients
 ```
 
 Status broadcast timing is developer-owned. No library timer. Developer sets up
-their own FreeRTOS timer or event loop and calls `pwui_broadcast_status()`.
+their own FreeRTOS timer or event loop and calls `prsl_broadcast_status()`.
 
 ---
 
 ## 5. Internal Module Structure
 
 ```
-components/pico-settings/
+components/parasol/
 ├── CMakeLists.txt
 ├── library.json
 ├── include/
 │   └── pwui.h              ← public API (developer-facing)
 ├── src/
 │   ├── pwui.c              ← init, lifecycle, builder API, route wiring
-│   ├── pwui_store.c        ← AV key-value store, dirty tracking
-│   ├── pwui_ws.c           ← WS protocol (connect handshake, apply, broadcast)
-│   └── pwui_json.c         ← wire format (build settings/status JSON, parse payloads)
+│   ├── prsl_store.c        ← AV key-value store, dirty tracking
+│   ├── prsl_ws.c           ← WS protocol (connect handshake, apply, broadcast)
+│   └── prsl_json.c         ← wire format (build settings/status JSON, parse payloads)
 ├── dependencies/
 │   └── cJSON/              ← vendored
 ├── scripts/
@@ -254,9 +254,9 @@ components/pico-settings/
 
 | Module | Owns |
 |---|---|
-| `pwui_store.c` | In-memory key-value map (flat `"comp.key" → cJSON* value`). Each value stored with its typed cJSON form (bool, number, string, null) determined by the field's `pwui_type_t`. Per-field `is_status` flag. `_dirty` boolean. `get/set/dirty/clear_dirty`. |
-| `pwui_json.c` | `build_settings_json(store)` → cJSON tree (attaches stored cJSON values directly). `build_status_json(store)` → cJSON tree. `parse_apply_payload(cjson_node)` → flat key-value pairs. |
-| `pwui_ws.c` | Manages `AsyncWebSocket` for `/api/events`. On connect: push status then settings. On `apply` message: parse → update store → broadcast settings to all clients. |
+| `prsl_store.c` | In-memory key-value map (flat `"comp.key" → cJSON* value`). Each value stored with its typed cJSON form (bool, number, string, null) determined by the field's `prsl_type_t`. Per-field `is_status` flag. `_dirty` boolean. `get/set/dirty/clear_dirty`. |
+| `prsl_json.c` | `build_settings_json(store)` → cJSON tree (attaches stored cJSON values directly). `build_status_json(store)` → cJSON tree. `parse_apply_payload(cjson_node)` → flat key-value pairs. |
+| `prsl_ws.c` | Manages `AsyncWebSocket` for `/api/events`. On connect: push status then settings. On `apply` message: parse → update store → broadcast settings to all clients. |
 | `pwui.c` | `init()` wires everything. Builder API collects field definitions pre-init. At `init()` time, definitions are frozen into the store schema. HTTP route handlers (thin wrappers). Static file serving from embedded gzip blobs. |
 
 ---
@@ -265,13 +265,13 @@ components/pico-settings/
 
 ### Startup
 ```
-pwui_init(&server, &storage)
+prsl_init(&server, &storage)
   └→ Freeze builder definitions → schema map in store
   └→ storage.on_load() → populate AV store, clear dirty
   └→ Register HTTP routes (save, reset)
   └→ Register WS /api/events
   └→ Register static file routes (/, /app.min.js, /pico.jade.min.css)
-  └→ pwui_start() → server.begin()
+  └→ prsl_start() → server.begin()
 ```
 
 ### HTTP POST /api/settings/save
@@ -304,16 +304,16 @@ browser → WS connect
 browser → {"action":"apply", "data":{"wifi":{"ssid":["text","SSID",{"value":"NewNet"}]}}}
   └→ parse payload → "wifi.ssid" = "NewNet"
   └→ store_set("wifi.ssid", "NewNet"), set _dirty = true
-  └→ call field's pwui_apply_cb_t("wifi.ssid", "NewNet") if registered
+  └→ call field's prsl_apply_cb_t("wifi.ssid", "NewNet") if registered
   └→ broadcast settings to all connected clients
 ```
 
 ### Status updates (developer-driven)
 ```
 developer's timer →
-  pwui_set("system.uptime", "3h 12m")
-  pwui_set("system.signal", "87")
-  pwui_broadcast_status()
+  prsl_set("system.uptime", "3h 12m")
+  prsl_set("system.signal", "87")
+  prsl_broadcast_status()
     └→ push {"type":"status", "data": build_status_json()} to all clients
 ```
 
@@ -344,7 +344,7 @@ pico-website/
 │   └── requirements.txt
 ├── test-deps/
 ├── node_modules/
-└── components/pico-settings/
+└── components/parasol/
     └── ... (see section 5)
 ```
 
@@ -379,37 +379,37 @@ static void on_ssid_apply(const char *path, const char *value) {
 void app_main(void) {
     AsyncWebServer server(80);
 
-    pwui_begin_component("wifi", "Wi-Fi Setup", false);
-    pwui_add_field(PWUI_TEXT, "wifi", "ssid", "SSID",
-                   PWUI_VALUE, "MyNetwork",
-                   PWUI_APPLY, on_ssid_apply,
-                   PWUI_END);
-    pwui_add_field(PWUI_PASSWORD, "wifi", "pass", "Password",
-                   PWUI_HELP, "At least 8 characters", PWUI_END);
-    pwui_add_field_opts(PWUI_SELECT, "wifi", "mode", "Mode",
-                        wifi_modes, 2, PWUI_VALUE, "station", PWUI_END);
-    pwui_end_component("wifi");
+    prsl_begin_component("wifi", "Wi-Fi Setup", false);
+    prsl_add_field(PRSL_TEXT, "wifi", "ssid", "SSID",
+                   PRSL_VALUE, "MyNetwork",
+                   PRSL_APPLY, on_ssid_apply,
+                   PRSL_END);
+    prsl_add_field(PRSL_PASSWORD, "wifi", "pass", "Password",
+                   PRSL_HELP, "At least 8 characters", PRSL_END);
+    prsl_add_field_opts(PRSL_SELECT, "wifi", "mode", "Mode",
+                        wifi_modes, 2, PRSL_VALUE, "station", PRSL_END);
+    prsl_end_component("wifi");
 
-    pwui_begin_component("system", "System", true);
-    pwui_add_field(PWUI_TEXT, "system", "uptime", "Uptime", PWUI_VALUE, "", PWUI_END);
-    pwui_end_component("system");
+    prsl_begin_component("system", "System", true);
+    prsl_add_field(PRSL_TEXT, "system", "uptime", "Uptime", PRSL_VALUE, "", PRSL_END);
+    prsl_end_component("system");
 
-    pwui_storage_t storage = {
+    prsl_storage_t storage = {
         .on_load = load_from_nvs,
         .on_save = save_to_nvs,
         .on_reset = reset_defaults,
     };
 
-    pwui_init(&server, &storage);
-    pwui_start();
+    prsl_init(&server, &storage);
+    prsl_start();
 
     // Developer sets up their own status timer
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(3000));
         char buf[64];
         snprintf(buf, sizeof(buf), "%ds", (int)(esp_timer_get_time() / 1000000));
-        pwui_set("system.uptime", buf);
-        pwui_broadcast_status();
+        prsl_set("system.uptime", buf);
+        prsl_broadcast_status();
     }
 }
 ```
@@ -427,28 +427,28 @@ void app_main(void) {
 | D5 | Builder registration API | ✓ Decided |
 | D6 | Settings + status share builder (is_status flag) | ✓ Decided |
 | D7 | Same component ID in both settings and status | ✓ Decided |
-| D8 | Varargs + PWUI_END for field options | ✓ Decided |
+| D8 | Varargs + PRSL_END for field options | ✓ Decided |
 | D9 | Two add functions (field + field_opts for choices) | ✓ Decided |
 | D10 | Status broadcast timer is developer-owned | ✓ Decided |
 | D11 | GET /api/settings and POST /api/settings/apply removed | ✓ Decided |
-| D12 | Server accepted via pwui_init(server*, ...) | ✓ Decided |
+| D12 | Server accepted via prsl_init(server*, ...) | ✓ Decided |
 | D13 | Static files embedded as gzipped C byte arrays | ✓ Decided |
 | D14 | Client merges settings+status accordions (future) | ✓ Decided |
 | D15 | Client auto-prefixes status component IDs | ✓ Decided |
 | D16 | 4 internal C modules + 1 public header | ✓ Decided |
-| D17 | Library prefix: pwui_ | ✓ Decided |
+| D17 | Library prefix: prsl_ | ✓ Decided |
 | D18 | Registration functions return esp_err_t (strict) | ✓ Decided |
-| D19 | Per-field pwui_apply_cb_t on WS apply (settings only) | ✓ Decided |
+| D19 | Per-field prsl_apply_cb_t on WS apply (settings only) | ✓ Decided |
 | D20 | Error handling: return codes, HTTP response codes, mutex | ✓ Decided |
-| D21 | PWUI_APPLY vararg key for per-field apply callbacks | ✓ Decided |
+| D21 | PRSL_APPLY vararg key for per-field apply callbacks | ✓ Decided |
 | D22 | Store values as cJSON* (typed, no string conversion) | ✓ Decided |
-| D23 | PWUI_ATTRS as single-quoted JSON string ('→" internally) | ✓ Decided |
+| D23 | PRSL_ATTRS as single-quoted JSON string ('→" internally) | ✓ Decided |
 | D24 | Host tests via ESP-IDF Unity on Linux target | ✓ Decided |
 | D25 | Test server cleanup deferred to implementation phase | ✓ Decided |
 | D26 | Assets generation via manual Python script | ✓ Decided |
 | D27 | cJSON included as git submodule | ✓ Decided |
-| D28 | Apply callback signature: (comp_id, key, value) | ✓ Decided |
-| D29 | PWUI_NULL sentinel for null values (type-safe pointer-sized NULL) | ✓ Decided |
+| D28 | Apply callback signature: (group_id, key, value) | ✓ Decided |
+| D29 | PRSL_NULL sentinel for null values (type-safe pointer-sized NULL) | ✓ Decided |
 
 ---
 

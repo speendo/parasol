@@ -15,7 +15,7 @@ lib_deps = https://github.com/<owner>/pico-website.git#v0.1.0
 ### 1. `library.json` — already exists
 
 ```json
-{"name": "pico-settings", "version": "0.1.0", ...}
+{"name": "parasol", "version": "0.1.0", ...}
 ```
 
 PlatformIO reads this for metadata. Already correct.

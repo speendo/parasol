@@ -1,6 +1,6 @@
-# Pico Website C API Reference
+# PRSL C API Reference
 
-Embedded web configuration UI for ESP32. Register components and fields in C,
+Embedded web configuration UI for ESP32. Register groups and fields in C,
 serve static assets from flash, and push live status updates over WebSocket —
 all from firmware.
 
@@ -8,14 +8,15 @@ all from firmware.
 
 - [Quick Start](#quick-start)
 - [Lifecycle](#lifecycle)
-- [Component Registration](#component-registration)
+- [Group Registration](#group-registration)
 - [Field Registration](#field-registration)
-- [Varargs Sentinels](#varargs-sentinels)
+- [Field Options Struct](#field-options-struct)
+- [Attrs Format](#attrs-format)
 - [Field Types](#field-types)
+- [Dirty Check](#dirty-check)
 - [Runtime Value Access](#runtime-value-access)
 - [Push and Broadcast](#push-and-broadcast)
-- [Storage Callbacks](#storage-callbacks)
-- [Apply Callbacks](#apply-callbacks)
+- [Save Callback](#save-callback)
 - [Full Example](#full-example)
 
 ## Quick Start
@@ -23,81 +24,92 @@ all from firmware.
 This is the exact code you need in your `app_main`. Study it first, then refer
 to the sections below for details on each function.
 
-**Critical ordering rule:** Register ALL components and fields BEFORE calling
-`pwui_init`. The store must be fully populated at init time.
+**Critical ordering rule:** Register ALL groups and fields BEFORE calling
+`prsl_init`. The store must be fully populated at init time.
 
 ```c
 /**
  * @file main.c
- * @brief Minimal pwui integration — Wi-Fi config + uptime status.
+ * @brief Minimal prsl integration — Wi-Fi config + uptime status.
  *
  * Steps in order:
- *   1. Register components and fields (structure)
- *   2. Configure storage callbacks (values)
- *   3. pwui_init + pwui_start (lifecycle)
- *   4. Loop: pwui_set + pwui_broadcast_status (runtime)
+ *   1. Register groups and fields (structure)
+ *   2. Set dirty check hook
+ *   3. prsl_init + prsl_start (lifecycle)
+ *   4. Loop: prsl_set + prsl_broadcast_status (runtime)
  */
 
-#include "pwui.h"                /**< The only header you need */
+#include "prsl.h"                /**< The only header you need */
 #include "WiFi.h"
-#include "ESPAsyncWebServer.h"   /**< Required by pwui_init */
+#include "ESPAsyncWebServer.h"   /**< Required by prsl_init */
 #include "nvs_flash.h"
 #include <stdio.h>
 
-/* ── Storage callbacks ──────────────────────────────────────────────
- * These three callbacks handle loading saved values, persisting changes,
- * and restoring factory defaults. Only values are returned — the
- * structure (types, labels, help text) was already registered via
- * pwui_add_field above.
+/* ── Get callbacks ─────────────────────────────────────────────────
+ * These callbacks load saved values from NVS on startup. Each returns
+ * a string value or NULL if not found.
  */
 
-/** @brief Load saved values from NVS on startup.
- *  @param root Empty cJSON object — add your saved values here.
- *  @return ESP_OK on success.
- *
- *  Only populate values (strings, numbers, booleans), not the full wire
- *  format.  The library already knows the field types, labels, and
- *  options from your pwui_add_field calls. */
-static esp_err_t load_from_nvs(cJSON *root) {
-    cJSON *wifi = cJSON_CreateObject();
-    cJSON_AddStringToObject(wifi, "ssid", "MyNetwork");
-    cJSON_AddStringToObject(wifi, "pass", "");
-    cJSON_AddItemToObject(root, "wifi", wifi);
-    return ESP_OK;
+static const char *load_ssid(void) {
+    nvs_handle_t h;
+    static char buf[64];
+    if (nvs_open("parasol", NVS_READONLY, &h) == ESP_OK) {
+        size_t len = sizeof(buf);
+        if (nvs_get_str(h, "wifi.ssid", buf, &len) == ESP_OK) {
+            nvs_close(h);
+            return buf;
+        }
+        nvs_close(h);
+    }
+    return "MyNetwork";
 }
 
-/** @brief Persist current settings to NVS when user clicks Save.
- *  @param root Full settings cJSON — write to NVS/flash here.
- *  @return ESP_OK on success. */
-static esp_err_t save_to_nvs(cJSON *root) {
-    printf("Save called\n");
-    return ESP_OK;
-}
-
-/** @brief Restore factory defaults (called on Reset).
- *  @param root Full settings cJSON — restore defaults here.
- *  @return ESP_OK on success. */
-static esp_err_t reset_defaults(cJSON *root) {
-    printf("Reset called\n");
-    return ESP_OK;
-}
-
-/* ── Apply callback ─────────────────────────────────────────────────
- * An apply callback fires every time a field value changes (via
- * WebSocket apply). Use it to react to live changes without waiting
- * for a Save.
+/* ── Set callback ─────────────────────────────────────────────────
+ * An on_set callback fires every time a field value changes (via
+ * WebSocket apply or Save). Use it to react to live changes or
+ * reject invalid values.
  */
 
-/** @brief React to SSID changes in real time.
- *  @param comp_id  Component ID string, e.g. "wifi"
- *  @param key      Field key string, e.g. "ssid"
- *  @param value    New field value as a string (NULL if cleared)
- *
- *  Called immediately when the browser applies a change via WebSocket.
- *  Good for: reconnecting WiFi, restarting services, validation. */
-static void on_ssid_change(const char *comp_id, const char *key,
-                           const char *value) {
-    printf("%s.%s changed to: %s\n", comp_id, key, value);
+static esp_err_t on_ssid_change(const char *group_id, const char *key,
+                                 const char *value) {
+    printf("%s.%s changed to: %s\n", group_id, key, value);
+    if (value && strlen(value) > 32) return ESP_ERR_INVALID_ARG;
+    return ESP_OK;
+}
+
+/* ── Save callback ─────────────────────────────────────────────────
+ * Called once per Save, after all on_set callbacks have passed.
+ * Receives an array of [path, value] pairs for single-cycle NVS
+ * persistence.
+ */
+
+static void save_to_nvs(const char *pairs[][2], int count) {
+    nvs_handle_t h;
+    if (nvs_open("parasol", NVS_READWRITE, &h) != ESP_OK) return;
+    for (int i = 0; i < count; i++) {
+        nvs_set_str(h, pairs[i][0], pairs[i][1]);
+    }
+    nvs_commit(h);
+    nvs_close(h);
+    printf("Saved %d field(s) to NVS\n", count);
+}
+
+/* ── Dirty check hook ──────────────────────────────────────────────
+ * Optional: compare current value against persisted storage.
+ * If not set, any change marks dirty (legacy behavior).
+ */
+
+static bool check_dirty(const char *group_id, const char *key,
+                         const char *current_value) {
+    nvs_handle_t h;
+    if (nvs_open("parasol", NVS_READONLY, &h) != ESP_OK) return true;
+    char saved[64]; size_t len = sizeof(saved);
+    char path[128];
+    snprintf(path, sizeof(path), "%s.%s", group_id, key);
+    bool differs = (nvs_get_str(h, path, saved, &len) != ESP_OK ||
+                    strcmp(saved, current_value ? current_value : ""));
+    nvs_close(h);
+    return differs;
 }
 
 /* ── Main ─────────────────────────────────────────────────────────── */
@@ -106,48 +118,46 @@ void app_main(void) {
     /* 1. Hardware setup */
     nvs_flash_init();
     WiFi.mode(WIFI_AP);
-    WiFi.softAP("pico-config", NULL);
+    WiFi.softAP("parasol-config", NULL);
     AsyncWebServer server(80);
 
-    /* 2. Register components and fields (BEFORE pwui_init!) */
-    pwui_begin_component("wifi", "Wi-Fi Setup", false);
-    /* false = settings component (editable fields) */
-    pwui_add_field(PWUI_TEXT, "wifi", "ssid", "SSID",
-                   PWUI_VALUE, "MyNetwork",
-                   PWUI_ATTRS, "{\"required\":true,\"maxlength\":32}",
-                   PWUI_HELP, "Network name - 1-32 characters",
-                   PWUI_APPLY, on_ssid_change,
-                   PWUI_END);
-    pwui_add_field(PWUI_PASSWORD, "wifi", "pass", "Password",
-                   PWUI_HELP, "At least 8 characters",
-                   PWUI_END);
-    pwui_end_component("wifi");
+    /* 2. Configure dirty check (optional, call before prsl_init) */
+    prsl_set_dirty_check(check_dirty);
 
-    pwui_begin_component("system", "System Status", true);
-    /* true = status component (read-only, DOM names prefixed st-) */
-    pwui_add_field(PWUI_TEXT, "system", "uptime", "Uptime",
-                   PWUI_VALUE, "",
-                   PWUI_END);
-    pwui_end_component("system");
+    /* 3. Register groups and fields (BEFORE prsl_init!) */
+    prsl_add_group("wifi", "Wi-Fi Setup");
+    prsl_add_group("system", "System Status");
 
-    /* 3. Configure and start */
-    pwui_storage_t storage = {
-        .on_load  = load_from_nvs,
-        .on_save  = save_to_nvs,
-        .on_reset = reset_defaults,
-    };
-    pwui_init(&server, &storage);
-    pwui_start();
+    prsl_add_field(PRSL_TEXT, "wifi", "ssid", "SSID",
+        &(prsl_field_opts_t){
+            .on_get = load_ssid,
+            .on_set = on_ssid_change,
+            .help   = "Network name - 1-32 characters",
+            .attrs  = "{\"required\":true,\"maxlength\":32}",
+        });
 
-    /* 4. Runtime loop — push live status every 3 seconds */
+    prsl_add_field(PRSL_PASSWORD, "wifi", "pass", "Password",
+        &(prsl_field_opts_t){
+            .on_get = load_pass,
+            .help   = "At least 8 characters",
+        });
+
+    prsl_add_field(PRSL_TEXT, "system", "uptime", "Uptime",
+        &(prsl_field_opts_t){ .is_status = true });
+
+    /* 4. Configure and start */
+    prsl_init(&server, save_to_nvs);
+    prsl_start();
+
+    /* 5. Runtime loop — push live status every 3 seconds */
     int seconds = 0;
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(3000));
         seconds += 3;
         char buf[64];
         snprintf(buf, sizeof(buf), "%ds", seconds);
-        pwui_set("system.uptime", buf);
-        pwui_broadcast_status();
+        prsl_set("system.uptime", buf);
+        prsl_broadcast_status();
     }
 }
 ```
@@ -161,30 +171,30 @@ the web server lives for the ESP32's full uptime.
 
 ```c
 /**
- * @brief Initialize pwui with a web server and storage callbacks.
+ * @brief Initialize prsl with a web server and save callback.
  *
  * Wires up HTTP routes (GET /api/settings, POST /api/settings/save)
  * and WebSocket endpoint (/api/events).  Serves static assets from flash.
  *
  * @param server  Pointer to an initialized AsyncWebServer (port 80).
- * @param storage Pointer to pwui_storage_t with load/save/reset callbacks.
+ * @param on_save Callback for single-cycle NVS persistence.
  *                May be NULL if you don't need persistence.
  * @return ESP_OK on success, ESP_ERR_* on failure.
  *
- * @warning All components and fields MUST be registered BEFORE calling
+ * @warning All groups and fields MUST be registered BEFORE calling
  *          this function.  The store snapshot is taken at init time. */
-esp_err_t pwui_init(AsyncWebServer *server, const pwui_storage_t *storage);
+esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save);
 ```
 
 ```c
 /**
  * @brief Start the async web server.
  *
- * Call this once, after pwui_init and all component registration.
+ * Call this once, after prsl_init and all group/field registration.
  * The server runs indefinitely on the calling task's event loop.
  *
  * @return ESP_OK on success. */
-esp_err_t pwui_start(void);
+esp_err_t prsl_start(void);
 ```
 
 **Typical call order in `app_main`:**
@@ -192,152 +202,122 @@ esp_err_t pwui_start(void);
 ```
 nvs_flash_init()                  /* hardware                   */
 WiFi.softAP(...)                  /* network                    */
-pwui_begin_component(...)         /* register components        */
-pwui_add_field(...)               /* register fields            */
-pwui_end_component(...)           /* close component            */
-pwui_init(&server, &storage)      /* wire routes, snapshot store */
-pwui_start()                      /* begin serving              */
+prsl_set_dirty_check(...)         /* optional dirty hook        */
+prsl_add_group(...)               /* register groups            */
+prsl_add_field(...)               /* register fields            */
+prsl_init(&server, on_save)       /* wire routes, snapshot store */
+prsl_start()                      /* begin serving              */
 /* --- enter runtime loop --- */
-pwui_set(...)                     /* update values              */
-pwui_broadcast_status()           /* push to clients            */
+prsl_set(...)                     /* update values              */
+prsl_broadcast_status()           /* push to clients            */
 ```
 
 ---
 
-## Component Registration
+## Group Registration
 
-Components are the top-level sections rendered as `<details>` accordions
-in the browser. Each component has an `id` (used as the JSON key and DOM
-prefix), a display `label`, and an `is_status` flag.
+Groups are the top-level sections rendered as `<details>` accordions
+in the browser. Each group has an `id` (used as the JSON key and DOM
+prefix) and a display `label`.
 
 ```c
 /**
- * @brief Begin a new component (accordion section).
+ * @brief Register a group before adding fields to it.
  *
- * @param id        Unique string ID, e.g. "wifi" or "system".
- *                  Must match the key in your storage callback JSON.
- *                  Must be unique across all components.
+ * @param group_id  Unique string ID, e.g. "wifi" or "system".
+ *                  Must be unique across all groups.
  * @param label     Human-readable display label, e.g. "Wi-Fi Setup".
- * @param is_status true = read-only status section (DOM gets st- prefix).
- *                  false = editable settings section.
+ *                  NULL = auto-derived from group_id (camelCase/snake_case
+ *                  splitting, title-cased).
  * @return ESP_OK on success.
- *
- * @note Status and settings components sharing the same @p id are
- *       merged into a single accordion in the browser.  Status fields
- *       appear first, disabled, with DOM name prefix "st-".  Settings
- *       fields appear after, editable, with unprefixed names. */
-esp_err_t pwui_begin_component(const char *id, const char *label,
-                               bool is_status);
+ */
+esp_err_t prsl_add_group(const char *group_id, const char *label);
 ```
 
-```c
-/**
- * @brief End a component. Must match the most recent pwui_begin_component.
- *
- * @param id Must equal the @p id passed to pwui_begin_component.
- *           Used as an assertion — mismatches return an error.
- * @return ESP_OK on success. */
-esp_err_t pwui_end_component(const char *id);
-```
-
-**Merged status + settings example:**
+**Example:**
 
 ```c
-/* Status section — read-only, DOM names like "st-system.uptime" */
-pwui_begin_component("system", "System Status", true);
-pwui_add_field(PWUI_TEXT, "system", "uptime", "Uptime",
-               PWUI_VALUE, "", PWUI_END);
-pwui_add_field(PWUI_TEXT, "system", "fw_version", "Firmware",
-               PWUI_VALUE, "1.0.0", PWUI_END);
-pwui_end_component("system");
-
-/* Settings section — editable, DOM names like "system.hostname" */
-pwui_begin_component("system", "System Config", false);
-pwui_add_field(PWUI_TEXT, "system", "hostname", "Hostname",
-               PWUI_VALUE, "pico-device", PWUI_END);
-pwui_end_component("system");
-
-/* Rendered as ONE merged accordion "System" with:
- *   - uptime (disabled, name="st-system.uptime")
- *   - fw_version (disabled, name="st-system.fw_version")
- *   - hostname (editable, name="system.hostname") */
+prsl_add_group("wifi", "Wi-Fi Setup");
+prsl_add_group("system", "System Status");
+prsl_add_group("auto_label_group", NULL); /* renders as "Auto Label Group" */
 ```
 
 ---
 
 ## Field Registration
 
-Two functions cover all field types. Use `pwui_add_field` for simple types
-(text, number, checkbox, range, etc.). Use `pwui_add_field_opts` for types
+Two functions cover all field types. Use `prsl_add_field` for simple types
+(text, number, checkbox, range, etc.). Use `prsl_add_field_opts` for types
 that need a list of options (select, radio).
 
 ```c
 /**
- * @brief Register a field with a component.
+ * @brief Register a field. opts may be NULL for no callbacks/help/attrs.
  *
- * @param type    Field type from pwui_type_t enum.
- * @param comp_id Component ID (must match a pwui_begin_component id).
- * @param key     Field key — unique within this component.
- *                Used as the JSON key and DOM name: "<comp_id>.<key>".
- * @param label   Human-readable label for the form field.
- * @param ...     Sentinel-tagged varargs (see table below).
- *               Terminate with PWUI_END.
+ * @param type     Field type from prsl_type_t enum.
+ * @param group_id Group ID (must match a prsl_add_group id).
+ * @param key      Field key — unique within this group.
+ *                 Used as the JSON key and DOM name: "<group_id>.<key>".
+ * @param label    Human-readable label for the form field.
+ * @param opts     Per-field options (callbacks, help, attrs, is_status).
+ *                 May be NULL.
  * @return ESP_OK on success.
  *
- * @note Key must NOT contain dots — the dot separates component from
+ * @note Key must NOT contain dots — the dot separates group from
  *       field in path strings like "wifi.ssid". */
-esp_err_t pwui_add_field(pwui_type_t type, const char *comp_id,
-                         const char *key, const char *label, ...);
+esp_err_t prsl_add_field(prsl_type_t type, const char *group_id, const char *key,
+                         const char *label, const prsl_field_opts_t *opts);
 ```
 
 ```c
 /**
  * @brief Register a select or radio field with options.
  *
- * Same as pwui_add_field but adds an options array for select/radio.
+ * Same as prsl_add_field but adds an options array for select/radio.
  *
- * @param type         Must be PWUI_SELECT or PWUI_RADIO.
- * @param comp_id      Component ID.
+ * @param type         Must be PRSL_SELECT or PRSL_RADIO.
+ * @param group_id     Group ID.
  * @param key          Field key.
  * @param label        Human-readable label.
  * @param options      Array of [value, label] string pairs.
  *                     Must be statically allocated (points to flash).
  * @param option_count Number of entries in @p options.
- * @param ...          Sentinel-tagged varargs (same as pwui_add_field).
- *                    Terminate with PWUI_END.
+ * @param opts         Per-field options (callbacks, help, attrs, is_status).
+ *                     May be NULL.
  * @return ESP_OK on success. */
-esp_err_t pwui_add_field_opts(pwui_type_t type, const char *comp_id,
-                              const char *key, const char *label,
+esp_err_t prsl_add_field_opts(prsl_type_t type, const char *group_id, const char *key,
+                              const char *label,
                               const char *options[][2], int option_count,
-                              ...);
+                              const prsl_field_opts_t *opts);
 ```
 
 **Examples:**
 
 ```c
-/* Text field with all optional parameters */
-pwui_add_field(PWUI_TEXT, "wifi", "ssid", "SSID",
-               PWUI_VALUE, "MyNetwork",
-               PWUI_ATTRS, "{\"required\":true,\"maxlength\":32}",
-               PWUI_HELP, "Network name",
-               PWUI_APPLY, on_ssid_change,
-               PWUI_END);
+/* Text field with on_get, on_set, help, attrs */
+prsl_add_field(PRSL_TEXT, "wifi", "ssid", "SSID",
+    &(prsl_field_opts_t){
+        .on_get = load_ssid,
+        .on_set = on_ssid_change,
+        .help   = "Network name",
+        .attrs  = "{\"required\":true,\"maxlength\":32}",
+    });
 
-/* Minimal field (only required: type, comp_id, key, label) */
-pwui_add_field(PWUI_NUMBER, "gpio", "pin", "Pin Number",
-               PWUI_END);
+/* Minimal field (NULL opts) */
+prsl_add_field(PRSL_NUMBER, "gpio", "pin", "Pin Number", NULL);
 
 /* Range slider with min/max */
-pwui_add_field(PWUI_RANGE, "led", "brightness", "Brightness",
-               PWUI_VALUE, "128",
-               PWUI_ATTRS, "{\"min\":0,\"max\":255}",
-               PWUI_END);
+prsl_add_field(PRSL_RANGE, "led", "brightness", "Brightness",
+    &(prsl_field_opts_t){
+        .help  = "0-255",
+        .attrs = "{\"min\":0,\"max\":255}",
+    });
 
-/* Checkbox with explicit null (indeterminate state) */
-pwui_add_field(PWUI_CHECKBOX, "features", "enable_ai", "Enable AI",
-               PWUI_NULL,
-               PWUI_HELP, "Enable experimental AI features",
-               PWUI_END);
+/* Checkbox with indeterminate state (NULL on_get = indeterminate) */
+prsl_add_field(PRSL_CHECKBOX, "features", "enable_ai", "Enable AI",
+    &(prsl_field_opts_t){
+        .help = "Enable experimental AI features",
+    });
 
 /* Select field with options */
 static const char *mode_opts[][2] = {
@@ -345,85 +325,160 @@ static const char *mode_opts[][2] = {
     {"ap",      "Access Point"},
     {"ap_sta",  "AP + Station"},
 };
-pwui_add_field_opts(PWUI_SELECT, "wifi", "mode", "WiFi Mode",
-                    mode_opts, 3,
-                    PWUI_VALUE, "station",
-                    PWUI_HELP, "Operating mode",
-                    PWUI_APPLY, on_mode_change,
-                    PWUI_END);
+prsl_add_field_opts(PRSL_SELECT, "wifi", "mode", "WiFi Mode",
+    mode_opts, 3,
+    &(prsl_field_opts_t){
+        .on_set = on_mode_change,
+        .help   = "Operating mode",
+    });
 
 /* Radio group */
 static const char *role_opts[][2] = {
     {"master", "Master"},
     {"slave",  "Slave"},
 };
-pwui_add_field_opts(PWUI_RADIO, "cluster", "role", "Role",
-                    role_opts, 2,
-                    PWUI_VALUE, "master",
-                    PWUI_END);
+prsl_add_field_opts(PRSL_RADIO, "cluster", "role", "Role",
+    role_opts, 2,
+    &(prsl_field_opts_t){ .help = "Cluster node role" });
 ```
 
 ---
 
-## Varargs Sentinels
+## Field Options Struct
 
-All optional parameters after `label` use tag-value pairs terminated by
-`PWUI_END`. Pass values as `const char *` or function pointers.
+All optional per-field parameters are passed through `prsl_field_opts_t`:
 
-| Sentinel | Argument type | Description |
+```c
+typedef struct {
+    bool           is_status;  /**< true = read-only status field */
+    prsl_get_cb_t  on_get;     /**< Load persisted value. NULL = type default */
+    prsl_set_cb_t  on_set;     /**< React to value changes. NULL = auto-accept */
+    const char    *help;       /**< Tooltip text. NULL = no tooltip */
+    const char    *attrs;      /**< HTML validation attrs as JSON. NULL = none */
+} prsl_field_opts_t;
+```
+
+| Field | Type | Description |
 |---|---|---|
-| `PWUI_VALUE` | `const char *` | Default/current value. String for all types (numbers, booleans as strings). |
-| `PWUI_HELP` | `const char *` | Helper text shown below the field. |
-| `PWUI_APPLY` | `pwui_apply_cb_t` | Callback fired on every WebSocket apply for this field. Available on both `pwui_add_field` and `pwui_add_field_opts`. |
-| `PWUI_ATTRS` | `const char *` | JSON string of HTML form attributes. Example: `"{\"required\":true,\"min\":1,\"max\":100}"`. Valid keys: `required`, `min`, `max`, `minlength`, `maxlength`, `step`, `placeholder`, `pattern`. |
-| `PWUI_NULL` | (none) | Sets the value to explicit null. Use alone, NOT with `PWUI_VALUE`. For checkbox: creates the indeterminate (tri-state) state. |
-| `PWUI_END` | (none) | **Required.** Terminates the varargs list. Must be the last sentinel. |
+| `is_status` | `bool` | `false` by default. `true` = read-only status field (renders disabled). |
+| `on_get` | `prsl_get_cb_t` | Called once per field at init. Return persisted value string, or NULL for default (checkbox→indeterminate, others→empty). |
+| `on_set` | `prsl_set_cb_t` | Called on every value change (blur/change via WS) and on Save. Return `ESP_OK` to accept, anything else to reject (Save aborts). |
+| `help` | `const char *` | Helper text shown below the field. NULL = no tooltip rendered. |
+| `attrs` | `const char *` | JSON string of HTML form attributes (see Attrs Format below). NULL = no validation attributes. |
 
-**Important:** Sentinels are order-independent except `PWUI_END` must be last.
-Duplicates are allowed — the last one wins.
+---
+
+## Attrs Format
+
+The `attrs` field of `prsl_field_opts_t` is a C string containing JSON with
+HTML validation attributes. It is processed server-side before reaching the
+browser:
+
+```
+C string:   "{'required':true,'maxlength':32}"
+               │
+               ▼  prsl_json_fix_attrs_quotes (single→double quote)
+               │
+JSON:        {"required":true,"maxlength":32}
+               │
+               ▼  sent as `opts.attrs` in wire format
+               │
+Browser:     <input required maxlength="32">
+```
+
+**Why single quotes?** JSON requires double quotes, but C string literals must
+escape them: `"{\"required\":true}"`. Single-quote attrs in C source
+(`"{'required':true}"`) are more readable. `prsl_json_fix_attrs_quotes`
+converts them to valid JSON at serialization time. Using double-quoted JSON
+in C directly (e.g., `"{\"required\":true}"`) works too — no conversion
+happens (no single quotes to replace).
+
+**Supported attributes:** `required`, `min`, `max`, `maxlength`, `minlength`,
+`pattern`, `step`, `placeholder`, `autocomplete`.
 
 ---
 
 ## Field Types
 
-| `pwui_type_t` | HTML rendered | Notes |
+| `prsl_type_t` | HTML rendered | Notes |
 |---|---|---|
-| `PWUI_TEXT` | `<input type="text">` | |
-| `PWUI_NUMBER` | `<input type="number">` | Value is string, server serializes as JSON number |
-| `PWUI_PASSWORD` | `<input type="password">` | Value is masked in browser, transmitted normally |
-| `PWUI_EMAIL` | `<input type="email">` | Browser validates email format |
-| `PWUI_TEL` | `<input type="tel">` | |
-| `PWUI_URL` | `<input type="url">` | Browser validates URL format |
-| `PWUI_COLOR` | `<input type="color">` | Value is hex string, e.g. `"#ff0000"` |
-| `PWUI_SWITCH` | `<input type="checkbox" role="switch">` | True/false toggle |
-| `PWUI_CHECKBOX` | `<input type="checkbox">` | Three states: `"true"`, `"false"`, `null` (use `PWUI_NULL`) |
-| `PWUI_RANGE` | `<input type="range">` | Use `PWUI_ATTRS` for `min`/`max`/`step` |
-| `PWUI_TEXTAREA` | `<textarea>` | Multi-line text input |
-| `PWUI_RADIO` | Radio group in `<fieldset>` | Use `pwui_add_field_opts` |
-| `PWUI_SELECT` | `<select>` | Use `pwui_add_field_opts` |
+| `PRSL_TEXT` | `<input type="text">` | |
+| `PRSL_NUMBER` | `<input type="number">` | Value is string, server serializes as JSON number |
+| `PRSL_PASSWORD` | `<input type="password">` | Value is masked in browser, transmitted normally |
+| `PRSL_EMAIL` | `<input type="email">` | Browser validates email format |
+| `PRSL_TEL` | `<input type="tel">` | |
+| `PRSL_URL` | `<input type="url">` | Browser validates URL format |
+| `PRSL_COLOR` | `<input type="color">` | Value is hex string, e.g. `"#ff0000"` |
+| `PRSL_SWITCH` | `<input type="checkbox" role="switch">` | True/false toggle |
+| `PRSL_CHECKBOX` | `<input type="checkbox">` | Three states: `"true"`, `"false"`, `null` (indeterminate via NULL on_get) |
+| `PRSL_RANGE` | `<input type="range">` | Use `attrs` for `min`/`max`/`step` |
+| `PRSL_TEXTAREA` | `<textarea>` | Multi-line text input |
+| `PRSL_RADIO` | Radio group in `<fieldset>` | Use `prsl_add_field_opts` |
+| `PRSL_SELECT` | `<select>` | Use `prsl_add_field_opts` |
+
+---
+
+## Dirty Check
+
+Register an optional hook that compares current values against persisted
+storage. This drives the Save button: enabled only when dirty is true.
+
+```c
+/**
+ * @brief Register a dirty check hook. Call before prsl_init.
+ * @param is_dirty NULL = any change is dirty (legacy behavior). */
+void prsl_set_dirty_check(prsl_is_dirty_cb_t is_dirty);
+
+/**
+ * @brief Query whether any unsaved changes exist. */
+bool prsl_is_dirty(void);
+```
+
+The dirty hook signature:
+
+```c
+typedef bool (*prsl_is_dirty_cb_t)(const char *group_id, const char *key,
+                                    const char *current_value);
+```
+
+**Example:**
+
+```c
+static bool check_dirty(const char *group_id, const char *key,
+                         const char *current_value) {
+    nvs_handle_t h;
+    if (nvs_open("parasol", NVS_READONLY, &h) != ESP_OK) return true;
+    char saved[64]; size_t len = sizeof(saved);
+    char path[128];
+    snprintf(path, sizeof(path), "%s.%s", group_id, key);
+    bool differs = (nvs_get_str(h, path, saved, &len) != ESP_OK ||
+                    strcmp(saved, current_value ? current_value : ""));
+    nvs_close(h);
+    return differs;
+}
+
+prsl_set_dirty_check(check_dirty);
+```
 
 ---
 
 ## Runtime Value Access
 
-Read and write field values at runtime by dot-path (`"component_id.field_key"`).
+Read and write field values at runtime by dot-path (`"group_id.field_key"`).
 
 ```c
 /**
  * @brief Set a field's value in the store.
  *
- * Paths are dot-separated: "comp_id.key".  The value is always a string.
- * Setting the value does NOT broadcast to clients — call pwui_push() or
- * pwui_broadcast_status() after.
+ * Paths are dot-separated: "group_id.key".  The value is always a string.
+ * Setting the value does NOT broadcast to clients — call prsl_push() or
+ * prsl_broadcast_status() after.
  *
  * @param path  Dot-path string, e.g. "wifi.ssid".
- * @param value New value as string (ownership transfers to store).
+ * @param value New value as string.
  * @return ESP_OK on success, ESP_ERR_NOT_FOUND if path doesn't match
- *         any registered field.
- *
- * @note Can be called before pwui_init (values are queued) or after
- *       (values are stored immediately). */
-esp_err_t pwui_set(const char *path, const char *value);
+ *         any registered field. */
+esp_err_t prsl_set(const char *path, const char *value);
 ```
 
 ```c
@@ -432,21 +487,21 @@ esp_err_t pwui_set(const char *path, const char *value);
  *
  * @param path Dot-path string, e.g. "system.uptime".
  * @return Pointer to the value string, or NULL if not found.
- *         The returned pointer is valid until the next pwui_set for
+ *         The returned pointer is valid until the next prsl_set for
  *         the same path. Do NOT free it. */
-const char *pwui_get(const char *path);
+const char *prsl_get(const char *path);
 ```
 
 **Example — read-modify-write:**
 
 ```c
-const char *current = pwui_get("led.brightness");
+const char *current = prsl_get("led.brightness");
 int b = atoi(current);
 b = (b + 16) % 256;
 char buf[16];
 snprintf(buf, sizeof(buf), "%d", b);
-pwui_set("led.brightness", buf);
-pwui_push();
+prsl_set("led.brightness", buf);
+prsl_push();
 ```
 
 ---
@@ -462,11 +517,11 @@ Two functions for sending data to connected WebSocket clients.
  * Serializes every registered field (settings + status) and broadcasts
  * the full /api/settings JSON to every open WS connection.
  *
- * Use after batch-updating values with pwui_set.  The browser receives
+ * Use after batch-updating values with prsl_set.  The browser receives
  * a {"type":"settings", ...} message and updates all fields.
  *
  * @return ESP_OK on success. */
-esp_err_t pwui_push(void);
+esp_err_t prsl_push(void);
 ```
 
 ```c
@@ -477,10 +532,10 @@ esp_err_t pwui_push(void);
  * {"type":"status", ...} message.  Settings fields are NOT included.
  *
  * Use in your main loop to push telemetry (uptime, signal, sensors).
- * Much lighter than pwui_push — only status fields go over the wire.
+ * Much lighter than prsl_push — only status fields go over the wire.
  *
  * @return ESP_OK on success. */
-esp_err_t pwui_broadcast_status(void);
+esp_err_t prsl_broadcast_status(void);
 ```
 
 **Pattern for live status updates:**
@@ -492,190 +547,52 @@ while (1) {
     float temp = read_temperature_sensor();
     char buf[32];
     snprintf(buf, sizeof(buf), "%.1f", temp);
-    pwui_set("sensors.temperature", buf);
+    prsl_set("sensors.temperature", buf);
 
-    pwui_broadcast_status();
+    prsl_broadcast_status();
 }
 ```
 
 ---
 
-## Storage Callbacks
+## Save Callback
 
-Registered via `pwui_storage_t` at init time. All three callbacks receive a
-`cJSON *root` object. The library owns the root — add/read from it, don't free it.
+Registered via `prsl_init` at init time. Called once per Save, after all
+`on_set` callbacks have returned `ESP_OK`.
 
 ```c
-/** @brief Storage callback type.
- *  @param data cJSON object — read from it (on_save), write to it (on_load),
- *              or restore defaults into it (on_reset).  Do NOT free this pointer. */
-typedef esp_err_t (*pwui_storage_cb_t)(cJSON *data);
-
-/** @brief Storage callback struct passed to pwui_init. */
-typedef struct {
-    pwui_storage_cb_t on_load;   /**< Called once at startup.  Populate
-                                      cJSON with saved values.  Only values
-                                      needed — structure is already known
-                                      from pwui_add_field calls. */
-    pwui_storage_cb_t on_save;   /**< Called when user clicks Save.  Persist
-                                      the full cJSON to NVS/LittleFS/SPIFFS. */
-    pwui_storage_cb_t on_reset;  /**< Called on factory reset.  Restore
-                                      defaults and persist them. */
-} pwui_storage_t;
+/**
+ * @brief Save callback signature.
+ *
+ * Called once per Save, after all on_set callbacks have passed.
+ * Receive an array of [path, value] pairs for single-cycle NVS
+ * persistence (one open/write/commit).
+ *
+ * @param pairs  Array of [path, value] pairs. pairs[i][0] = "group_id.key",
+ *               pairs[i][1] = "value".
+ * @param count  Number of pairs. */
+typedef void (*prsl_save_cb_t)(const char *pairs[][2], int count);
 ```
 
-### on_load — load saved values
-
-The library calls `on_load` after `pwui_init`. You populate the cJSON with
-**values only** — the library already knows field types, labels, and options
-from your `pwui_add_field` calls.
-
-**Note:** The cJSON keys must match your component IDs and field keys exactly.
-`"wifi"` is the component id, `"ssid"` is the field key.
+**Example — persist to NVS:**
 
 ```c
-/** @brief Load persisted settings from NVS.
- *
- *  Structure (types, labels, help text) is defined in pwui_add_field calls
- *  above.  Here we only supply the saved values.
- *
- *  @param root  Empty cJSON object — add your component objects here.
- *  @return ESP_OK on success, or ESP_ERR_* if NVS read fails. */
-static esp_err_t load_from_nvs(cJSON *root) {
-    nvs_handle_t handle;
-    esp_err_t err = nvs_open("pwui", NVS_READONLY, &handle);
-    if (err != ESP_OK) return err;
+static void save_to_nvs(const char *pairs[][2], int count) {
+    nvs_handle_t h;
+    if (nvs_open("parasol", NVS_READWRITE, &h) != ESP_OK) return;
 
-    cJSON *wifi = cJSON_CreateObject();
-    char ssid[64];  size_t len = sizeof(ssid);
-    if (nvs_get_str(handle, "wifi.ssid", ssid, &len) == ESP_OK)
-        cJSON_AddStringToObject(wifi, "ssid", ssid);
-    else
-        cJSON_AddStringToObject(wifi, "ssid", "");
-
-    char pass[64];  len = sizeof(pass);
-    if (nvs_get_str(handle, "wifi.pass", pass, &len) == ESP_OK)
-        cJSON_AddStringToObject(wifi, "pass", pass);
-    else
-        cJSON_AddStringToObject(wifi, "pass", "");
-
-    cJSON_AddItemToObject(root, "wifi", wifi);
-
-    nvs_close(handle);
-    return ESP_OK;
-}
-```
-
-### on_save — persist to flash
-
-Called when the user clicks the Save button in the browser. Receive the full
-settings cJSON — walk it and write each value to NVS.
-
-```c
-/** @brief Persist all settings to NVS.
- *  @param root  cJSON containing every field's value, keyed by
- *               component ID and field key.
- *  @return ESP_OK on success. */
-static esp_err_t save_to_nvs(cJSON *root) {
-    nvs_handle_t handle;
-    esp_err_t err = nvs_open("pwui", NVS_READWRITE, &handle);
-    if (err != ESP_OK) return err;
-
-    cJSON *comp = NULL;
-    cJSON_ArrayForEach(comp, root) {
-        if (!cJSON_IsObject(comp)) continue;
-        const char *comp_id = comp->string;
-
-        cJSON *field = NULL;
-        cJSON_ArrayForEach(field, comp) {
-            const char *key = field->string;
-            char nvs_key[128];
-            snprintf(nvs_key, sizeof(nvs_key), "%s.%s", comp_id, key);
-            if (cJSON_IsString(field))
-                nvs_set_str(handle, nvs_key, field->valuestring);
-        }
+    for (int i = 0; i < count; i++) {
+        char current[64];
+        size_t len = sizeof(current);
+        if (nvs_get_str(h, pairs[i][0], current, &len) == ESP_OK
+            && strcmp(current, pairs[i][1]) == 0) continue;
+        nvs_set_str(h, pairs[i][0], pairs[i][1]);
     }
 
-    nvs_commit(handle);
-    nvs_close(handle);
-    return ESP_OK;
+    nvs_commit(h);
+    nvs_close(h);
+    printf("Saved %d changed field(s) to NVS\n", count);
 }
-```
-
-### on_reset — factory defaults
-
-```c
-/** @brief Restore factory defaults.
- *  @param root  cJSON to populate with defaults.  Same format as on_load.
- *  @return ESP_OK on success. */
-static esp_err_t reset_defaults(cJSON *root) {
-    cJSON *wifi = cJSON_CreateObject();
-    cJSON_AddStringToObject(wifi, "ssid", "pico-default");
-    cJSON_AddStringToObject(wifi, "pass", "");
-    cJSON_AddItemToObject(root, "wifi", wifi);
-    return ESP_OK;
-}
-```
-
----
-
-## Apply Callbacks
-
-Every field can have an optional apply callback. It fires on every WebSocket
-apply — not just on Save. Use it for live reconfiguration.
-
-```c
-/** @brief Apply callback signature.
- *
- *  Called by the library when a browser applies a field change via
- *  WebSocket.  The callback runs inside the WebSocket event handler
- *  task — keep it fast.  Offload long operations to a queue/task.
- *
- *  @param comp_id  Component ID string, e.g. "wifi"
- *  @param key      Field key string, e.g. "ssid"
- *  @param value    New value as string.  NULL if the field was cleared.
- *                  For checkbox with PWUI_NULL, this will be NULL. */
-typedef void (*pwui_apply_cb_t)(const char *comp_id, const char *key,
-                                const char *value);
-```
-
-**Example — reconnect WiFi on SSID/password change:**
-
-```c
-/** @brief Apply callback: reconnects WiFi when SSID or password changes. */
-static void on_wifi_change(const char *comp_id, const char *key,
-                           const char *value) {
-    if (strcmp(comp_id, "wifi") != 0) return;
-
-    const char *ssid = strcmp(key, "ssid") == 0 ? value : pwui_get("wifi.ssid");
-    const char *pass = strcmp(key, "pass") == 0 ? value : pwui_get("wifi.pass");
-
-    printf("Reconnecting to %s...\n", ssid);
-    WiFi.begin(ssid, pass);
-}
-
-/* Registered on both fields — fires on either change: */
-pwui_add_field(PWUI_TEXT, "wifi", "ssid", "SSID",
-               PWUI_APPLY, on_wifi_change, PWUI_END);
-pwui_add_field(PWUI_PASSWORD, "wifi", "pass", "Password",
-               PWUI_APPLY, on_wifi_change, PWUI_END);
-```
-
-**Example — apply callback on a select field using `pwui_add_field_opts`:**
-
-```c
-static void on_mode_change(const char *comp_id, const char *key,
-                           const char *value) {
-    printf("Mode changed to: %s\n", value);
-}
-
-static const char *mode_opts[][2] = {
-    {"station", "Station"}, {"ap", "Access Point"},
-};
-pwui_add_field_opts(PWUI_SELECT, "wifi", "mode", "Mode",
-                    mode_opts, 2,
-                    PWUI_APPLY, on_mode_change,
-                    PWUI_END);
 ```
 
 ---
@@ -683,7 +600,7 @@ pwui_add_field_opts(PWUI_SELECT, "wifi", "mode", "Mode",
 ## Full Example
 
 The complete, runnable example lives at:
-[`components/pico-settings/examples/basic/main.c`](components/pico-settings/examples/basic/main.c)
+[`components/parasol/examples/basic/main.c`](components/parasol/examples/basic/main.c)
 
 For the WebSocket protocol used between the device and browser, see
 [`WS_PROTOCOL.md`](WS_PROTOCOL.md).

@@ -1,4 +1,4 @@
-# Pico Website
+# PARASOL
 
 Web-based configuration UI for ESP32 devices. Renders live settings forms,
 handles dirty tracking, and syncs changes via WebSocket.
@@ -6,7 +6,7 @@ handles dirty tracking, and syncs changes via WebSocket.
 ## Requirements
 
 - Modern browser (Chrome, Firefox, Safari, Edge)
-- ESP32 running pico-website firmware, **or** the Python test server for development
+- ESP32 running PARASOL firmware, **or** the Python test server for development
 
 ## Quick Start (Browser-side development)
 
@@ -31,7 +31,7 @@ npm run build
 
 | Document | Audience | Content |
 |---|---|---|
-| [`API_REFERENCE.md`](API_REFERENCE.md) | ESP32 firmware developers | C API reference with doxygen examples — component registration, field types, storage callbacks, runtime value access |
+| [`API_REFERENCE.md`](API_REFERENCE.md) | ESP32 firmware developers | C API reference with doxygen examples — group registration, field types, save callbacks, dirty check, runtime value access |
 | [`WS_PROTOCOL.md`](WS_PROTOCOL.md) | Developers debugging WebSocket traffic | Message format reference — status, settings, apply, error payloads, state machine summary |
 | [`docs/superpowers/specs/2026-06-18-unified-settings-design.md`](docs/superpowers/specs/2026-06-18-unified-settings-design.md) | Contributors | Full architecture spec, API contract, JSON wire format, state machine |
 

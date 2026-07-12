@@ -39,7 +39,7 @@ via `pwui_broadcast_status`). Contains read-only telemetry data.
 }
 ```
 
-**Field format:** Each field under a component is a 3-element JSON array:
+**Field format:** Each field under a group is a 3-element JSON array:
 
 ```
 [type_string, label_string, opts_object]
@@ -51,7 +51,7 @@ text). For the full field format reference, see the architecture spec.
 
 **Rendering:** Status fields render as disabled `<input>` elements with DOM
 names prefixed by `st-` (e.g., `name="st-system.uptime"`). The prefix prevents
-name collisions when a status and settings component share the same `id`.
+name collisions when a status and settings group share the same `id`.
 
 ### `type: "settings"`
 
@@ -90,8 +90,8 @@ apply). Contains the full settings state.
 value differs from the stored (NVS) value. Drives the Save button: enabled
 only when `_dirty` is true AND all form fields pass validation.
 
-**`label`:** Optional key within each component object. If present, used as the
-accordion section title. If absent, the component ID is title-cased (e.g.,
+**`label`:** Optional key within each group object. If present, used as the
+accordion section title. If absent, the group ID is title-cased (e.g.,
 `"gpio"` to `"Gpio"`, `"audio_interface"` to `"Audio Interface"`).
 
 ### `type: "error"`
