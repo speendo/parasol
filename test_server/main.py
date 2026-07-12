@@ -3,12 +3,17 @@ import time
 import asyncio
 from pathlib import Path
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
 
 app = FastAPI()
 
 BASE = Path(__file__).resolve().parent.parent
 FIXTURES = BASE / "test-deps" / "fixtures"
+
+# Build-time template values (mirrors parasol_config.json)
+PARASOL_TITLE = "PARASOL"
+PARASOL_LOGO = "/logo.png"
+PARASOL_FAVICON = "/favicon.ico"
 
 # Schema definition — mirrors the Phase 4 settings format
 # Each top-level key is a group. Each group has field definitions:
@@ -307,7 +312,11 @@ async def api_settings_reset():
 
 @app.get("/")
 async def get_root():
-    return FileResponse(str(BASE / "index.html"))
+    html = (BASE / "index.html").read_text()
+    html = html.replace("{{TITLE}}", PARASOL_TITLE)
+    html = html.replace("{{LOGO}}", PARASOL_LOGO)
+    html = html.replace("{{FAVICON}}", PARASOL_FAVICON)
+    return HTMLResponse(html)
 
 
 @app.get("/{name:path}")
