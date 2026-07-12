@@ -1,6 +1,6 @@
 {
     "name": "parasol",
-    "version": "1.0.0",
+    "version": "0.3.0",
     "description": "Pico Async Realtime Application - Socket Operated Library",
     "keywords": "settings, config, websocket, pico-css, parasol",
     "authors": { "name": "parasol" },
