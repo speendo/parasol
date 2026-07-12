@@ -40,7 +40,7 @@ npm run build
 Add to `platformio.ini`:
 
 ```ini
-lib_deps = https://github.com/<owner>/pico-website.git#v0.1.0
+lib_deps = https://github.com/speendo/parasol.git#v0.1.0
 ```
 
 See [`API_REFERENCE.md`](API_REFERENCE.md) for the complete C API.

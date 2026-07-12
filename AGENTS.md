@@ -70,7 +70,7 @@ Playwright config auto-starts uvicorn on port 8765 and stops it when done.
 
 # Version Bumping
 
-When a change merits a new release, bump `components/pico-settings/library.json`
+When a change merits a new release, bump `components/parasol/library.json`
 and tag accordingly:
 
 - **Major (X.0.0):** Breaking changes to wire format, WS protocol, or public API

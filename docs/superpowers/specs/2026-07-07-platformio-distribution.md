@@ -5,7 +5,7 @@
 Downstream dev adds one line to `platformio.ini`:
 
 ```ini
-lib_deps = https://github.com/<owner>/pico-website.git#v0.1.0
+lib_deps = https://github.com/speendo/parasol.git#v0.1.0
 ```
 
 `pio run` pulls the library, builds assets (via CMake), compiles firmware.

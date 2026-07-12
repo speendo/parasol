@@ -1,5 +1,5 @@
 {
-  "name": "pico-website",
+  "name": "parasol",
   "private": true,
   "scripts": {
     "build": "./build.sh",
