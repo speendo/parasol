@@ -16,58 +16,105 @@ extern "C" {
 /* ── Types ─────────────────────────────────────────────────── */
 
 typedef enum {
-    PWUI_TEXT, PWUI_NUMBER, PWUI_PASSWORD, PWUI_EMAIL, PWUI_TEL,
-    PWUI_URL, PWUI_COLOR, PWUI_SWITCH, PWUI_CHECKBOX,
-    PWUI_RANGE, PWUI_TEXTAREA, PWUI_RADIO, PWUI_SELECT
-} pwui_type_t;
+    PRSL_TEXT, PRSL_NUMBER, PRSL_PASSWORD, PRSL_EMAIL, PRSL_TEL,
+    PRSL_URL, PRSL_COLOR, PRSL_SWITCH, PRSL_CHECKBOX,
+    PRSL_RANGE, PRSL_TEXTAREA, PRSL_RADIO, PRSL_SELECT
+} prsl_type_t;
 
-typedef void (*pwui_apply_cb_t)(const char *comp_id, const char *key, const char *value);
-typedef esp_err_t (*pwui_storage_cb_t)(cJSON *data);
+/** @brief Called once per field at prsl_init time.
+ *  @return Persisted value string, or NULL.
+ *          For PRSL_CHECKBOX: NULL = indeterminate (third state).
+ *          For all other types: NULL = start empty. */
+typedef const char *(*prsl_get_cb_t)(void);
 
+/** @brief Called on every value change (blur/change) and on Save.
+ *  @param group_id Group ID, e.g. "wifi".
+ *  @param key      Field key, e.g. "ssid".
+ *  @param value    New value string, or NULL if cleared/indeterminate.
+ *  @return ESP_OK to accept, anything else to reject (Save aborts). */
+typedef esp_err_t (*prsl_set_cb_t)(const char *group_id, const char *key,
+                                    const char *value);
+
+/** @brief Called once per Save, after all on_set callbacks have returned ESP_OK.
+ *  @param pairs  Array of [path, value] pairs. pairs[i][0] = "group_id.key", pairs[i][1] = "value".
+ *  @param count  Number of pairs.
+ *  Use for single-cycle NVS persistence (one open/write/commit). */
+typedef void (*prsl_save_cb_t)(const char *pairs[][2], int count);
+
+/** @brief Developer hook: compare current value against persisted storage.
+ *  @return true if current_value differs from NVS/EEPROM (dirty),
+ *          false if they match (clean). */
+typedef bool (*prsl_is_dirty_cb_t)(const char *group_id, const char *key,
+                                    const char *current_value);
+
+/** @brief Per-field options. All fields are required; pass NULL to opt out.
+ *  @var is_status false by default (via designated initializer). true = read-only status field.
+ *  @var on_get    NULL = type-dependent (checkbox→indeterminate, else empty).
+ *  @var on_set    NULL = auto-accept any value (returns ESP_OK).
+ *  @var help      NULL = no tooltip rendered.
+ *  @var attrs     NULL = no HTML validation attributes. */
 typedef struct {
-    pwui_storage_cb_t on_load;
-    pwui_storage_cb_t on_save;
-    pwui_storage_cb_t on_reset;
-} pwui_storage_t;
+    bool           is_status;
+    prsl_get_cb_t  on_get;
+    prsl_set_cb_t  on_set;
+    const char    *help;
+    const char    *attrs;
+} prsl_field_opts_t;
 
-/* ── Varargs sentinels ──────────────────────────────────────── */
+/* ── Group registration ────────────────────────────────────── */
 
-#define PWUI_END     ((const void*)0)
-#define PWUI_VALUE   ((const void*)1)
-#define PWUI_HELP    ((const void*)2)
-#define PWUI_APPLY   ((const void*)3)
-#define PWUI_ATTRS   ((const void*)4)
-#define PWUI_NULL    ((const void*)5)  /* creates null value — use standalone (not with PWUI_VALUE) */
+/** @brief Register a group before adding fields to it.
+ *  @param group_id Must be unique. Controls JSON key and DOM prefix.
+ *  @param label    NULL = auto-derived from group_id (camelCase/snake_case
+ *                  splitting, title-cased). Non-NULL overrides. */
+esp_err_t prsl_add_group(const char *group_id, const char *label);
+
+/* ── Field registration ────────────────────────────────────── */
+
+/** @brief Register a field. opts may be NULL for no callbacks/help/attrs. */
+esp_err_t prsl_add_field(prsl_type_t type, const char *group_id, const char *key,
+                         const char *label, const prsl_field_opts_t *opts);
+
+/** @brief Register a select or radio field with options. */
+esp_err_t prsl_add_field_opts(prsl_type_t type, const char *group_id, const char *key,
+                              const char *label,
+                              const char *options[][2], int option_count,
+                              const prsl_field_opts_t *opts);
+
+/* ── Dirty check ───────────────────────────────────────────── */
+
+/** @brief Register a dirty check hook. Call before prsl_init.
+ *  @param is_dirty NULL = any change is dirty (legacy behavior). */
+void prsl_set_dirty_check(prsl_is_dirty_cb_t is_dirty);
+
+/** @brief Query whether any unsaved changes exist. */
+bool prsl_is_dirty(void);
 
 /* ── Lifecycle ──────────────────────────────────────────────── */
 
-esp_err_t pwui_init(AsyncWebServer *server, const pwui_storage_t *storage);
-esp_err_t pwui_start(void);
+/** @brief Initialize prsl with a web server and save callback.
+ *  @param server   Initialized AsyncWebServer (port 80).
+ *  @param on_save  Called on Save after all on_set pass. NULL = no persistence.
+ *  @return ESP_OK on success.
+ *  @warning All groups and fields MUST be registered BEFORE calling this. */
+esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save);
 
-/* ── Component registration ─────────────────────────────────── */
+/** @brief Start the async web server. */
+esp_err_t prsl_start(void);
 
-esp_err_t pwui_begin_component(const char *id, const char *label, bool is_status);
-esp_err_t pwui_end_component(const char *id);
+/** @brief Re-load all persisted values from on_get callbacks and push to browser.
+ *  Resets applied values to stored values, discarding unsaved changes. */
+esp_err_t prsl_reset(void);
 
-/* ── Field registration ─────────────────────────────────────── */
+/* ── Runtime value access ──────────────────────────────────── */
 
-esp_err_t pwui_add_field(pwui_type_t type, const char *comp_id, const char *key,
-                         const char *label, ...);
+esp_err_t prsl_set(const char *path, const char *value);
+const char *prsl_get(const char *path);
 
-esp_err_t pwui_add_field_opts(pwui_type_t type, const char *comp_id, const char *key,
-                              const char *label,
-                              const char *options[][2], int option_count,
-                              ...);
+/* ── Push / broadcast ──────────────────────────────────────── */
 
-/* ── Runtime value access ───────────────────────────────────── */
-
-esp_err_t pwui_set(const char *path, const char *value);
-const char *pwui_get(const char *path);
-
-/* ── Push / broadcast ───────────────────────────────────────── */
-
-esp_err_t pwui_push(void);
-esp_err_t pwui_broadcast_status(void);
+esp_err_t prsl_push(void);
+esp_err_t prsl_broadcast_status(void);
 
 #ifdef __cplusplus
 }
