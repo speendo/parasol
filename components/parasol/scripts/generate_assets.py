@@ -25,8 +25,8 @@ def generate():
         compressed = gzip.compress(raw, 9)
         sources.append((filename, compressed, mime))
 
-    with open(os.path.join(OUT_DIR, "pwui_assets.c"), "w") as f:
-        f.write('#include "pwui_assets.h"\n\n')
+    with open(os.path.join(OUT_DIR, "prsl_assets.c"), "w") as f:
+        f.write('#include "prsl_assets.h"\n\n')
         for filename, data, mime in sources:
             varname = filename.replace(".", "_")
             f.write(f"const uint8_t {varname}_gz[] = {{\n")
@@ -36,15 +36,15 @@ def generate():
             f.write(f"}};\n")
             f.write(f"const size_t {varname}_gz_len = {len(data)};\n\n")
 
-        f.write("const pwui_asset_t pwui_assets[] = {\n")
+        f.write("const prsl_asset_t prsl_assets[] = {\n")
         for filename, _, mime in sources:
             varname = filename.replace(".", "_")
             path = "/" + filename if filename != "index.html" else "/"
             f.write(f'    {{"{path}", "{mime}", {varname}_gz, {varname}_gz_len}},\n')
         f.write("};\n")
-        f.write(f"const size_t pwui_assets_count = {len(sources)};\n")
+        f.write(f"const size_t prsl_assets_count = {len(sources)};\n")
 
-    with open(os.path.join(OUT_DIR, "pwui_assets.h"), "w") as f:
+    with open(os.path.join(OUT_DIR, "prsl_assets.h"), "w") as f:
         f.write("""#pragma once
 #include <stddef.h>
 #include <stdint.h>
@@ -54,10 +54,10 @@ typedef struct {
     const char *mime;
     const uint8_t *data;
     size_t len;
-} pwui_asset_t;
+} prsl_asset_t;
 
-extern const pwui_asset_t pwui_assets[];
-extern const size_t pwui_assets_count;
+extern const prsl_asset_t prsl_assets[];
+extern const size_t prsl_assets_count;
 """)
     print(f"Generated {len(sources)} asset files to {OUT_DIR}")
 

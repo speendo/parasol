@@ -1,12 +1,12 @@
 {
-    "name": "pico-settings",
-    "version": "0.1.0",
-    "description": "Reusable configuration UI library for ESP32 devices",
-    "keywords": "settings, config, websocket, pico-css",
-    "authors": { "name": "pico-website" },
+    "name": "parasol",
+    "version": "1.0.0",
+    "description": "Pico Async Realtime Application - Socket Operated Library",
+    "keywords": "settings, config, websocket, pico-css, parasol",
+    "authors": { "name": "parasol" },
     "frameworks": "arduino,espidf",
     "platforms": "espressif32",
-    "headers": ["pwui.h"],
+    "headers": ["prsl.h"],
     "dependencies": {
         "me-no-dev/ESP Async WebServer": "~3.11",
         "DaveGamble/cJSON": "~1.7"
