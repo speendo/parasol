@@ -681,13 +681,16 @@
         renderSection(grp.id, grp.label, grp.fields, false, null);
       }
     }
+    var details = configForm.querySelectorAll('details');
+    for (var di = 0; di < details.length; di++) {
+      details[di].open = true;
+    }
     var fields = configForm.querySelectorAll('input, select, textarea');
     for (var fi = 0; fi < fields.length; fi++) {
       if (fields[fi].name) fields[fi].setAttribute('aria-invalid', fields[fi].checkValidity() ? 'false' : 'true');
     }
-    var details = configForm.querySelectorAll('details');
     for (var di = 0; di < details.length; di++) {
-      if (details[di].querySelector('[aria-invalid="true"]')) details[di].open = true;
+      if (!details[di].querySelector('[aria-invalid="true"]')) details[di].open = false;
     }
   }
 
