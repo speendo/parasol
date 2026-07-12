@@ -1,91 +1,96 @@
-#include "pwui_ws.h"
-#include "pwui_json.h"
+#include "prsl_ws.h"
+#include "prsl_store.h"
+#include "prsl_json.h"
+#include "ESPAsyncWebServer.h"
 #include <string.h>
+#include <stdio.h>
 
-esp_err_t pwui_ws_init(AsyncWebSocket *ws, pwui_store_t *store) {
-    if (!ws || !store) return ESP_ERR_INVALID_ARG;
+static prsl_store_t *g_store = NULL;
 
-    ws->onEvent([store](AsyncWebSocket *server, AsyncWebSocketClient *client,
-                         AwsEventType type, void *arg, uint8_t *data, size_t len) {
-        switch (type) {
-        case WS_EVT_CONNECT: {
-            /* Send status: {"type":"status","data":{...}} */
-            cJSON *status_inner = pwui_json_build_status(store);
-            if (status_inner) {
-                cJSON *status_msg = cJSON_CreateObject();
-                cJSON_AddStringToObject(status_msg, "type", "status");
-                cJSON_AddItemToObject(status_msg, "data", status_inner);
-                char *sstr = cJSON_PrintUnformatted(status_msg);
-                client->text(sstr);
-                free(sstr);
-                cJSON_Delete(status_msg);
-            }
+static void on_event(AsyncWebSocket *server, AsyncWebSocketClient *client,
+                     AwsEventType type, void *arg, uint8_t *data, size_t len) {
+    if (type == WS_EVT_CONNECT) {
+        cJSON *status = cJSON_CreateObject();
+        cJSON_AddStringToObject(status, "type", "status");
+        cJSON_AddItemToObject(status, "data", prsl_json_build_status(g_store));
+        char *s = cJSON_PrintUnformatted(status);
+        cJSON_Delete(status);
+        if (s) { client->text(s); free(s); }
 
-            /* Send settings: {"type":"settings","_dirty":...,"data":{...}} */
-            cJSON *settings_inner = pwui_json_build_settings(store);
-            if (settings_inner) {
-                cJSON *settings_msg = cJSON_CreateObject();
-                cJSON_AddStringToObject(settings_msg, "type", "settings");
-                cJSON_AddBoolToObject(settings_msg, "_dirty", pwui_store_is_dirty(store));
-                cJSON_AddItemToObject(settings_msg, "data", settings_inner);
-                char *sstr = cJSON_PrintUnformatted(settings_msg);
-                client->text(sstr);
-                free(sstr);
-                cJSON_Delete(settings_msg);
-            }
-            break;
-        }
-        case WS_EVT_DATA: {
-            AwsFrameInfo *info = (AwsFrameInfo *)arg;
-            if (info->final && info->opcode == WS_TEXT) {
-                char *msg = (char *)malloc(len + 1);
-                if (!msg) break;
-                memcpy(msg, data, len);
-                msg[len] = '\0';
+        cJSON *settings = cJSON_CreateObject();
+        cJSON_AddStringToObject(settings, "type", "settings");
+        cJSON_AddBoolToObject(settings, "_dirty", prsl_store_is_dirty(g_store));
+        cJSON_AddItemToObject(settings, "data", prsl_json_build_settings(g_store));
+        char *s2 = cJSON_PrintUnformatted(settings);
+        cJSON_Delete(settings);
+        if (s2) { client->text(s2); free(s2); }
+    } else if (type == WS_EVT_DATA) {
+        AwsFrameInfo *info = (AwsFrameInfo *)arg;
+        if (info->final && info->index == 0 && info->len == len
+            && info->opcode == WS_TEXT && len > 0) {
+            cJSON *msg = cJSON_ParseWithLength((const char *)data, len);
+            if (!msg) return;
 
-                cJSON *parsed = cJSON_Parse(msg);
-                if (parsed) {
-                    cJSON *action = cJSON_GetObjectItem(parsed, "action");
-                    if (action && cJSON_IsString(action) &&
-                        strcmp(cJSON_GetStringValue(action), "apply") == 0) {
+            cJSON *action = cJSON_GetObjectItem(msg, "action");
+            if (action && cJSON_IsString(action) && strcmp(action->valuestring, "apply") == 0) {
+                cJSON *body = cJSON_GetObjectItem(msg, "data");
+                if (!body || !cJSON_IsObject(body)) { cJSON_Delete(msg); return; }
 
-                        char comps[16][32], keys[16][32], values[16][256];
-                        int n = pwui_json_parse_apply(store, msg, comps, keys, values, 16);
-
-                        for (int i = 0; i < n; i++) {
-                            pwui_store_set_value(store, comps[i], keys[i], values[i]);
-
-                            pwui_field_t *f = pwui_store_find(store, comps[i], keys[i]);
-                            if (f && f->on_apply) {
-                                f->on_apply(comps[i], keys[i], values[i]);
-                            }
-                        }
-
-                        cJSON *inner = pwui_json_build_settings(store);
-                        if (inner) {
-                            cJSON *msg_out = cJSON_CreateObject();
-                            cJSON_AddStringToObject(msg_out, "type", "settings");
-                            cJSON_AddBoolToObject(msg_out, "_dirty", pwui_store_is_dirty(store));
-                            cJSON_AddItemToObject(msg_out, "data", inner);
-                            char *out_str = cJSON_PrintUnformatted(msg_out);
-                            server->textAll(out_str);
-                            free(out_str);
-                            cJSON_Delete(msg_out);
-                        }
+                bool any_applied = false;
+                cJSON *group = body->child;
+                while (group) {
+                    if (!cJSON_IsObject(group) || group->string[0] == '_') {
+                        group = group->next; continue;
                     }
-                    cJSON_Delete(parsed);
-                }
-                free(msg);
-            }
-            break;
-        }
-        case WS_EVT_DISCONNECT:
-        case WS_EVT_ERROR:
-        case WS_EVT_PING:
-        case WS_EVT_PONG:
-            break;
-        }
-    });
+                    cJSON *field = group->child;
+                    while (field) {
+                        if (!cJSON_IsArray(field) || cJSON_GetArraySize(field) < 3) {
+                            field = field->next; continue;
+                        }
+                        cJSON *opts = cJSON_GetArrayItem(field, 2);
+                        cJSON *val = cJSON_GetObjectItem(opts, "value");
+                        const char *val_str = prsl_json_value_str(val);
 
+                        prsl_field_t *f = prsl_store_find(g_store, group->string, field->string);
+                        if (f && f->on_set) {
+                            esp_err_t ae = f->on_set(group->string, field->string, val_str);
+                            if (ae != ESP_OK) {
+                                char err[128];
+                                snprintf(err, sizeof(err), "{\"type\":\"error\",\"message\":\"on_set rejected %s.%s\"}",
+                                         group->string, field->string);
+                                client->text(err);
+                            } else {
+                                prsl_store_set_value(g_store, group->string, field->string, val_str);
+                                any_applied = true;
+                            }
+                        } else if (f) {
+                            prsl_store_set_value(g_store, group->string, field->string, val_str);
+                            any_applied = true;
+                        }
+                        field = field->next;
+                    }
+                    group = group->next;
+                }
+
+                /* Batch: broadcast once after processing all fields */
+                if (any_applied) {
+                    cJSON *resp = cJSON_CreateObject();
+                    cJSON_AddStringToObject(resp, "type", "settings");
+                    cJSON_AddBoolToObject(resp, "_dirty", prsl_store_is_dirty(g_store));
+                    cJSON_AddItemToObject(resp, "data", prsl_json_build_settings(g_store));
+                    char *out = cJSON_PrintUnformatted(resp);
+                    cJSON_Delete(resp);
+                    if (out) { server->textAll(out); free(out); }
+                }
+            }
+            cJSON_Delete(msg);
+        }
+    }
+}
+
+esp_err_t prsl_ws_init(AsyncWebSocket *ws, prsl_store_t *store) {
+    if (!ws || !store) return ESP_ERR_INVALID_ARG;
+    g_store = store;
+    ws->onEvent(on_event);
     return ESP_OK;
 }
