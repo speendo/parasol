@@ -1,37 +1,37 @@
-#include "pwui_store.h"
+#include "prsl_store.h"
 #include <stdlib.h>
 #include <string.h>
 
-esp_err_t pwui_store_init(pwui_store_t *store) {
+esp_err_t prsl_store_init(prsl_store_t *store) {
     if (!store) return ESP_ERR_INVALID_ARG;
     memset(store, 0, sizeof(*store));
     store->capacity = 16;
-    store->fields = calloc(store->capacity, sizeof(pwui_field_t));
+    store->fields = calloc(store->capacity, sizeof(prsl_field_t));
     if (!store->fields) return ESP_ERR_NO_MEM;
-    store->comp_capacity = 4;
-    store->comps = calloc(store->comp_capacity, sizeof(pwui_comp_meta_t));
-    if (!store->comps) {
+    store->group_capacity = 4;
+    store->groups = calloc(store->group_capacity, sizeof(prsl_group_meta_t));
+    if (!store->groups) {
         free(store->fields);
         return ESP_ERR_NO_MEM;
     }
     return ESP_OK;
 }
 
-void pwui_store_deinit(pwui_store_t *store) {
+void prsl_store_deinit(prsl_store_t *store) {
     if (!store) return;
     for (int i = 0; i < store->count; i++) {
         cJSON_Delete(store->fields[i].value);
     }
     free(store->fields);
-    free(store->comps);
+    free(store->groups);
     memset(store, 0, sizeof(*store));
 }
 
-esp_err_t pwui_store_add_field(pwui_store_t *store, const pwui_field_t *field) {
+esp_err_t prsl_store_add_field(prsl_store_t *store, const prsl_field_t *field) {
     if (!store || !field) return ESP_ERR_INVALID_ARG;
     if (store->count >= store->capacity) {
         int new_cap = store->capacity * 2;
-        pwui_field_t *new_fields = realloc(store->fields, new_cap * sizeof(pwui_field_t));
+        prsl_field_t *new_fields = realloc(store->fields, new_cap * sizeof(prsl_field_t));
         if (!new_fields) return ESP_ERR_NO_MEM;
         store->fields = new_fields;
         store->capacity = new_cap;
@@ -42,10 +42,10 @@ esp_err_t pwui_store_add_field(pwui_store_t *store, const pwui_field_t *field) {
     return ESP_OK;
 }
 
-pwui_field_t *pwui_store_find(pwui_store_t *store, const char *comp_id, const char *key) {
-    if (!store || !comp_id || !key) return NULL;
+prsl_field_t *prsl_store_find(prsl_store_t *store, const char *group_id, const char *key) {
+    if (!store || !group_id || !key) return NULL;
     for (int i = 0; i < store->count; i++) {
-        if (strcmp(store->fields[i].comp_id, comp_id) == 0 &&
+        if (strcmp(store->fields[i].group_id, group_id) == 0 &&
             strcmp(store->fields[i].key, key) == 0) {
             return &store->fields[i];
         }
@@ -53,7 +53,7 @@ pwui_field_t *pwui_store_find(pwui_store_t *store, const char *comp_id, const ch
     return NULL;
 }
 
-int pwui_store_settings_count(pwui_store_t *store) {
+int prsl_store_settings_count(prsl_store_t *store) {
     if (!store) return 0;
     int n = 0;
     for (int i = 0; i < store->count; i++) {
@@ -62,7 +62,7 @@ int pwui_store_settings_count(pwui_store_t *store) {
     return n;
 }
 
-int pwui_store_status_count(pwui_store_t *store) {
+int prsl_store_status_count(prsl_store_t *store) {
     if (!store) return 0;
     int n = 0;
     for (int i = 0; i < store->count; i++) {
@@ -71,23 +71,23 @@ int pwui_store_status_count(pwui_store_t *store) {
     return n;
 }
 
-pwui_field_t *pwui_store_field_at(pwui_store_t *store, int i) {
+prsl_field_t *prsl_store_field_at(prsl_store_t *store, int i) {
     if (!store || i < 0 || i >= store->count) return NULL;
     return &store->fields[i];
 }
 
-static bool is_bool_type(pwui_type_t t) {
-    return t == PWUI_CHECKBOX || t == PWUI_SWITCH;
+static bool is_bool_type(prsl_type_t t) {
+    return t == PRSL_CHECKBOX || t == PRSL_SWITCH;
 }
 
-static bool is_number_type(pwui_type_t t) {
-    return t == PWUI_NUMBER || t == PWUI_RANGE;
+static bool is_number_type(prsl_type_t t) {
+    return t == PRSL_NUMBER || t == PRSL_RANGE;
 }
 
-esp_err_t pwui_store_set_value(pwui_store_t *store, const char *comp_id,
+esp_err_t prsl_store_set_value(prsl_store_t *store, const char *group_id,
                                 const char *key, const char *value_str) {
-    if (!store || !comp_id || !key) return ESP_ERR_INVALID_ARG;
-    pwui_field_t *f = pwui_store_find(store, comp_id, key);
+    if (!store || !group_id || !key) return ESP_ERR_INVALID_ARG;
+    prsl_field_t *f = prsl_store_find(store, group_id, key);
     if (!f) return ESP_ERR_NOT_FOUND;
 
     cJSON_Delete(f->value);
@@ -105,95 +105,123 @@ esp_err_t pwui_store_set_value(pwui_store_t *store, const char *comp_id,
     }
 
     if (!f->is_status) {
-        store->dirty = true;
+        if (store->is_dirty_hook) {
+            char path[PRSL_MAX_PATH];
+            snprintf(path, sizeof(path), "%s.%s", group_id, key);
+            const char *cv = (f->value && cJSON_IsString(f->value))
+                ? cJSON_GetStringValue(f->value) : NULL;
+            if (store->is_dirty_hook(group_id, key, cv)) {
+                store->dirty = true;
+            }
+        } else {
+            store->dirty = true;
+        }
     }
     return ESP_OK;
 }
 
-cJSON *pwui_store_get_value(pwui_store_t *store, const char *comp_id, const char *key) {
-    pwui_field_t *f = pwui_store_find(store, comp_id, key);
+cJSON *prsl_store_get_value(prsl_store_t *store, const char *group_id, const char *key) {
+    prsl_field_t *f = prsl_store_find(store, group_id, key);
     if (!f) return NULL;
     return f->value;
 }
 
-bool pwui_store_is_dirty(pwui_store_t *store) {
+bool prsl_store_is_dirty(prsl_store_t *store) {
     return store ? store->dirty : false;
 }
 
-void pwui_store_set_dirty(pwui_store_t *store, bool d) {
+void prsl_store_set_dirty(prsl_store_t *store, bool d) {
     if (store) store->dirty = d;
 }
 
-void pwui_store_clear_dirty(pwui_store_t *store) {
+void prsl_store_clear_dirty(prsl_store_t *store) {
     if (store) store->dirty = false;
 }
 
-void pwui_store_lock(pwui_store_t *store) { (void)store; }
-void pwui_store_unlock(pwui_store_t *store) { (void)store; }
+void prsl_store_set_dirty_hook(prsl_store_t *store, prsl_is_dirty_cb_t hook) {
+    if (store) store->is_dirty_hook = hook;
+}
 
-esp_err_t pwui_store_add_component(pwui_store_t *store, const char *comp_id, const char *label) {
-    if (!store || !comp_id || !label) return ESP_ERR_INVALID_ARG;
-    for (int i = 0; i < store->comp_count; i++) {
-        if (strcmp(store->comps[i].comp_id, comp_id) == 0) {
-            if (strcmp(store->comps[i].label, label) == 0) return ESP_OK;
+void prsl_store_check_dirty(prsl_store_t *store) {
+    if (!store || !store->is_dirty_hook) return;
+    store->dirty = false;
+    for (int i = 0; i < store->count; i++) {
+        prsl_field_t *f = &store->fields[i];
+        if (f->is_status) continue;
+        const char *cv = (f->value && cJSON_IsString(f->value))
+            ? cJSON_GetStringValue(f->value) : NULL;
+        if (store->is_dirty_hook(f->group_id, f->key, cv)) {
+            store->dirty = true;
+            break;
+        }
+    }
+}
+
+void prsl_store_lock(prsl_store_t *store) { (void)store; }
+void prsl_store_unlock(prsl_store_t *store) { (void)store; }
+
+esp_err_t prsl_store_add_group(prsl_store_t *store, const char *group_id, const char *label) {
+    if (!store || !group_id) return ESP_ERR_INVALID_ARG;
+    for (int i = 0; i < store->group_count; i++) {
+        if (strcmp(store->groups[i].group_id, group_id) == 0) {
+            if (!label && !store->groups[i].label) return ESP_OK;
+            if (label && store->groups[i].label
+                && strcmp(store->groups[i].label, label) == 0) return ESP_OK;
             return ESP_ERR_INVALID_STATE;
         }
     }
-    if (store->comp_count >= store->comp_capacity) {
-        int new_cap = store->comp_capacity * 2;
-        pwui_comp_meta_t *new_comps = realloc(store->comps, new_cap * sizeof(pwui_comp_meta_t));
-        if (!new_comps) return ESP_ERR_NO_MEM;
-        store->comps = new_comps;
-        store->comp_capacity = new_cap;
+    if (store->group_count >= store->group_capacity) {
+        int new_cap = store->group_capacity * 2;
+        prsl_group_meta_t *new_groups = realloc(store->groups, new_cap * sizeof(prsl_group_meta_t));
+        if (!new_groups) return ESP_ERR_NO_MEM;
+        store->groups = new_groups;
+        store->group_capacity = new_cap;
     }
-    store->comps[store->comp_count].comp_id = comp_id;
-    store->comps[store->comp_count].label = label;
-    store->comp_count++;
+    store->groups[store->group_count].group_id = group_id;
+    store->groups[store->group_count].label = label;
+    store->group_count++;
     return ESP_OK;
 }
 
-const char *pwui_store_get_label(pwui_store_t *store, const char *comp_id) {
-    if (!store || !comp_id) return NULL;
-    for (int i = 0; i < store->comp_count; i++) {
-        if (strcmp(store->comps[i].comp_id, comp_id) == 0) return store->comps[i].label;
+bool prsl_store_has_group(prsl_store_t *store, const char *group_id) {
+    if (!store || !group_id) return false;
+    for (int i = 0; i < store->group_count; i++) {
+        if (strcmp(store->groups[i].group_id, group_id) == 0) return true;
+    }
+    return false;
+}
+
+const char *prsl_store_get_label(prsl_store_t *store, const char *group_id) {
+    if (!store || !group_id) return NULL;
+    for (int i = 0; i < store->group_count; i++) {
+        if (strcmp(store->groups[i].group_id, group_id) == 0)
+            return store->groups[i].label;
     }
     return NULL;
 }
 
-esp_err_t pwui_store_populate(pwui_store_t *store, cJSON *data) {
-    if (!store || !data) return ESP_ERR_INVALID_ARG;
-    if (!cJSON_IsObject(data)) return ESP_ERR_INVALID_ARG;
+esp_err_t prsl_store_load_values(prsl_store_t *store) {
+    if (!store) return ESP_ERR_INVALID_ARG;
+    for (int i = 0; i < store->count; i++) {
+        prsl_field_t *f = &store->fields[i];
+        if (!f->on_get) continue;
+        const char *val = f->on_get();
+        prsl_store_set_value(store, f->group_id, f->key, val);
+    }
+    store->dirty = false;
+    return ESP_OK;
+}
 
-    cJSON *group = data->child;
-    while (group) {
-        if (!cJSON_IsObject(group)) { group = group->next; continue; }
-        cJSON *field_json = group->child;
-        while (field_json) {
-            if (!cJSON_IsArray(field_json) || cJSON_GetArraySize(field_json) < 3) {
-                field_json = field_json->next; continue;
-            }
-            cJSON *opts = cJSON_GetArrayItem(field_json, 2);
-            cJSON *val = NULL;
-            if (cJSON_IsObject(opts)) {
-                val = cJSON_GetObjectItem(opts, "value");
-            }
-            if (val) {
-                const char *val_str = NULL;
-                char *printed = NULL;
-                if (cJSON_IsString(val)) {
-                    val_str = cJSON_GetStringValue(val);
-                } else {
-                    printed = cJSON_PrintUnformatted(val);
-                    val_str = printed;
-                }
-                if (val_str) {
-                    pwui_store_set_value(store, group->string, field_json->string, val_str);
-                }
-                free(printed);
-            }
-            field_json = field_json->next;
+esp_err_t prsl_store_reset_values(prsl_store_t *store) {
+    if (!store) return ESP_ERR_INVALID_ARG;
+    for (int i = 0; i < store->count; i++) {
+        prsl_field_t *f = &store->fields[i];
+        if (!f->on_get) {
+            prsl_store_set_value(store, f->group_id, f->key, NULL);
+            continue;
         }
-        group = group->next;
+        const char *val = f->on_get();
+        prsl_store_set_value(store, f->group_id, f->key, val);
     }
     store->dirty = false;
     return ESP_OK;
