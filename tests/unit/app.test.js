@@ -844,14 +844,14 @@ describe('findField', function () {
     expect(field.type).toBe('text')
   })
 
-  it('returns the field for a different component', function () {
+  it('returns the field for a different group', function () {
     var field = window.findField('gpio', 'pin')
     expect(field).not.toBeNull()
     expect(field.key).toBe('pin')
     expect(field.opts.value).toBe(2)
   })
 
-  it('returns null for unknown component ID', function () {
+  it('returns null for unknown group ID', function () {
     expect(window.findField('nonexistent', 'ssid')).toBeNull()
   })
 
@@ -859,7 +859,7 @@ describe('findField', function () {
     expect(window.findField('wifi', 'nonexistent')).toBeNull()
   })
 
-  it('returns null for component with no fields', function () {
+  it('returns null for group with no fields', function () {
     window.__test.groups = [{ id: 'empty' }]
     expect(window.findField('empty', 'x')).toBeNull()
   })
@@ -1239,11 +1239,11 @@ describe('null-guard: syncLS and updateAV', function () {
     window.__test.groups = origComponents;
   })
 
-  it('syncLS does not throw when component has no fields', function () {
+  it('syncLS does not throw when group has no fields', function () {
     expect(function () { window.syncLS() }).not.toThrow()
   })
 
-  it('updateAV does not throw when component has no fields', function () {
+  it('updateAV does not throw when group has no fields', function () {
     expect(function () {
       window.updateAV({ wifi: { ssid: ['text', 'SSID', { value: 'x' }] } })
     }).not.toThrow()
