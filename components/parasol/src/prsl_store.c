@@ -29,6 +29,7 @@ void prsl_store_deinit(prsl_store_t *store) {
 
 esp_err_t prsl_store_add_field(prsl_store_t *store, const prsl_field_t *field) {
     if (!store || !field) return ESP_ERR_INVALID_ARG;
+    if (!prsl_store_has_group(store, field->group_id)) return ESP_ERR_NOT_FOUND;
     if (store->count >= store->capacity) {
         int new_cap = store->capacity * 2;
         prsl_field_t *new_fields = realloc(store->fields, new_cap * sizeof(prsl_field_t));
