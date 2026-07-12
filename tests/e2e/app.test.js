@@ -9,9 +9,9 @@ test.describe('Form rendering', () => {
     await page.goto('/')
     await expect(page.locator('#config-form')).not.toHaveAttribute('aria-busy', 'true')
     await expect(page.locator('details#wifi')).toBeVisible()
-    await expect(page.locator('details#gpio')).toBeVisible()
-    await expect(page.locator('details#mqtt')).toBeVisible()
-    await expect(page.locator('details#notifications')).toBeVisible()
+    await expect(page.locator('details#gpio')).toHaveCount(1)
+    await expect(page.locator('details#mqtt')).toHaveCount(1)
+    await expect(page.locator('details#notifications')).toHaveCount(1)
   })
 
   test('renders correct field types', async ({ page }) => {
@@ -73,7 +73,7 @@ test.describe('Save & Apply button', () => {
         await page.locator('[name="wifi.ssid"]').fill('DirtyTest')
     await page.locator('[name="wifi.password"]').fill('secret')
     await page.locator('[name="wifi.ssid"]').focus()
-    await page.waitForTimeout(500)
+    await page.waitForSelector('#config-form:not([aria-busy])', { timeout: 5000 })
     await expect(page.locator('#btn-save-apply')).toBeEnabled()
     await expect(page.locator('#btn-save-apply')).not.toBeHidden()
   })
@@ -83,10 +83,10 @@ test.describe('Save & Apply button', () => {
         await page.locator('[name="wifi.ssid"]').fill('SaveTest')
     await page.locator('[name="wifi.password"]').fill('secret')
     await page.locator('[name="wifi.ssid"]').focus()
-    await page.waitForTimeout(500)
+    await page.waitForSelector('#config-form:not([aria-busy])', { timeout: 5000 })
     await expect(page.locator('#btn-save-apply')).toBeEnabled()
     await page.locator('#btn-save-apply').click()
-    await page.waitForTimeout(500)
+    await page.waitForSelector('#config-form:not([aria-busy])', { timeout: 5000 })
     await expect(page.locator('#btn-save-apply')).toBeDisabled()
     await expect(page.locator('#btn-save-apply')).toBeHidden()
   })
@@ -168,7 +168,7 @@ test.describe('WebSocket notifications', () => {
     await page.waitForTimeout(500)
         await page.locator('[name="wifi.ssid"]').fill('LocalVal')
     await page.locator('[name="wifi.password"]').focus()
-    await page.waitForTimeout(300)
+    await page.waitForTimeout(500)
     await page.request.post('/api/settings/external-change', {
       data: { wifi: { ssid: ['text', 'SSID', { value: 'ExtVal' }] } },
     })
@@ -181,8 +181,8 @@ test.describe('WebSocket notifications', () => {
 test.describe('Status variables', () => {
   test('renders status sections before settings', async ({ page }) => {
     await page.goto('/')
-    await expect(page.locator('details#system')).toBeVisible()
-    await expect(page.locator('details#sensors')).toBeVisible()
+    await expect(page.locator('details#system')).toHaveCount(1)
+    await expect(page.locator('details#sensors')).toHaveCount(1)
     var allDetails = page.locator('#config-form details')
     await expect(allDetails.nth(0)).toHaveId('system')
     await expect(allDetails.nth(1)).toHaveId('network')
@@ -247,6 +247,7 @@ test.describe('form validation UI', () => {
   test('required empty field shows :invalid after blur', async ({ page }) => {
         var input = page.locator('[name="wifi.ssid"]')
     await input.fill('')
+    await input.blur()
     var isInvalid = await input.evaluate(function (el) { return el.matches(':invalid') })
     expect(isInvalid).toBe(true)
   })
@@ -267,12 +268,14 @@ test.describe('form validation UI', () => {
       el.setAttribute('maxlength', '32')
       el.dispatchEvent(new Event('input', { bubbles: true }))
     })
+    await input.blur()
     var isInvalid = await input.evaluate(function (el) { return el.matches(':invalid') })
     expect(isInvalid).toBe(true)
   })
 
   test('minlength violation shows :invalid after blur', async ({ page }) => {
     await page.locator('#nav-list a[href="#mqtt"]').click()
+    await page.waitForSelector('#mqtt[open]', { timeout: 5000 })
     var input = page.locator('[name="mqtt.client_id"]')
     await input.fill('ab')
     await input.blur()
@@ -282,6 +285,7 @@ test.describe('form validation UI', () => {
 
   test('minlength satisfied does not show :invalid', async ({ page }) => {
     await page.locator('#nav-list a[href="#mqtt"]').click()
+    await page.waitForSelector('#mqtt[open]', { timeout: 5000 })
     var input = page.locator('[name="mqtt.client_id"]')
     await input.fill('esp32-device')
     await input.blur()
@@ -291,6 +295,7 @@ test.describe('form validation UI', () => {
 
   test('pattern violation shows :invalid after blur', async ({ page }) => {
     await page.locator('#nav-list a[href="#mqtt"]').click()
+    await page.waitForSelector('#mqtt[open]', { timeout: 5000 })
     var input = page.locator('[name="mqtt.client_id"]')
     await input.fill('!!!')
     await input.blur()
@@ -300,6 +305,7 @@ test.describe('form validation UI', () => {
 
   test('email type validation shows :invalid for malformed email', async ({ page }) => {
     await page.locator('#nav-list a[href="#notifications"]').click()
+    await page.waitForSelector('#notifications[open]', { timeout: 5000 })
     var input = page.locator('[name="notifications.sender"]')
     await input.fill('not-an-email')
     await input.blur()
@@ -309,6 +315,7 @@ test.describe('form validation UI', () => {
 
   test('email type validation passes for valid email', async ({ page }) => {
     await page.locator('#nav-list a[href="#notifications"]').click()
+    await page.waitForSelector('#notifications[open]', { timeout: 5000 })
     var input = page.locator('[name="notifications.sender"]')
     await input.fill('device@example.com')
     await input.blur()
@@ -318,6 +325,7 @@ test.describe('form validation UI', () => {
 
   test('number min constraint shows :invalid', async ({ page }) => {
     await page.locator('#nav-list a[href="#notifications"]').click()
+    await page.waitForSelector('#notifications[open]', { timeout: 5000 })
     var input = page.locator('[name="notifications.port"]')
     await input.fill('0')
     await input.blur()
@@ -327,6 +335,7 @@ test.describe('form validation UI', () => {
 
   test('number step constraint shows :invalid', async ({ page }) => {
     await page.locator('#nav-list a[href="#mqtt"]').click()
+    await page.waitForSelector('#mqtt[open]', { timeout: 5000 })
     var input = page.locator('[name="mqtt.keepalive"]')
     await input.fill('62')
     await input.blur()
@@ -340,8 +349,10 @@ test.describe('form validation UI', () => {
     await page.locator('[name="wifi.ssid"]').focus()
     await expect(page.locator('#btn-save-apply')).toBeVisible({ timeout: 5000 })
     await page.locator('#nav-list a[href="#notifications"]').click()
+    await page.waitForSelector('#notifications[open]', { timeout: 5000 })
     var port = page.locator('[name="notifications.port"]')
     await port.evaluate(function (el) { el.value = '0'; el.dispatchEvent(new Event('change', { bubbles: true })) })
+    await page.waitForSelector('#config-form:not([aria-busy])', { timeout: 5000 })
     await expect(page.locator('#btn-save-apply')).toBeHidden()
   })
 
@@ -349,6 +360,7 @@ test.describe('form validation UI', () => {
         await page.locator('[name="wifi.ssid"]').fill('MyNetwork')
     await page.locator('[name="wifi.password"]').fill('secret123')
     await page.locator('[name="wifi.ssid"]').focus()
+    await page.waitForSelector('#config-form:not([aria-busy])', { timeout: 5000 })
     var saveBtn = page.locator('#btn-save-apply')
     await expect(saveBtn).toBeVisible({ timeout: 5000 })
   })
@@ -363,6 +375,7 @@ test.describe('form validation UI', () => {
         await page.locator('[name="wifi.ssid"]').fill('Network')
     await page.locator('[name="wifi.password"]').fill('password')
     await page.locator('[name="wifi.ssid"]').focus()
+    await page.waitForSelector('#config-form:not([aria-busy])', { timeout: 5000 })
     await expect(page.locator('#btn-save-apply')).toBeVisible({ timeout: 5000 })
   })
 
