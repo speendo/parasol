@@ -11,7 +11,7 @@ BASE = Path(__file__).resolve().parent.parent
 FIXTURES = BASE / "test-deps" / "fixtures"
 
 # Schema definition — mirrors the Phase 4 settings format
-# Each top-level key is a component group. Each group has field definitions:
+# Each top-level key is a group. Each group has field definitions:
 # {field_key: [type, label, opts]}
 SETTINGS = {
     "wifi": {
@@ -75,23 +75,23 @@ connected: set[WebSocket] = set()
 
 @app.on_event("startup")
 async def startup():
-    for comp_id, fields in SETTINGS.items():
+    for group_id, fields in SETTINGS.items():
         for key, field_def in fields.items():
             if key == "label":
                 continue
             opts = field_def[2]
             val = opts.get("value", "")
-            store_key = comp_id + "." + key
+            store_key = group_id + "." + key
             nvs_store[store_key] = val
             applied_store[store_key] = val
-    for comp_id, fields in STATUS.items():
+    for group_id, fields in STATUS.items():
         for key, field_def in fields.items():
             if key == "label":
                 continue
             opts = field_def[2]
             val = opts.get("value")
             if val is not None:
-                store_key = comp_id + "." + key
+                store_key = group_id + "." + key
                 status_store[store_key] = val
     asyncio.ensure_future(status_broadcaster())
 
@@ -99,18 +99,18 @@ async def startup():
 def build_settings():
     result = {}
     result["_dirty"] = nvs_store != applied_store
-    for comp_id, fields in SETTINGS.items():
+    for group_id, fields in SETTINGS.items():
         group = {}
         for key, field_def in fields.items():
             if key == "label":
                 continue
             ftype, flabel, fopts = field_def
             opts = dict(fopts)
-            store_key = comp_id + "." + key
+            store_key = group_id + "." + key
             if store_key in applied_store:
                 opts["value"] = applied_store[store_key]
             group[key] = [ftype, flabel, opts]
-        result[comp_id] = group
+        result[group_id] = group
     return result
 
 
@@ -123,7 +123,7 @@ def build_status():
     uptime_str = f"{days}d {hours % 24}h {minutes % 60}m {seconds}s"
 
     result = {}
-    for comp_id, fields in STATUS.items():
+    for group_id, fields in STATUS.items():
         group = {}
         for key, field_def in fields.items():
             if key == "label":
@@ -137,10 +137,10 @@ def build_status():
             elif key == "temperature":
                 opts["value"] = str(round(23.5 + (int(elapsed) % 10) * 0.1, 1))
             else:
-                store_key = comp_id + "." + key
+                store_key = group_id + "." + key
                 opts["value"] = status_store.get(store_key, opts.get("value", ""))
             group[key] = [ftype, flabel, opts]
-        result[comp_id] = group
+        result[group_id] = group
     return result
 
 
@@ -167,15 +167,15 @@ async def api_settings_save(request: Request):
         return PlainTextResponse("Invalid JSON", status_code=400)
     if not isinstance(data, dict):
         return PlainTextResponse("Body must be a JSON object", status_code=400)
-    for comp_id, fields in data.items():
-        if comp_id.startswith("_"):
+    for group_id, fields in data.items():
+        if group_id.startswith("_"):
             continue
         for key, field_def in fields.items():
             if not isinstance(field_def, list) or len(field_def) < 3:
                 continue
             opts = field_def[2]
             if "value" in opts:
-                store_key = comp_id + "." + key
+                store_key = group_id + "." + key
                 nvs_store[store_key] = opts["value"]
                 applied_store[store_key] = opts["value"]
     return {}
@@ -256,8 +256,8 @@ async def old_manifest():
     return PlainTextResponse("Not Found", status_code=404)
 
 
-@app.api_route("/components/{name:path}", methods=["GET", "POST"])
-async def old_component(name: str):
+@app.api_route("/groups/{name:path}", methods=["GET", "POST"])
+async def old_group(name: str):
     return PlainTextResponse("Not Found", status_code=404)
 
 
@@ -271,17 +271,35 @@ async def old_apply():
     return PlainTextResponse("Not Found", status_code=404)
 
 
+@app.post("/api/settings/apply")
+async def api_settings_apply(request: Request):
+    try:
+        data = await request.json()
+    except Exception:
+        return PlainTextResponse("Invalid JSON", status_code=400)
+    for group_key, fields in data.items():
+        schema_entry = SETTINGS.get(group_key)
+        if not schema_entry:
+            continue
+        for field_key, field_arr in fields.items():
+            if not isinstance(field_arr, list) or len(field_arr) < 3:
+                continue
+            store_key = group_key + "." + field_key
+            applied_store[store_key] = field_arr[2].get("value", "")
+    return {}
+
+
 @app.api_route("/api/settings/reset", methods=["GET", "POST"])
 async def api_settings_reset():
     nvs_store.clear()
     applied_store.clear()
-    for comp_id, fields in SETTINGS.items():
+    for group_id, fields in SETTINGS.items():
         for key, field_def in fields.items():
             if key == "label":
                 continue
             opts = field_def[2]
             val = opts.get("value", "")
-            store_key = comp_id + "." + key
+            store_key = group_id + "." + key
             nvs_store[store_key] = val
             applied_store[store_key] = val
     return {}

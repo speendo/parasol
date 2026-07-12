@@ -69,7 +69,7 @@ def test_settings_apply_rejects_invalid_json():
 
 def test_old_endpoints_return_404():
     assert client.get("/manifest.json").status_code == 404
-    assert client.get("/components/wifi.json").status_code == 404
+    assert client.get("/groups/wifi.json").status_code == 404
     assert client.post("/api/save", json={}).status_code == 404
     assert client.post("/api/apply", json={}).status_code == 404
 
@@ -104,7 +104,7 @@ def test_dirty_false_after_reset():
 
 
 def test_ws_connect_receives_settings():
-    with client.websocket_connect("/api/settings/ws") as ws:
+    with client.websocket_connect("/api/events") as ws:
         data = ws.receive_json()
         assert "_dirty" in data
         assert "wifi" in data
@@ -112,7 +112,7 @@ def test_ws_connect_receives_settings():
 
 
 def test_ws_apply_updates_applied():
-    with client.websocket_connect("/api/settings/ws") as ws:
+    with client.websocket_connect("/api/events") as ws:
         ws.receive_json()  # initial push
         ws.send_json({"action": "apply", "data": {"wifi": {"ssid": ["text", "SSID", {"value": "WSTest"}]}}})
         pushed = ws.receive_json()
@@ -120,7 +120,7 @@ def test_ws_apply_updates_applied():
 
 
 def test_ws_apply_makes_dirty():
-    with client.websocket_connect("/api/settings/ws") as ws:
+    with client.websocket_connect("/api/events") as ws:
         ws.receive_json()  # initial push
         ws.send_json({"action": "apply", "data": {"wifi": {"ssid": ["text", "SSID", {"value": "DirtyMaker"}]}}})
         pushed = ws.receive_json()
@@ -128,8 +128,8 @@ def test_ws_apply_makes_dirty():
 
 
 def test_external_change_broadcasts_to_all_clients():
-    with client.websocket_connect("/api/settings/ws") as ws1, \
-         client.websocket_connect("/api/settings/ws") as ws2:
+    with client.websocket_connect("/api/events") as ws1, \
+         client.websocket_connect("/api/events") as ws2:
         ws1.receive_json()
         ws2.receive_json()
         client.post("/api/settings/external-change", json={"wifi": {"ssid": ["text", "SSID", {"value": "ExtChange"}]}})
