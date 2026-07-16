@@ -256,26 +256,6 @@ async def external_status_change(body: dict):
     return {"ok": True}
 
 
-@app.api_route("/manifest.json", methods=["GET", "POST"])
-async def old_manifest():
-    return PlainTextResponse("Not Found", status_code=404)
-
-
-@app.api_route("/groups/{name:path}", methods=["GET", "POST"])
-async def old_group(name: str):
-    return PlainTextResponse("Not Found", status_code=404)
-
-
-@app.api_route("/api/save", methods=["GET", "POST"])
-async def old_save():
-    return PlainTextResponse("Not Found", status_code=404)
-
-
-@app.api_route("/api/apply", methods=["GET", "POST"])
-async def old_apply():
-    return PlainTextResponse("Not Found", status_code=404)
-
-
 @app.post("/api/settings/apply")
 async def api_settings_apply(request: Request):
     try:
