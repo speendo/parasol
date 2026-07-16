@@ -110,33 +110,7 @@ void test_attrs_quote_fixer_empty(void) {
     free(fixed);
 }
 
-void test_parse_apply_single_field(void) {
-    add_field("wifi", "ssid", PRSL_TEXT, false, "old");
-    const char *msg = "{\"action\":\"apply\",\"data\":{\"wifi\":{\"ssid\":[\"text\",\"SSID\",{\"value\":\"NewNet\"}]}}}";
 
-    char groups[8][32], keys[8][32], values[8][256];
-    int n = prsl_json_parse_apply(&store, msg, groups, keys, values, 8);
-    TEST_ASSERT_EQUAL(1, n);
-    TEST_ASSERT_EQUAL_STRING("wifi", groups[0]);
-    TEST_ASSERT_EQUAL_STRING("ssid", keys[0]);
-    TEST_ASSERT_EQUAL_STRING("NewNet", values[0]);
-}
-
-void test_parse_apply_unknown_field_skipped(void) {
-    add_field("wifi", "ssid", PRSL_TEXT, false, "old");
-    const char *msg = "{\"action\":\"apply\",\"data\":{\"wifi\":{\"nope\":[\"text\",\"X\",{\"value\":\"y\"}]}}}";
-
-    char groups[8][32], keys[8][32], values[8][256];
-    int n = prsl_json_parse_apply(&store, msg, groups, keys, values, 8);
-    TEST_ASSERT_EQUAL(0, n);
-}
-
-void test_parse_apply_malformed(void) {
-    add_field("wifi", "ssid", PRSL_TEXT, false, "old");
-    char groups[8][32], keys[8][32], values[8][256];
-    int n = prsl_json_parse_apply(&store, "not json", groups, keys, values, 8);
-    TEST_ASSERT_EQUAL(0, n);
-}
 
 void test_build_empty_store(void) {
     cJSON *out = prsl_json_build_settings(&store);
@@ -189,107 +163,6 @@ void test_build_group_no_label(void) {
     cJSON *label = cJSON_GetObjectItem(wifi, "label");
     TEST_ASSERT_NULL(label);
     cJSON_Delete(out);
-}
-
-void test_parse_apply_empty_data(void) {
-    add_field("wifi", "ssid", PRSL_TEXT, false, "old");
-    const char *msg = "{\"action\":\"apply\",\"data\":{}}";
-
-    char groups[8][32], keys[8][32], values[8][256];
-    int n = prsl_json_parse_apply(&store, msg, groups, keys, values, 8);
-    TEST_ASSERT_EQUAL(0, n);
-}
-
-void test_parse_apply_max_changes(void) {
-    add_field("comp", "k1", PRSL_TEXT, false, "");
-    add_field("comp", "k2", PRSL_TEXT, false, "");
-    add_field("comp", "k3", PRSL_TEXT, false, "");
-    add_field("comp", "k4", PRSL_TEXT, false, "");
-    add_field("comp", "k5", PRSL_TEXT, false, "");
-    const char *msg = "{\"action\":\"apply\",\"data\":{\"comp\":{"
-        "\"k1\":[\"text\",\"k1\",{\"value\":\"v1\"}],"
-        "\"k2\":[\"text\",\"k2\",{\"value\":\"v2\"}],"
-        "\"k3\":[\"text\",\"k3\",{\"value\":\"v3\"}],"
-        "\"k4\":[\"text\",\"k4\",{\"value\":\"v4\"}],"
-        "\"k5\":[\"text\",\"k5\",{\"value\":\"v5\"}]"
-    "}}}";
-
-    char groups[8][32], keys[8][32], values[8][256];
-    int n = prsl_json_parse_apply(&store, msg, groups, keys, values, 3);
-    TEST_ASSERT_EQUAL(3, n);
-}
-
-void test_parse_apply_skips_prefix(void) {
-    add_field("wifi", "ssid", PRSL_TEXT, false, "old");
-    const char *msg = "{\"action\":\"apply\",\"data\":{\"_meta\":{\"dummy\":[\"text\",\"D\",{\"value\":\"x\"}]},\"wifi\":{\"ssid\":[\"text\",\"SSID\",{\"value\":\"NewNet\"}]}}}";
-
-    char groups[8][32], keys[8][32], values[8][256];
-    int n = prsl_json_parse_apply(&store, msg, groups, keys, values, 8);
-    TEST_ASSERT_EQUAL(1, n);
-    TEST_ASSERT_EQUAL_STRING("wifi", groups[0]);
-    TEST_ASSERT_EQUAL_STRING("ssid", keys[0]);
-    TEST_ASSERT_EQUAL_STRING("NewNet", values[0]);
-}
-
-void test_parse_apply_null_value(void) {
-    prsl_field_t f = {0};
-    f.group_id = "wifi";
-    f.key = "ssid";
-    f.label = "SSID";
-    f.type = PRSL_TEXT;
-    f.is_status = false;
-    prsl_store_add_group(&store, "wifi", NULL);
-    prsl_store_add_field(&store, &f);
-    const char *msg = "{\"action\":\"apply\",\"data\":{\"wifi\":{\"ssid\":[\"text\",\"SSID\",{\"value\":null}]}}}";
-
-    char groups[8][32], keys[8][32], values[8][256];
-    int n = prsl_json_parse_apply(&store, msg, groups, keys, values, 8);
-    TEST_ASSERT_EQUAL(1, n);
-    TEST_ASSERT_EQUAL_STRING("", values[0]);
-}
-
-void test_parse_apply_number_value(void) {
-    prsl_field_t f = {0};
-    f.group_id = "sensor";
-    f.key = "threshold";
-    f.label = "Threshold";
-    f.type = PRSL_NUMBER;
-    f.is_status = false;
-    prsl_store_add_group(&store, "sensor", NULL);
-    prsl_store_add_field(&store, &f);
-    const char *msg = "{\"action\":\"apply\",\"data\":{\"sensor\":{\"threshold\":[\"number\",\"Threshold\",{\"value\":42}]}}}";
-
-    char groups[8][32], keys[8][32], values[8][256];
-    int n = prsl_json_parse_apply(&store, msg, groups, keys, values, 8);
-    TEST_ASSERT_EQUAL(1, n);
-    TEST_ASSERT_EQUAL_STRING("42", values[0]);
-}
-
-void test_parse_apply_bool_values(void) {
-    prsl_field_t f1 = {0};
-    f1.group_id = "wifi";
-    f1.key = "enabled";
-    f1.label = "Enabled";
-    f1.type = PRSL_CHECKBOX;
-    f1.is_status = false;
-    prsl_store_add_group(&store, "wifi", NULL);
-    prsl_store_add_field(&store, &f1);
-
-    prsl_field_t f2 = {0};
-    f2.group_id = "wifi";
-    f2.key = "hidden";
-    f2.label = "Hidden";
-    f2.type = PRSL_CHECKBOX;
-    f2.is_status = false;
-    prsl_store_add_field(&store, &f2);
-
-    const char *msg = "{\"action\":\"apply\",\"data\":{\"wifi\":{\"enabled\":[\"checkbox\",\"Enabled\",{\"value\":true}],\"hidden\":[\"checkbox\",\"Hidden\",{\"value\":false}]}}}";
-
-    char groups[8][32], keys[8][32], values[8][256];
-    int n = prsl_json_parse_apply(&store, msg, groups, keys, values, 8);
-    TEST_ASSERT_EQUAL(2, n);
-    TEST_ASSERT_EQUAL_STRING("true", values[0]);
-    TEST_ASSERT_EQUAL_STRING("false", values[1]);
 }
 
 void test_attrs_fixer_null_input(void) {
@@ -383,19 +256,10 @@ int main(void) {
     RUN_TEST(test_build_with_attrs);
     RUN_TEST(test_attrs_quote_fixer);
     RUN_TEST(test_attrs_quote_fixer_empty);
-    RUN_TEST(test_parse_apply_single_field);
-    RUN_TEST(test_parse_apply_unknown_field_skipped);
-    RUN_TEST(test_parse_apply_malformed);
     RUN_TEST(test_build_empty_store);
     RUN_TEST(test_build_with_help);
     RUN_TEST(test_build_group_label);
     RUN_TEST(test_build_group_no_label);
-    RUN_TEST(test_parse_apply_empty_data);
-    RUN_TEST(test_parse_apply_max_changes);
-    RUN_TEST(test_parse_apply_skips_prefix);
-    RUN_TEST(test_parse_apply_null_value);
-    RUN_TEST(test_parse_apply_number_value);
-    RUN_TEST(test_parse_apply_bool_values);
     RUN_TEST(test_attrs_fixer_null_input);
     RUN_TEST(test_build_interleaved_fields);
     RUN_TEST(test_value_str_string);

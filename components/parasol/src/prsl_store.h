@@ -59,9 +59,6 @@ void prsl_store_check_dirty(prsl_store_t *store);
 int prsl_store_settings_count(prsl_store_t *store);
 int prsl_store_status_count(prsl_store_t *store);
 prsl_field_t *prsl_store_field_at(prsl_store_t *store, int i);
-void prsl_store_lock(prsl_store_t *store);
-void prsl_store_unlock(prsl_store_t *store);
-
 /** @brief Call on_get on every registered field to populate initial values. */
 esp_err_t prsl_store_load_values(prsl_store_t *store);
 

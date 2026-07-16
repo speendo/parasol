@@ -158,9 +158,6 @@ void prsl_store_check_dirty(prsl_store_t *store) {
     }
 }
 
-void prsl_store_lock(prsl_store_t *store) { (void)store; }
-void prsl_store_unlock(prsl_store_t *store) { (void)store; }
-
 esp_err_t prsl_store_add_group(prsl_store_t *store, const char *group_id, const char *label) {
     if (!store || !group_id) return ESP_ERR_INVALID_ARG;
     for (int i = 0; i < store->group_count; i++) {
