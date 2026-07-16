@@ -1,4 +1,4 @@
-(function () {
+var parasol = (function () {
   'use strict';
 
   var navList = document.getElementById('nav-list');
@@ -241,18 +241,23 @@
    * @param {Object} data - settings payload (without _dirty)
    * @param {boolean} dirtyFlag - server `_dirty` flag
    */
+  function parseFields(group) {
+    var fields = [];
+    for (var fieldKey in group) {
+      if (fieldKey === 'label') continue;
+      var arr = group[fieldKey];
+      fields.push({key: fieldKey, type: arr[0], label: arr[1], opts: arr[2]});
+    }
+    return fields;
+  }
+
   function processSettings(data, dirtyFlag) {
     dirty = dirtyFlag === true;
     var grps = [];
     for (var key in data) {
       if (key[0] === '_') continue;
       var group = data[key];
-      var fields = [];
-      for (var fieldKey in group) {
-        if (fieldKey === 'label') continue;
-        var arr = group[fieldKey];
-        fields.push({key: fieldKey, type: arr[0], label: arr[1], opts: arr[2]});
-      }
+      var fields = parseFields(group);
       grps.push({id: key, label: group.label || labelFromKey(key), fields: fields});
     }
     groups = grps;
@@ -278,12 +283,7 @@
       for (var key in data) {
         if (key[0] === '_') continue;
         var group = data[key];
-        var fields = [];
-        for (var fieldKey in group) {
-          if (fieldKey === 'label') continue;
-          var arr = group[fieldKey];
-          fields.push({key: fieldKey, type: arr[0], label: arr[1], opts: arr[2]});
-        }
+        var fields = parseFields(group);
         statusGroups.push({id: key, label: group.label || labelFromKey(key), fields: fields});
       }
       if (groups.length > 0) {
@@ -969,5 +969,59 @@
     if (describedEl) describedEl.setAttribute('aria-describedby', helper.id);
     container.appendChild(helper);
   }
-  /* test-expose */if(window.__TEST_MODE){window.serialize=serialize;window.setBaseline=setBaseline;window.getPending=getPending;window.createField=createField;window.populateFromGroups=populateFromGroups;window.applyAttrs=applyAttrs;window.addHelperText=addHelperText;window.findField=findField;window.updateUI=updateUI;window.showError=showError;window.clearError=clearError;window.postJSON=postJSON;window.syncThen=syncThen;window.handleSaveApply=handleSaveApply;window.renderNav=renderNav;window.renderForm=renderForm;window.handleHash=handleHash;window.wireButtons=wireButtons;window.bindChangeListeners=bindChangeListeners;window.init=init;window.buildPatch=buildPatch;window.connectWS=connectWS;window.disconnectWS=disconnectWS;window.onWSClose=onWSClose;window.processSettings=processSettings;window.onWSMessage=onWSMessage;window.updateAV=updateAV;window.applyAV=applyAV;window.syncLS=syncLS;window.resolveNested=resolveNested;window.sendToServer=sendToServer;window.onUserInput=onUserInput;window.readFormValue=readFormValue;window.showExternalNotification=showExternalNotification;window.showConflictPrompt=showConflictPrompt;window.hideNotification=hideNotification;window.__test={};window.__test.receiveWSMessage=onWSMessage;window.__test.wsReady=function(){if(ws)ws.readyState=1};Object.defineProperty(window.__test,'groups',{get:function(){return groups},set:function(v){groups=v}});Object.defineProperty(window.__test,'dirty',{get:function(){return dirty},set:function(v){dirty=v}});Object.defineProperty(window.__test,'lastSent',{get:function(){return lastSent},set:function(v){lastSent=v}});Object.defineProperty(window.__test,'inFlight',{get:function(){return inFlight},set:function(v){inFlight=v}});Object.defineProperty(window.__test,'formInteracted',{get:function(){return formInteracted},set:function(v){formInteracted=v}});window.processStatus=processStatus;Object.defineProperty(window.__test,'statusGroups',{get:function(){return statusGroups},set:function(v){statusGroups=v}});}
+  return {
+    init: init,
+    serialize: serialize,
+    setBaseline: setBaseline,
+    getPending: getPending,
+    createField: createField,
+    populateFromGroups: populateFromGroups,
+    applyAttrs: applyAttrs,
+    addHelperText: addHelperText,
+    findField: findField,
+    updateUI: updateUI,
+    showError: showError,
+    clearError: clearError,
+    postJSON: postJSON,
+    syncThen: syncThen,
+    handleSaveApply: handleSaveApply,
+    renderNav: renderNav,
+    renderForm: renderForm,
+    handleHash: handleHash,
+    wireButtons: wireButtons,
+    bindChangeListeners: bindChangeListeners,
+    buildPatch: buildPatch,
+    connectWS: connectWS,
+    disconnectWS: disconnectWS,
+    onWSClose: onWSClose,
+    processSettings: processSettings,
+    onWSMessage: onWSMessage,
+    updateAV: updateAV,
+    applyAV: applyAV,
+    syncLS: syncLS,
+    resolveNested: resolveNested,
+    sendToServer: sendToServer,
+    onUserInput: onUserInput,
+    readFormValue: readFormValue,
+    showExternalNotification: showExternalNotification,
+    showConflictPrompt: showConflictPrompt,
+    hideNotification: hideNotification,
+    processStatus: processStatus,
+    __test: {
+      get groups() { return groups; },
+      set groups(v) { groups = v; },
+      get dirty() { return dirty; },
+      set dirty(v) { dirty = v; },
+      get lastSent() { return lastSent; },
+      set lastSent(v) { lastSent = v; },
+      get inFlight() { return inFlight; },
+      set inFlight(v) { inFlight = v; },
+      get formInteracted() { return formInteracted; },
+      set formInteracted(v) { formInteracted = v; },
+      get statusGroups() { return statusGroups; },
+      set statusGroups(v) { statusGroups = v; },
+      get receiveWSMessage() { return onWSMessage; },
+      get wsReady() { return function () { if (ws) ws.readyState = 1; }; }
+    }
+  };
 })();

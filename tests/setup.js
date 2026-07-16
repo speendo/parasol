@@ -5,8 +5,6 @@ import { dirname, resolve } from 'path'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
-window.__TEST_MODE = true
-
 document.body.innerHTML = `
   <nav id="nav-list"></nav>
   <form id="config-form"></form>
@@ -34,7 +32,7 @@ window.WebSocket = function (url) {
   }, 0);
 };
 window.WebSocket.prototype.send = function (data) {
-  if (window.__test.onWSSend) window.__test.onWSSend(data);
+  if (window.__test && window.__test.onWSSend) window.__test.onWSSend(data);
 };
 window.WebSocket.prototype.close = function () {
   this.readyState = 3;
@@ -43,3 +41,11 @@ window.WebSocket.prototype.close = function () {
 
 const code = readFileSync(resolve(__dirname, '../app.js'), 'utf-8')
 ;(0, eval)(code)
+
+// Backward-compat: expose parasol module on window for existing tests
+if (typeof parasol !== 'undefined') {
+  Object.keys(parasol).forEach(function (k) {
+    if (k !== '__test') window[k] = parasol[k];
+  });
+  window.__test = parasol.__test;
+}

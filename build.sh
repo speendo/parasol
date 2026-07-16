@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 set -euo pipefail
-"$(npm root)"/.bin/terser app.js -o app.min.js -c -m --define window.__TEST_MODE=false
+"$(npm root)"/.bin/terser app.js -o app.min.js -c -m
