@@ -7,7 +7,4 @@ test-deps/_extract/
 test-deps/*.bak/
 test-results/
 
-# Generated asset files (cmake/generate_assets.cmake)
-components/parasol/src/pwui_assets.c
-components/parasol/src/pwui_assets.h
 pico CI log.txt
