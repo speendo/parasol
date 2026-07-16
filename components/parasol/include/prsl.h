@@ -35,11 +35,21 @@ typedef const char *(*prsl_get_cb_t)(void);
 typedef esp_err_t (*prsl_set_cb_t)(const char *group_id, const char *key,
                                     const char *value);
 
-/** @brief Called once per Save, after all on_set callbacks have returned ESP_OK.
- *  @param pairs  Array of [path, value] pairs. pairs[i][0] = "group_id.key", pairs[i][1] = "value".
- *  @param count  Number of pairs.
- *  Use for single-cycle NVS persistence (one open/write/commit). */
-typedef void (*prsl_save_cb_t)(const char *pairs[][2], int count);
+/** @brief A single path/value pair passed to the save callback.
+ *  @var path   "group_id.key" — points into a heap buffer (valid during callback).
+ *  @var value  Pointer into store's cJSON tree (stable during callback). */
+typedef struct {
+    const char *path;
+    const char *value;
+} prsl_save_pair_t;
+
+/** @brief Called once per batch after on_set callbacks return ESP_OK.
+ *  May be called multiple times per HTTP save request if the store has more
+ *  fields than PRSL_SAVE_MAX_FIELDS (see parasol_config.json).
+ *  @param pairs  Array of prsl_save_pair_t structures.
+ *  @param count  Number of pairs in this batch.
+ *  Use for single-cycle NVS persistence (one open/write/commit per batch). */
+typedef void (*prsl_save_cb_t)(const prsl_save_pair_t *pairs, int count);
 
 /** @brief Developer hook: compare current value against persisted storage.
  *  @return true if current_value differs from NVS/EEPROM (dirty),

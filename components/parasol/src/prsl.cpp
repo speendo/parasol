@@ -132,71 +132,95 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save) {
                 return;
             }
             cJSON *body = cJSON_GetObjectItem(msg, "data");
-            if (body) {
-                cJSON *group = body->child;
-                while (group) {
-                    if (cJSON_IsObject(group) && group->string[0] != '_') {
-                        cJSON *field = group->child;
-                        while (field) {
-                            if (cJSON_IsArray(field) && cJSON_GetArraySize(field) >= 3) {
-                                cJSON *opts = cJSON_GetArrayItem(field, 2);
-                                cJSON *val = cJSON_GetObjectItem(opts, "value");
-                                char val_buf[64];
-                                const char *val_str = prsl_json_value_str(val, val_buf, sizeof(val_buf));
-                                prsl_field_t *f = prsl_store_find(&g_store, group->string, field->string);
-                                if (f && f->on_set) {
-                                    esp_err_t ae = f->on_set(group->string, field->string, val_str);
-                                    if (ae != ESP_OK) {
-                                        char err[128];
-                                        snprintf(err, sizeof(err), "on_set rejected %s.%s", group->string, field->string);
-                                        req->send(400, "text/plain", err);
-                                        cJSON_Delete(msg);
-                                        return;
-                                    }
-                                }
-                                prsl_store_set_value(&g_store, group->string, field->string, val_str);
-                            }
-                            field = field->next;
-                        }
-                    }
-                    group = group->next;
-                }
+            if (!body) {
+                cJSON_Delete(msg);
+                req->send(400, "text/plain", "Missing data");
+                return;
+            }
 
-                enum { MAX_PAIRS = 64 };
-                const char *pairs[MAX_PAIRS][2];
-                char paths[MAX_PAIRS][128];
-                int pair_count = 0;
-                if (g_on_save) {
-                    group = body->child;
-                    while (group && pair_count < MAX_PAIRS) {
-                        if (cJSON_IsObject(group) && group->string[0] != '_') {
-                            cJSON *field = group->child;
-                            while (field && pair_count < MAX_PAIRS) {
-                                if (cJSON_IsArray(field) && cJSON_GetArraySize(field) >= 3) {
-                                    cJSON *opts = cJSON_GetArrayItem(field, 2);
-                                    cJSON *val = cJSON_GetObjectItem(opts, "value");
-                                    if (val) {
-                                        cJSON *sv = prsl_store_get_value(&g_store, group->string, field->string);
-                                        if (sv && cJSON_IsString(sv)) {
-                                            snprintf(paths[pair_count], sizeof(paths[0]), "%s.%s", group->string, field->string);
-                                            pairs[pair_count][0] = paths[pair_count];
-                                            pairs[pair_count][1] = cJSON_GetStringValue(sv);
-                                            pair_count++;
-                                        }
-                                    }
+            /* Single pass: validate, apply, and collect pairs */
+            int total_fields = g_store.count;
+            prsl_save_pair_t *all_pairs = NULL;
+            int pair_count = 0;
+
+            if (g_on_save && total_fields > 0) {
+                all_pairs = (prsl_save_pair_t *)calloc(total_fields, sizeof(prsl_save_pair_t));
+                if (!all_pairs) {
+                    cJSON_Delete(msg);
+                    req->send(500, "text/plain", "Out of memory");
+                    return;
+                }
+            }
+
+            cJSON *group = body->child;
+            while (group) {
+                if (!cJSON_IsObject(group) || group->string[0] == '_') {
+                    group = group->next; continue;
+                }
+                cJSON *field = group->child;
+                while (field) {
+                    if (!cJSON_IsArray(field) || cJSON_GetArraySize(field) < 3) {
+                        field = field->next; continue;
+                    }
+                    cJSON *opts = cJSON_GetArrayItem(field, 2);
+                    cJSON *val = cJSON_GetObjectItem(opts, "value");
+                    char val_buf[64];
+                    const char *val_str = prsl_json_value_str(val, val_buf, sizeof(val_buf));
+                    prsl_field_t *f = prsl_store_find(&g_store, group->string, field->string);
+                    if (f && f->on_set) {
+                        esp_err_t ae = f->on_set(group->string, field->string, val_str);
+                        if (ae != ESP_OK) {
+                            char err[128];
+                            snprintf(err, sizeof(err), "on_set rejected %s.%s", group->string, field->string);
+                            free(all_pairs);
+                            cJSON_Delete(msg);
+                            req->send(400, "text/plain", err);
+                            return;
+                        }
+                    }
+                    if (f) {
+                        prsl_store_set_value(&g_store, group->string, field->string, val_str);
+                        if (all_pairs) {
+                            cJSON *sv = prsl_store_get_value(&g_store, group->string, field->string);
+                            if (sv && cJSON_IsString(sv)) {
+                                size_t plen = snprintf(NULL, 0, "%s.%s", group->string, field->string);
+                                char *path = (char *)malloc(plen + 1);
+                                if (path) {
+                                    snprintf(path, plen + 1, "%s.%s", group->string, field->string);
+                                    all_pairs[pair_count].path = path;
+                                    all_pairs[pair_count].value = cJSON_GetStringValue(sv);
+                                    pair_count++;
                                 }
-                                field = field->next;
                             }
                         }
-                        group = group->next;
                     }
+                    field = field->next;
                 }
-                if (pair_count > 0 && g_on_save) {
-                    g_on_save(pairs, pair_count);
-                }
-                prsl_store_check_dirty(&g_store);
+                group = group->next;
             }
             cJSON_Delete(msg);
+
+            /* Batch calls to on_save */
+            if (g_on_save && pair_count > 0 && all_pairs) {
+#ifndef PRSL_SAVE_MAX_FIELDS
+#define PRSL_SAVE_MAX_FIELDS 32
+#endif
+                int offset = 0;
+                while (offset < pair_count) {
+                    int batch = pair_count - offset;
+                    if (batch > PRSL_SAVE_MAX_FIELDS) batch = PRSL_SAVE_MAX_FIELDS;
+                    g_on_save(&all_pairs[offset], batch);
+                    offset += batch;
+                }
+
+                for (int i = 0; i < pair_count; i++) {
+                    free((void *)all_pairs[i].path);
+                }
+                free(all_pairs);
+            } else if (all_pairs) {
+                free(all_pairs);
+            }
+
             req->send(200, "text/plain", "OK");
         });
 
