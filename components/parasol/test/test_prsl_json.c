@@ -222,30 +222,35 @@ void test_build_interleaved_fields(void) {
 
 void test_value_str_string(void) {
     cJSON *s = cJSON_CreateString("hello");
-    TEST_ASSERT_EQUAL_STRING("hello", prsl_json_value_str(s));
+    char buf[64];
+    TEST_ASSERT_EQUAL_STRING("hello", prsl_json_value_str(s, buf, sizeof(buf)));
     cJSON_Delete(s);
 }
 
 void test_value_str_number(void) {
     cJSON *n = cJSON_CreateNumber(42.5);
-    TEST_ASSERT_EQUAL_STRING("42.5", prsl_json_value_str(n));
+    char buf[64];
+    TEST_ASSERT_EQUAL_STRING("42.5", prsl_json_value_str(n, buf, sizeof(buf)));
     cJSON_Delete(n);
 }
 
 void test_value_str_true(void) {
     cJSON *t = cJSON_CreateTrue();
-    TEST_ASSERT_EQUAL_STRING("true", prsl_json_value_str(t));
+    char buf[64];
+    TEST_ASSERT_EQUAL_STRING("true", prsl_json_value_str(t, buf, sizeof(buf)));
     cJSON_Delete(t);
 }
 
 void test_value_str_false(void) {
     cJSON *f = cJSON_CreateFalse();
-    TEST_ASSERT_EQUAL_STRING("false", prsl_json_value_str(f));
+    char buf[64];
+    TEST_ASSERT_EQUAL_STRING("false", prsl_json_value_str(f, buf, sizeof(buf)));
     cJSON_Delete(f);
 }
 
 void test_value_str_null(void) {
-    TEST_ASSERT_NULL(prsl_json_value_str(NULL));
+    char buf[64];
+    TEST_ASSERT_NULL(prsl_json_value_str(NULL, buf, sizeof(buf)));
 }
 
 int main(void) {

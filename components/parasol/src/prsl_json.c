@@ -3,11 +3,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-const char *prsl_json_value_str(cJSON *val) {
-    static char buf[64];
+const char *prsl_json_value_str(cJSON *val, char *buf, size_t buf_size) {
     if (!val) return NULL;
     if (cJSON_IsString(val)) return val->valuestring;
-    if (cJSON_IsNumber(val)) { snprintf(buf, sizeof(buf), "%g", cJSON_GetNumberValue(val)); return buf; }
+    if (cJSON_IsNumber(val)) { snprintf(buf, buf_size, "%g", cJSON_GetNumberValue(val)); return buf; }
     if (cJSON_IsTrue(val)) return "true";
     if (cJSON_IsFalse(val)) return "false";
     return NULL;

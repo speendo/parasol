@@ -141,7 +141,8 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save) {
                             if (cJSON_IsArray(field) && cJSON_GetArraySize(field) >= 3) {
                                 cJSON *opts = cJSON_GetArrayItem(field, 2);
                                 cJSON *val = cJSON_GetObjectItem(opts, "value");
-                                const char *val_str = prsl_json_value_str(val);
+                                char val_buf[64];
+                                const char *val_str = prsl_json_value_str(val, val_buf, sizeof(val_buf));
                                 prsl_field_t *f = prsl_store_find(&g_store, group->string, field->string);
                                 if (f && f->on_set) {
                                     esp_err_t ae = f->on_set(group->string, field->string, val_str);

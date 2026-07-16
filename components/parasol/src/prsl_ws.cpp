@@ -49,7 +49,8 @@ static void on_event(AsyncWebSocket *server, AsyncWebSocketClient *client,
                         }
                         cJSON *opts = cJSON_GetArrayItem(field, 2);
                         cJSON *val = cJSON_GetObjectItem(opts, "value");
-                        const char *val_str = prsl_json_value_str(val);
+                        char val_buf[64];
+                        const char *val_str = prsl_json_value_str(val, val_buf, sizeof(val_buf));
 
                         prsl_field_t *f = prsl_store_find(g_store, group->string, field->string);
                         if (f && f->on_set) {
