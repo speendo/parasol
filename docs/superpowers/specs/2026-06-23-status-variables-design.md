@@ -46,15 +46,15 @@ as the discriminator.
     "system": {
       "uptime":     ["text",   "Uptime",    {"value": "1d 2h 30m 15s"}],
       "fw_version": ["select", "Firmware",  {"options": [["2.0.0","2.0.0"],["2.1.0","2.1.0"],["2.2.0-beta","2.2.0-beta"]], "value": "2.1.0"}],
-      "led":        ["switch", "LED",       {"value": true, "tooltip": "System LED indicator"}]
+      "led":        ["switch", "LED",       {"value": true, "help": "System LED indicator"}]
     },
     "network": {
-      "mode":       ["radio",  "Mode",      {"options": [["auto","Auto"],["manual","Manual"],["safe","Safe"]], "value": "auto", "tooltip": "Network operation mode"}],
-      "signal":     ["range",  "Signal",    {"attrs": {"min": 0, "max": 100, "step": 1}, "value": "75", "tooltip": "Signal strength %"}],
+      "mode":       ["radio",  "Mode",      {"options": [["auto","Auto"],["manual","Manual"],["safe","Safe"]], "value": "auto", "help": "Network operation mode"}],
+      "signal":     ["range",  "Signal",    {"attrs": {"min": 0, "max": 100, "step": 1}, "value": "75", "help": "Signal strength %"}],
       "connection": ["select", "Connection",{"options": [["connected","Connected"],["disconnected","Disconnected"],["error","Error"]], "value": "connected"}]
     },
     "sensors": {
-      "temperature": ["number", "Temperature", {"value": "23.5", "tooltip": "Celsius"}]
+      "temperature": ["number", "Temperature", {"value": "23.5", "help": "Celsius"}]
     }
   }
 }
@@ -141,15 +141,15 @@ STATUS = {
     "system": {
         "uptime":     ["text", "Uptime",     {"value": None}],
         "fw_version": ["select", "Firmware", {"options": [["2.0.0","2.0.0"],["2.1.0","2.1.0"],["2.2.0-beta","2.2.0-beta"]], "value": "2.1.0"}],
-        "led":        ["switch", "LED",      {"value": True, "tooltip": "System LED indicator"}],
+        "led":        ["switch", "LED",      {"value": True, "help": "System LED indicator"}],
     },
     "network": {
-        "mode":       ["radio", "Mode",      {"options": [["auto","Auto"],["manual","Manual"],["safe","Safe"]], "value": "auto", "tooltip": "Network operation mode"}],
-        "signal":     ["range", "Signal",    {"attrs": {"min": 0, "max": 100, "step": 1}, "value": None, "tooltip": "Signal strength %"}],
+        "mode":       ["radio", "Mode",      {"options": [["auto","Auto"],["manual","Manual"],["safe","Safe"]], "value": "auto", "help": "Network operation mode"}],
+        "signal":     ["range", "Signal",    {"attrs": {"min": 0, "max": 100, "step": 1}, "value": None, "help": "Signal strength %"}],
         "connection": ["select", "Connection",{"options": [["connected","Connected"],["disconnected","Disconnected"],["error","Error"]], "value": "connected"}],
     },
     "sensors": {
-        "temperature": ["number", "Temperature", {"value": None, "tooltip": "Celsius"}],
+        "temperature": ["number", "Temperature", {"value": None, "help": "Celsius"}],
     },
 }
 ```

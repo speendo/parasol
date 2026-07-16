@@ -71,7 +71,7 @@ Status-kind fields do not affect `_dirty`.
 
 ---
 
-## 4. Public API (`pwui.h`)
+## 4. Public API (`prsl.h`)
 
 ### 4.1 Lifecycle
 
@@ -236,9 +236,9 @@ components/parasol/
 ├── CMakeLists.txt
 ├── library.json
 ├── include/
-│   └── pwui.h              ← public API (developer-facing)
+│   └── prsl.h              ← public API (developer-facing)
 ├── src/
-│   ├── pwui.c              ← init, lifecycle, builder API, route wiring
+│   ├── prsl.c              ← init, lifecycle, builder API, route wiring
 │   ├── prsl_store.c        ← AV key-value store, dirty tracking
 │   ├── prsl_ws.c           ← WS protocol (connect handshake, apply, broadcast)
 │   └── prsl_json.c         ← wire format (build settings/status JSON, parse payloads)
@@ -257,7 +257,7 @@ components/parasol/
 | `prsl_store.c` | In-memory key-value map (flat `"comp.key" → cJSON* value`). Each value stored with its typed cJSON form (bool, number, string, null) determined by the field's `prsl_type_t`. Per-field `is_status` flag. `_dirty` boolean. `get/set/dirty/clear_dirty`. |
 | `prsl_json.c` | `build_settings_json(store)` → cJSON tree (attaches stored cJSON values directly). `build_status_json(store)` → cJSON tree. `parse_apply_payload(cjson_node)` → flat key-value pairs. |
 | `prsl_ws.c` | Manages `AsyncWebSocket` for `/api/events`. On connect: push status then settings. On `apply` message: parse → update store → broadcast settings to all clients. |
-| `pwui.c` | `init()` wires everything. Builder API collects field definitions pre-init. At `init()` time, definitions are frozen into the store schema. HTTP route handlers (thin wrappers). Static file serving from embedded gzip blobs. |
+| `prsl.c` | `init()` wires everything. Builder API collects field definitions pre-init. At `init()` time, definitions are frozen into the store schema. HTTP route handlers (thin wrappers). Static file serving from embedded gzip blobs. |
 
 ---
 
@@ -353,7 +353,7 @@ pico-website/
 ## 8. Usage Example
 
 ```c
-#include "pwui.h"
+#include "prsl.h"
 
 static esp_err_t load_from_nvs(cJSON *root) {
     // Developer reads NVS keys into cJSON

@@ -16,7 +16,7 @@ data, multiplexed by a `type` field (server to client) or `action` field
 ### `type: "status"`
 
 Sent on initial connect and periodically thereafter (typically every 3 seconds
-via `pwui_broadcast_status`). Contains read-only telemetry data.
+via `prsl_broadcast_status`). Contains read-only telemetry data.
 
 ```json
 {
@@ -46,7 +46,7 @@ via `pwui_broadcast_status`). Contains read-only telemetry data.
 ```
 
 where `opts` contains at minimum `"value"`, and optionally `"options"` (for
-select/radio), `"attrs"` (HTML validation attributes), and `"tooltip"` (help
+select/radio), `"attrs"` (HTML validation attributes), and `"help"` (help
 text). For the full field format reference, see the architecture spec.
 
 **Rendering:** Status fields render as disabled `<input>` elements with DOM
@@ -67,10 +67,10 @@ apply). Contains the full settings state.
       "label": "Wi-Fi Setup",
       "ssid":     ["text",     "SSID",     {"value": "MyNetwork",
                                             "attrs": {"required":true,"maxlength":32},
-                                            "tooltip": "Network name - 1-32 characters"}],
+                                            "help": "Network name - 1-32 characters"}],
       "pass":     ["password", "Password", {"value": "",
                                             "attrs": {"maxlength":64},
-                                            "tooltip": "WiFi password - up to 64 characters"}],
+                                            "help": "WiFi password - up to 64 characters"}],
       "mode":     ["select",   "Mode",     {"value": "station",
                                             "options": [["station","Station"],["ap","Access Point"]]}]
     },

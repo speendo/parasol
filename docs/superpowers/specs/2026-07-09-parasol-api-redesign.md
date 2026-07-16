@@ -91,7 +91,7 @@ typedef struct {
     bool           is_status;  /* false by default via designated init */
     prsl_get_cb_t  on_get;
     prsl_set_cb_t  on_set;
-    const char    *help;       /* NULL = no tooltip */
+    const char    *help;       /* NULL = no help */
     const char    *attrs;      /* NULL = no HTML validation */
 } prsl_field_opts_t;
 ```

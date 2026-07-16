@@ -46,8 +46,8 @@ HTTP used only for persistence:
   "_dirty": false,
   "wifi": {
     "label": "Wi-Fi",
-    "ssid":     ["text", "SSID",     {"value": "MyNetwork", "tooltip": "WiFi network name \u2014 required, 1\u201332 characters"}],
-    "password": ["password", "Password", {"value": "", "attrs": {"maxlength": 64}, "tooltip": "WiFi password \u2014 required, up to 64 characters"}],
+    "ssid":     ["text", "SSID",     {"value": "MyNetwork", "help": "WiFi network name \u2014 required, 1\u201332 characters"}],
+    "password": ["password", "Password", {"value": "", "attrs": {"maxlength": 64}, "help": "WiFi password \u2014 required, up to 64 characters"}],
     "mode":     ["select", "Mode",   {"value": "station", "options": [["station","Station"],["ap","Access Point"]]}]
   },
   "gpio": {
@@ -60,7 +60,7 @@ HTTP used only for persistence:
 
 ### Field format
 
-Each key under a component group is a 3-element array:
+Each key under a group is a 3-element array:
 
 ```
 [type, label, opts]
@@ -73,7 +73,7 @@ Each key under a component group is a 3-element array:
   - `value` — current applied value (replaces `default` from old format)
   - `options` — for `select` and `radio`: `[["key1", "Label 1"], ...]`
    - `attrs` — HTML attributes: `{min, max, maxlength, minlength, step, placeholder, required, pattern}`
-  - `tooltip` — help text string
+  - `help` — help text string
 - `checkbox` has three wire values: `true` (checked), `false` (unchecked), `null`
   (indeterminate/unset)
 
