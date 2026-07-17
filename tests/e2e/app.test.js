@@ -432,3 +432,52 @@ test.describe('Navbar image and favicon', () => {
   })
 })
 
+test.describe('Save non-string fields', () => {
+  test('save persists number, checkbox, and range values (not silently dropped)', async ({ page }) => {
+    await page.goto('/')
+    await page.waitForSelector('#config-form:not([aria-busy])', { timeout: 10000 })
+
+    // Fill required wifi fields first so save button is enabled
+    await page.locator('[name="wifi.ssid"]').fill('TestNet')
+    await page.locator('[name="wifi.password"]').fill('secret123')
+    await page.locator('[name="wifi.ssid"]').focus()
+    await page.waitForSelector('#config-form:not([aria-busy])', { timeout: 5000 })
+
+    // Open gpio accordion to make fields visible
+    await page.locator('details#gpio summary').click()
+    await page.waitForSelector('#gpio[open]', { timeout: 5000 })
+
+    var pinInput = page.locator('[name="gpio.pin"]')
+    await pinInput.fill('10')
+    await pinInput.blur()
+    await page.waitForSelector('#config-form:not([aria-busy])', { timeout: 5000 })
+
+    var enabledCb = page.locator('[name="gpio.enabled"]')
+    var wasChecked = await enabledCb.isChecked()
+    await enabledCb.setChecked(!wasChecked)
+    await enabledCb.dispatchEvent('change')
+    await page.waitForSelector('#config-form:not([aria-busy])', { timeout: 5000 })
+
+    await expect(page.locator('#btn-save-apply')).toBeVisible({ timeout: 5000 })
+
+    var savePayload = null
+    await page.route('**/api/settings/save', async function (route) {
+      savePayload = route.request().postDataJSON()
+      await route.fulfill({ status: 200, body: 'OK' })
+    })
+
+    await page.locator('#btn-save-apply').click()
+    await page.waitForTimeout(1000)
+
+    expect(savePayload).not.toBeNull()
+    expect(savePayload.gpio).toBeDefined()
+    expect(savePayload.gpio.pin).toBeDefined()
+    var pinValue = savePayload.gpio.pin[2].value
+    expect(pinValue).toBe(10)
+
+    expect(savePayload.gpio.enabled).toBeDefined()
+    var enabledValue = savePayload.gpio.enabled[2].value
+    expect(typeof enabledValue).toBe('boolean')
+  })
+})
+
