@@ -187,7 +187,7 @@ var parasol = (function () {
     }
   }
 
-  /** Open a WebSocket connection to /api/settings/ws. Sets aria-busy on the form. */
+  /** Open a WebSocket connection to /api/events. Sets aria-busy on the form. */
   function connectWS() {
     configForm.setAttribute('aria-busy', 'true');
     var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
