@@ -2226,3 +2226,57 @@ describe('rapid blur events across different fields', function () {
     expect(window.__test.sentMessages.length).toBe(count)
   })
 })
+
+describe('notif-keep-local sends only conflicting fields', () => {
+  beforeEach(() => {
+    document.getElementById('server-changed').hidden = true
+    document.querySelector('#config-form').innerHTML = ''
+    window.__test.groups = []
+    window.__test.lastSent = {}
+    window.__test.inFlight = {}
+    window.__test.dirty = false
+    document.getElementById('notif-load').hidden = true
+    document.getElementById('notif-keep').hidden = true
+    document.getElementById('notif-keep-local').hidden = true
+    document.getElementById('notif-accept-server').hidden = true
+  })
+
+  it('sends only conflicting fields, not entire form', () => {
+    window.__test.groups = [
+      { id: 'wifi', fields: [
+        { key: 'ssid', type: 'text', label: 'SSID', opts: { value: 'oldSsid' } },
+        { key: 'pwd', type: 'password', label: 'Pwd', opts: { value: 'oldPwd' } }
+      ]}
+    ]
+    var ssidInput = document.createElement('input')
+    ssidInput.name = 'wifi.ssid'
+    ssidInput.value = 'localSsid'
+    document.querySelector('#config-form').appendChild(ssidInput)
+    var pwdInput = document.createElement('input')
+    pwdInput.type = 'password'
+    pwdInput.name = 'wifi.pwd'
+    pwdInput.value = 'oldPwd'
+    document.querySelector('#config-form').appendChild(pwdInput)
+
+    window.__test.lastSent = { 'wifi.pwd': 'oldPwd' }
+    window.__test.dirty = true
+
+    var sentKeys = []
+    window.__test.onWSSend = function (data) {
+      var msg = JSON.parse(data)
+      var keys = Object.keys(msg.data.wifi)
+      for (var ki = 0; ki < keys.length; ki++) sentKeys.push('wifi.' + keys[ki])
+    }
+    window.__test.wsReady()
+
+    var pushData = { wifi: { ssid: ['text', 'SSID', { value: 'serverSsid' }] } }
+    window.__test.receiveWSMessage({ data: JSON.stringify({ type: 'settings', _dirty: false, data: pushData }) })
+
+    expect(document.getElementById('notif-keep-local').hidden).toBe(false)
+
+    sentKeys = []
+    document.getElementById('notif-keep-local').click()
+
+    expect(sentKeys).toEqual(['wifi.ssid'])
+  })
+})

@@ -18,6 +18,7 @@ var parasol = (function () {
   var wsReconnectTimer = null;
   var wsRetries = 0;
   var formInteracted = false;
+  var pendingConflicts = [];
 
   /** Show an error message in the status bar. @param {string} msg */
   function showError(msg) {
@@ -581,6 +582,7 @@ var parasol = (function () {
 
   /** Show the conflict resolution prompt when both local and server values changed. @param {Array} conflicts */
   function showConflictPrompt(conflicts) {
+    pendingConflicts = conflicts;
     var bar = document.getElementById('server-changed');
     var text = document.getElementById('notif-text');
     text.textContent = 'Conflict: ' + fieldLabels(conflicts);
@@ -792,10 +794,12 @@ var parasol = (function () {
     });
     document.getElementById('notif-keep-local').addEventListener('click', function () {
       hideNotification();
-      var changes = serialize();
-      for (var key in changes) {
-        sendToServer(key, changes[key]);
+      for (var ci = 0; ci < pendingConflicts.length; ci++) {
+        var c = pendingConflicts[ci];
+        var val = readFormValue(c.key.split('.'));
+        if (val !== undefined) sendToServer(c.key, val);
       }
+      pendingConflicts = [];
     });
     document.getElementById('notif-accept-server').addEventListener('click', function () {
       hideNotification();
