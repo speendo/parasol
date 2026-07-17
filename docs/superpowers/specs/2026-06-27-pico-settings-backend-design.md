@@ -36,18 +36,10 @@ status value updates.
 
 | Method | Path | Purpose |
 |---|---|---|
+| GET | `/api/settings` | HTTP fallback — returns full settings JSON with `_dirty` flag |
 | WS | `/api/events` | Primary transport: status on connect, settings on connect, apply handling, push |
 | POST | `/api/settings/save` | Persist settings (calls developer's `on_save`) |
 | POST | `/api/settings/reset` | Reset to defaults (calls developer's `on_reset`) |
-
-### Endpoints (NOT implemented — removed from contract)
-
-| Method | Path | Reason |
-|---|---|---|
-| GET | `/api/settings` | Removed — settings are WS-only |
-| POST | `/api/settings/apply` | Removed — client uses WS apply, never called this |
-| POST | `/api/settings/external-change` | Test harness only |
-| POST | `/api/settings/external-status-change` | Test harness only |
 
 ### Wire Format
 
@@ -82,7 +74,7 @@ esp_err_t prsl_start(void);
 
 `prsl_init` registers routes with the supplied server, wires up WS, and calls
 `storage.on_load()` to populate the AV store. Must be called after all
-`prsl_begin_component` / `prsl_end_component` calls.
+`prsl_add_group` / `prsl_add_field` calls.
 
 ### 4.2 Storage Callbacks
 
@@ -103,8 +95,9 @@ once during `prsl_init`. `on_save` is called on POST `/api/settings/save`.
 ### 4.3 Component Registration
 
 ```c
-esp_err_t prsl_begin_component(const char *id, const char *label, bool is_status);
-esp_err_t prsl_end_component(const char *id);
+esp_err_t prsl_add_group(const char *group_id, const char *label);
+esp_err_t prsl_add_field(prsl_type_t type, const char *group_id, const char *key,
+                         const char *label, const prsl_field_opts_t *opts);
 ```
 
 - `is_status=false` → settings component, fields affect `_dirty`
@@ -144,7 +137,7 @@ callback.
 
 ### 4.5 Error Handling
 
-All registration functions (`prsl_begin_component`, `prsl_end_component`,
+All registration functions (`prsl_add_group`, `prsl_add_field`,
 `prsl_add_field`, `prsl_add_field_opts`) return `esp_err_t`. Errors are
 programming mistakes and should be caught during integration.
 
@@ -379,20 +372,12 @@ static void on_ssid_apply(const char *path, const char *value) {
 void app_main(void) {
     AsyncWebServer server(80);
 
-    prsl_begin_component("wifi", "Wi-Fi Setup", false);
-    prsl_add_field(PRSL_TEXT, "wifi", "ssid", "SSID",
-                   PRSL_VALUE, "MyNetwork",
-                   PRSL_APPLY, on_ssid_apply,
-                   PRSL_END);
-    prsl_add_field(PRSL_PASSWORD, "wifi", "pass", "Password",
-                   PRSL_HELP, "At least 8 characters", PRSL_END);
-    prsl_add_field_opts(PRSL_SELECT, "wifi", "mode", "Mode",
-                        wifi_modes, 2, PRSL_VALUE, "station", PRSL_END);
-    prsl_end_component("wifi");
+    prsl_add_group("wifi", "Wi-Fi Setup");
+    prsl_add_field(PRSL_TEXT, "wifi", "ssid", "SSID", NULL);
+    prsl_add_field(PRSL_PASSWORD, "wifi", "password", "Password", NULL);
 
-    prsl_begin_component("system", "System", true);
-    prsl_add_field(PRSL_TEXT, "system", "uptime", "Uptime", PRSL_VALUE, "", PRSL_END);
-    prsl_end_component("system");
+    prsl_add_group("system", "System");
+    prsl_add_field(PRSL_TEXT, "system", "uptime", "Uptime", NULL);
 
     prsl_storage_t storage = {
         .on_load = load_from_nvs,
