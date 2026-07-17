@@ -14,6 +14,12 @@ esp_err_t prsl_store_init(prsl_store_t *store) {
         free(store->fields);
         return ESP_ERR_NO_MEM;
     }
+    store->mutex = xSemaphoreCreateMutex();
+    if (!store->mutex) {
+        free(store->groups);
+        free(store->fields);
+        return ESP_ERR_NO_MEM;
+    }
     return ESP_OK;
 }
 
@@ -21,6 +27,10 @@ void prsl_store_deinit(prsl_store_t *store) {
     if (!store) return;
     for (int i = 0; i < store->count; i++) {
         cJSON_Delete(store->fields[i].value);
+    }
+    if (store->mutex) {
+        vSemaphoreDelete(store->mutex);
+        store->mutex = NULL;
     }
     free(store->fields);
     free(store->groups);
@@ -30,27 +40,35 @@ void prsl_store_deinit(prsl_store_t *store) {
 esp_err_t prsl_store_add_field(prsl_store_t *store, const prsl_field_t *field) {
     if (!store || !field) return ESP_ERR_INVALID_ARG;
     if (!prsl_store_has_group(store, field->group_id)) return ESP_ERR_NOT_FOUND;
+    xSemaphoreTake(store->mutex, portMAX_DELAY);
     if (store->count >= store->capacity) {
         int new_cap = store->capacity * 2;
         prsl_field_t *new_fields = realloc(store->fields, new_cap * sizeof(prsl_field_t));
-        if (!new_fields) return ESP_ERR_NO_MEM;
+        if (!new_fields) {
+            xSemaphoreGive(store->mutex);
+            return ESP_ERR_NO_MEM;
+        }
         store->fields = new_fields;
         store->capacity = new_cap;
     }
     store->fields[store->count] = *field;
     store->fields[store->count].value = NULL;
     store->count++;
+    xSemaphoreGive(store->mutex);
     return ESP_OK;
 }
 
 prsl_field_t *prsl_store_find(prsl_store_t *store, const char *group_id, const char *key) {
     if (!store || !group_id || !key) return NULL;
+    xSemaphoreTake(store->mutex, portMAX_DELAY);
     for (int i = 0; i < store->count; i++) {
         if (strcmp(store->fields[i].group_id, group_id) == 0 &&
             strcmp(store->fields[i].key, key) == 0) {
+            xSemaphoreGive(store->mutex);
             return &store->fields[i];
         }
     }
+    xSemaphoreGive(store->mutex);
     return NULL;
 }
 
@@ -70,8 +88,21 @@ static bool is_number_type(prsl_type_t t) {
 esp_err_t prsl_store_set_value(prsl_store_t *store, const char *group_id,
                                 const char *key, const char *value_str) {
     if (!store || !group_id || !key) return ESP_ERR_INVALID_ARG;
-    prsl_field_t *f = prsl_store_find(store, group_id, key);
-    if (!f) return ESP_ERR_NOT_FOUND;
+    xSemaphoreTake(store->mutex, portMAX_DELAY);
+
+    /* Inline find to avoid re-entrant mutex in prsl_store_find */
+    prsl_field_t *f = NULL;
+    for (int i = 0; i < store->count; i++) {
+        if (strcmp(store->fields[i].group_id, group_id) == 0 &&
+            strcmp(store->fields[i].key, key) == 0) {
+            f = &store->fields[i];
+            break;
+        }
+    }
+    if (!f) {
+        xSemaphoreGive(store->mutex);
+        return ESP_ERR_NOT_FOUND;
+    }
 
     cJSON_Delete(f->value);
     f->value = NULL;
@@ -100,13 +131,25 @@ esp_err_t prsl_store_set_value(prsl_store_t *store, const char *group_id,
             store->dirty = true;
         }
     }
+    xSemaphoreGive(store->mutex);
     return ESP_OK;
 }
 
 cJSON *prsl_store_get_value(prsl_store_t *store, const char *group_id, const char *key) {
-    prsl_field_t *f = prsl_store_find(store, group_id, key);
-    if (!f) return NULL;
-    return f->value;
+    if (!store || !group_id || !key) return NULL;
+    xSemaphoreTake(store->mutex, portMAX_DELAY);
+    /* Inline find to avoid re-entrant mutex */
+    prsl_field_t *f = NULL;
+    for (int i = 0; i < store->count; i++) {
+        if (strcmp(store->fields[i].group_id, group_id) == 0 &&
+            strcmp(store->fields[i].key, key) == 0) {
+            f = &store->fields[i];
+            break;
+        }
+    }
+    cJSON *v = f ? f->value : NULL;
+    xSemaphoreGive(store->mutex);
+    return v;
 }
 
 bool prsl_store_is_dirty(prsl_store_t *store) {
@@ -142,24 +185,36 @@ void prsl_store_check_dirty(prsl_store_t *store) {
 
 esp_err_t prsl_store_add_group(prsl_store_t *store, const char *group_id, const char *label) {
     if (!store || !group_id) return ESP_ERR_INVALID_ARG;
+    xSemaphoreTake(store->mutex, portMAX_DELAY);
     for (int i = 0; i < store->group_count; i++) {
         if (strcmp(store->groups[i].group_id, group_id) == 0) {
-            if (!label && !store->groups[i].label) return ESP_OK;
+            if (!label && !store->groups[i].label) {
+                xSemaphoreGive(store->mutex);
+                return ESP_OK;
+            }
             if (label && store->groups[i].label
-                && strcmp(store->groups[i].label, label) == 0) return ESP_OK;
+                && strcmp(store->groups[i].label, label) == 0) {
+                xSemaphoreGive(store->mutex);
+                return ESP_OK;
+            }
+            xSemaphoreGive(store->mutex);
             return ESP_ERR_INVALID_STATE;
         }
     }
     if (store->group_count >= store->group_capacity) {
         int new_cap = store->group_capacity * 2;
         prsl_group_meta_t *new_groups = realloc(store->groups, new_cap * sizeof(prsl_group_meta_t));
-        if (!new_groups) return ESP_ERR_NO_MEM;
+        if (!new_groups) {
+            xSemaphoreGive(store->mutex);
+            return ESP_ERR_NO_MEM;
+        }
         store->groups = new_groups;
         store->group_capacity = new_cap;
     }
     store->groups[store->group_count].group_id = group_id;
     store->groups[store->group_count].label = label;
     store->group_count++;
+    xSemaphoreGive(store->mutex);
     return ESP_OK;
 }
 
@@ -182,27 +237,39 @@ const char *prsl_store_get_label(prsl_store_t *store, const char *group_id) {
 
 esp_err_t prsl_store_load_values(prsl_store_t *store) {
     if (!store) return ESP_ERR_INVALID_ARG;
+    xSemaphoreTake(store->mutex, portMAX_DELAY);
     for (int i = 0; i < store->count; i++) {
         prsl_field_t *f = &store->fields[i];
         if (!f->on_get) continue;
         const char *val = f->on_get();
-        prsl_store_set_value(store, f->group_id, f->key, val);
+        cJSON_Delete(f->value);
+        f->value = NULL;
+        if (!val) {
+            f->value = cJSON_CreateNull();
+        } else {
+            f->value = cJSON_CreateString(val);
+        }
     }
     store->dirty = false;
+    xSemaphoreGive(store->mutex);
     return ESP_OK;
 }
 
 esp_err_t prsl_store_reset_values(prsl_store_t *store) {
     if (!store) return ESP_ERR_INVALID_ARG;
+    xSemaphoreTake(store->mutex, portMAX_DELAY);
     for (int i = 0; i < store->count; i++) {
         prsl_field_t *f = &store->fields[i];
-        if (!f->on_get) {
-            prsl_store_set_value(store, f->group_id, f->key, NULL);
-            continue;
+        const char *val = f->on_get ? f->on_get() : NULL;
+        cJSON_Delete(f->value);
+        f->value = NULL;
+        if (!val) {
+            f->value = cJSON_CreateNull();
+        } else {
+            f->value = cJSON_CreateString(val);
         }
-        const char *val = f->on_get();
-        prsl_store_set_value(store, f->group_id, f->key, val);
     }
     store->dirty = false;
+    xSemaphoreGive(store->mutex);
     return ESP_OK;
 }

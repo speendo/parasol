@@ -4,6 +4,12 @@
 #include "esp_err.h"
 #include "cJSON.h"
 #include "prsl.h"
+#ifndef HOST_TEST
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+#else
+#include "freertos_stub.h"
+#endif
 
 #define PRSL_MAX_PATH 128
 
@@ -36,6 +42,7 @@ typedef struct {
     int group_count;
     int group_capacity;
     prsl_is_dirty_cb_t is_dirty_hook;
+    SemaphoreHandle_t mutex;
 } prsl_store_t;
 
 #ifdef __cplusplus
