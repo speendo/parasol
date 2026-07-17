@@ -54,24 +54,6 @@ prsl_field_t *prsl_store_find(prsl_store_t *store, const char *group_id, const c
     return NULL;
 }
 
-int prsl_store_settings_count(prsl_store_t *store) {
-    if (!store) return 0;
-    int n = 0;
-    for (int i = 0; i < store->count; i++) {
-        if (!store->fields[i].is_status) n++;
-    }
-    return n;
-}
-
-int prsl_store_status_count(prsl_store_t *store) {
-    if (!store) return 0;
-    int n = 0;
-    for (int i = 0; i < store->count; i++) {
-        if (store->fields[i].is_status) n++;
-    }
-    return n;
-}
-
 prsl_field_t *prsl_store_field_at(prsl_store_t *store, int i) {
     if (!store || i < 0 || i >= store->count) return NULL;
     return &store->fields[i];

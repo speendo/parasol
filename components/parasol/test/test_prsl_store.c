@@ -188,17 +188,6 @@ void test_get_value_unknown(void) {
     TEST_ASSERT_NULL(v);
 }
 
-void test_settings_status_counts(void) {
-    prsl_store_add_group(&store, "wifi", "WiFi");
-    prsl_store_add_group(&store, "sys", "System");
-    prsl_field_t fs = make_field("wifi", "ssid", PRSL_TEXT, false);
-    prsl_field_t fst = make_field("sys", "uptime", PRSL_TEXT, true);
-    prsl_store_add_field(&store, &fs);
-    prsl_store_add_field(&store, &fst);
-    TEST_ASSERT_EQUAL(1, prsl_store_settings_count(&store));
-    TEST_ASSERT_EQUAL(1, prsl_store_status_count(&store));
-}
-
 void test_dirty_hook_true_marks_dirty(void) {
     prsl_store_set_dirty_hook(&store, dirty_hook_true);
     g_dirty_hook_result = true;
@@ -374,7 +363,6 @@ int main(void) {
     RUN_TEST(test_set_value_unknown_field);
     RUN_TEST(test_set_value_overwrite);
     RUN_TEST(test_get_value_unknown);
-    RUN_TEST(test_settings_status_counts);
     RUN_TEST(test_dirty_hook_true_marks_dirty);
     RUN_TEST(test_dirty_hook_false_keeps_clean);
     RUN_TEST(test_status_field_no_dirty);
