@@ -42,10 +42,10 @@ window.WebSocket.prototype.close = function () {
 const code = readFileSync(resolve(__dirname, '../app.js'), 'utf-8')
 ;(0, eval)(code)
 
-// Backward-compat: expose parasol module on window for existing tests
+// Expose module exports on window for test access
 if (typeof parasol !== 'undefined') {
   Object.keys(parasol).forEach(function (k) {
-    if (k !== '__test') window[k] = parasol[k];
+    window[k] = parasol[k];
   });
-  window.__test = parasol.__test;
 }
+// __test is set up by app.js's dev guard — no additional injection needed

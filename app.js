@@ -969,6 +969,20 @@ var parasol = (function () {
     if (describedEl) describedEl.setAttribute('aria-describedby', helper.id);
     container.appendChild(helper);
   }
+
+  /* test hooks — set up window.__test for unit test access (stripped in production build) */
+  if (typeof __DEV__ === 'undefined' || __DEV__) {
+    window.__test = {};
+    Object.defineProperty(window.__test, 'groups', { get: function () { return groups; }, set: function (v) { groups = v; }, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'dirty', { get: function () { return dirty; }, set: function (v) { dirty = v; }, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'inFlight', { get: function () { return inFlight; }, set: function (v) { inFlight = v; }, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'lastSent', { get: function () { return lastSent; }, set: function (v) { lastSent = v; }, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'formInteracted', { get: function () { return formInteracted; }, set: function (v) { formInteracted = v; }, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'statusGroups', { get: function () { return statusGroups; }, set: function (v) { statusGroups = v; }, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'receiveWSMessage', { get: function () { return onWSMessage; }, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'wsReady', { get: function () { return function () { if (ws) ws.readyState = 1; }; }, enumerable: true, configurable: true });
+  }
+
   return {
     init: init,
     serialize: serialize,
@@ -1007,21 +1021,5 @@ var parasol = (function () {
     showConflictPrompt: showConflictPrompt,
     hideNotification: hideNotification,
     processStatus: processStatus,
-    __test: {
-      get groups() { return groups; },
-      set groups(v) { groups = v; },
-      get dirty() { return dirty; },
-      set dirty(v) { dirty = v; },
-      get lastSent() { return lastSent; },
-      set lastSent(v) { lastSent = v; },
-      get inFlight() { return inFlight; },
-      set inFlight(v) { inFlight = v; },
-      get formInteracted() { return formInteracted; },
-      set formInteracted(v) { formInteracted = v; },
-      get statusGroups() { return statusGroups; },
-      set statusGroups(v) { statusGroups = v; },
-      get receiveWSMessage() { return onWSMessage; },
-      get wsReady() { return function () { if (ws) ws.readyState = 1; }; }
-    }
   };
 })();
