@@ -36,8 +36,13 @@ typedef esp_err_t (*prsl_set_cb_t)(const char *group_id, const char *key,
                                     const char *value);
 
 /** @brief A single path/value pair passed to the save callback.
- *  @var path   "group_id.key" — points into a heap buffer (valid during callback).
- *  @var value  Pointer into store's cJSON tree (stable during callback). */
+ *  @var path   "group_id.key" — heap-allocated, caller must free after callback.
+ *  @var value  String representation of the field's value. For all field types
+ *              (text, number, checkbox, switch, range, select, radio, etc.),
+ *              the save callback always receives a string. Checkbox/switch values
+ *              are "true"/"false", numbers are stringified (e.g., "6", "2.5"),
+ *              text fields are the raw text. Developers are responsible for
+ *              converting back to their expected type (atoi, strcmp, etc.). */
 typedef struct {
     const char *path;
     const char *value;
@@ -46,7 +51,8 @@ typedef struct {
 /** @brief Called once per batch after on_set callbacks return ESP_OK.
  *  May be called multiple times per HTTP save request if the store has more
  *  fields than PRSL_SAVE_MAX_FIELDS (see parasol_config.json).
- *  @param pairs  Array of prsl_save_pair_t structures.
+ *  @param pairs  Array of prsl_save_pair_t structures. Every pair.value is a
+ *                string (including for boolean and numeric field types).
  *  @param count  Number of pairs in this batch.
  *  Use for single-cycle NVS persistence (one open/write/commit per batch). */
 typedef void (*prsl_save_cb_t)(const prsl_save_pair_t *pairs, int count);

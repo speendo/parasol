@@ -172,6 +172,10 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save) {
                         if (ae != ESP_OK) {
                             char err[128];
                             snprintf(err, sizeof(err), "on_set rejected %s.%s", group->string, field->string);
+                            for (int i = 0; i < pair_count; i++) {
+                                free((void *)all_pairs[i].path);
+                                free((void *)all_pairs[i].value);
+                            }
                             free(all_pairs);
                             cJSON_Delete(msg);
                             req->send(400, "text/plain", err);
@@ -182,14 +186,23 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save) {
                         prsl_store_set_value(&g_store, group->string, field->string, val_str);
                         if (all_pairs) {
                             cJSON *sv = prsl_store_get_value(&g_store, group->string, field->string);
-                            if (sv && cJSON_IsString(sv)) {
-                                size_t plen = snprintf(NULL, 0, "%s.%s", group->string, field->string);
-                                char *path = (char *)malloc(plen + 1);
-                                if (path) {
-                                    snprintf(path, plen + 1, "%s.%s", group->string, field->string);
-                                    all_pairs[pair_count].path = path;
-                                    all_pairs[pair_count].value = cJSON_GetStringValue(sv);
-                                    pair_count++;
+                            if (sv && !cJSON_IsNull(sv)) {
+                                char val_buf2[64];
+                                const char *vstr = prsl_json_value_str(sv, val_buf2, sizeof(val_buf2));
+                                if (vstr) {
+                                    char *dupval = strdup(vstr);
+                                    if (dupval) {
+                                        size_t plen = snprintf(NULL, 0, "%s.%s", group->string, field->string);
+                                        char *path = (char *)malloc(plen + 1);
+                                        if (path) {
+                                            snprintf(path, plen + 1, "%s.%s", group->string, field->string);
+                                            all_pairs[pair_count].path = path;
+                                            all_pairs[pair_count].value = dupval;
+                                            pair_count++;
+                                        } else {
+                                            free(dupval);
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -215,6 +228,7 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save) {
 
                 for (int i = 0; i < pair_count; i++) {
                     free((void *)all_pairs[i].path);
+                    free((void *)all_pairs[i].value);
                 }
                 free(all_pairs);
             } else if (all_pairs) {
