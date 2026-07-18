@@ -77,10 +77,10 @@ esp_err_t prsl_add_field_opts(prsl_type_t type, const char *group_id, const char
     return prsl_store_add_field(&g_store, &f);
 }
 
-/* ── Dirty check ────────────────────────────────────────────── */
+/* ── Dirty ─────────────────────────────────────────────────── */
 
-void prsl_set_dirty_check(prsl_is_dirty_cb_t is_dirty) {
-    prsl_store_set_dirty_hook(&g_store, is_dirty);
+void prsl_set_dirty(bool dirty) {
+    prsl_store_set_dirty(&g_store, dirty);
 }
 
 bool prsl_is_dirty(void) {

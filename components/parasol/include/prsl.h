@@ -57,12 +57,6 @@ typedef struct {
  *  Use for single-cycle NVS persistence (one open/write/commit per batch). */
 typedef void (*prsl_save_cb_t)(const prsl_save_pair_t *pairs, int count);
 
-/** @brief Developer hook: compare current value against persisted storage.
- *  @return true if current_value differs from NVS/EEPROM (dirty),
- *          false if they match (clean). */
-typedef bool (*prsl_is_dirty_cb_t)(const char *group_id, const char *key,
-                                    const char *current_value);
-
 /** @brief Per-field options. All fields are required; pass NULL to opt out.
  *  @var is_status false by default (via designated initializer). true = read-only status field.
  *  @var on_get    NULL = type-dependent (checkbox→indeterminate, else empty).
@@ -97,11 +91,11 @@ esp_err_t prsl_add_field_opts(prsl_type_t type, const char *group_id, const char
                               const char *options[][2], int option_count,
                               const prsl_field_opts_t *opts);
 
-/* ── Dirty check ───────────────────────────────────────────── */
+/* ── Dirty ─────────────────────────────────────────────────── */
 
-/** @brief Register a dirty check hook. Call before prsl_init.
- *  @param is_dirty NULL = any change is dirty (legacy behavior). */
-void prsl_set_dirty_check(prsl_is_dirty_cb_t is_dirty);
+/** @brief Developer-driven dirty flag. Set true when AV diverges
+ *  from saved values. Parasol clears it after successful on_save. */
+void prsl_set_dirty(bool dirty);
 
 /** @brief Query whether any unsaved changes exist. */
 bool prsl_is_dirty(void);

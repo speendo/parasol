@@ -117,20 +117,6 @@ esp_err_t prsl_store_set_value(prsl_store_t *store, const char *group_id,
     } else {
         f->value = cJSON_CreateString(value_str);
     }
-
-    if (!f->is_status) {
-        if (store->is_dirty_hook) {
-            char path[PRSL_MAX_PATH];
-            snprintf(path, sizeof(path), "%s.%s", group_id, key);
-            const char *cv = (f->value && cJSON_IsString(f->value))
-                ? cJSON_GetStringValue(f->value) : NULL;
-            if (store->is_dirty_hook(group_id, key, cv)) {
-                store->dirty = true;
-            }
-        } else {
-            store->dirty = true;
-        }
-    }
     xSemaphoreGive(store->mutex);
     return ESP_OK;
 }
@@ -162,25 +148,6 @@ void prsl_store_set_dirty(prsl_store_t *store, bool d) {
 
 void prsl_store_clear_dirty(prsl_store_t *store) {
     if (store) store->dirty = false;
-}
-
-void prsl_store_set_dirty_hook(prsl_store_t *store, prsl_is_dirty_cb_t hook) {
-    if (store) store->is_dirty_hook = hook;
-}
-
-void prsl_store_check_dirty(prsl_store_t *store) {
-    if (!store || !store->is_dirty_hook) return;
-    store->dirty = false;
-    for (int i = 0; i < store->count; i++) {
-        prsl_field_t *f = &store->fields[i];
-        if (f->is_status) continue;
-        const char *cv = (f->value && cJSON_IsString(f->value))
-            ? cJSON_GetStringValue(f->value) : NULL;
-        if (store->is_dirty_hook(f->group_id, f->key, cv)) {
-            store->dirty = true;
-            break;
-        }
-    }
 }
 
 esp_err_t prsl_store_add_group(prsl_store_t *store, const char *group_id, const char *label) {

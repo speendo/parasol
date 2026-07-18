@@ -6,18 +6,6 @@
 
 static prsl_store_t store;
 
-static bool g_dirty_hook_result;
-
-static bool dirty_hook_true(const char *group_id, const char *key, const char *current_value) {
-    (void)group_id; (void)key; (void)current_value;
-    return g_dirty_hook_result;
-}
-
-static bool dirty_hook_false(const char *group_id, const char *key, const char *current_value) {
-    (void)group_id; (void)key; (void)current_value;
-    return g_dirty_hook_result;
-}
-
 static const char *get_persisted_val(void) {
     return "persisted";
 }
@@ -44,7 +32,6 @@ static prsl_field_t make_field(const char *group, const char *k, prsl_type_t t, 
 
 void setUp(void) {
     TEST_ASSERT_EQUAL(ESP_OK, prsl_store_init(&store));
-    g_dirty_hook_result = true;
 }
 
 void tearDown(void) {
@@ -188,73 +175,6 @@ void test_get_value_unknown(void) {
     TEST_ASSERT_NULL(v);
 }
 
-void test_dirty_hook_true_marks_dirty(void) {
-    prsl_store_set_dirty_hook(&store, dirty_hook_true);
-    g_dirty_hook_result = true;
-    prsl_store_add_group(&store, "wifi", "WiFi");
-    prsl_field_t f = make_field("wifi", "ssid", PRSL_TEXT, false);
-    prsl_store_add_field(&store, &f);
-    prsl_store_clear_dirty(&store);
-    TEST_ASSERT_FALSE(prsl_store_is_dirty(&store));
-    prsl_store_set_value(&store, "wifi", "ssid", "new");
-    TEST_ASSERT_TRUE(prsl_store_is_dirty(&store));
-}
-
-void test_dirty_hook_false_keeps_clean(void) {
-    prsl_store_set_dirty_hook(&store, dirty_hook_false);
-    g_dirty_hook_result = false;
-    prsl_store_add_group(&store, "wifi", "WiFi");
-    prsl_field_t f = make_field("wifi", "ssid", PRSL_TEXT, false);
-    prsl_store_add_field(&store, &f);
-    prsl_store_clear_dirty(&store);
-    prsl_store_set_value(&store, "wifi", "ssid", "new");
-    TEST_ASSERT_FALSE(prsl_store_is_dirty(&store));
-}
-
-void test_status_field_no_dirty(void) {
-    prsl_store_add_group(&store, "sys", "System");
-    prsl_field_t f = make_field("sys", "uptime", PRSL_TEXT, true);
-    prsl_store_add_field(&store, &f);
-    prsl_store_set_value(&store, "sys", "uptime", "3h");
-    TEST_ASSERT_FALSE(prsl_store_is_dirty(&store));
-}
-
-void test_check_dirty_re_evaluates(void) {
-    prsl_store_set_dirty_hook(&store, dirty_hook_true);
-    prsl_store_add_group(&store, "wifi", "WiFi");
-    prsl_field_t f = make_field("wifi", "ssid", PRSL_TEXT, false);
-    prsl_store_add_field(&store, &f);
-    prsl_store_clear_dirty(&store);
-    g_dirty_hook_result = false;
-    prsl_store_set_value(&store, "wifi", "ssid", "new");
-    TEST_ASSERT_FALSE(prsl_store_is_dirty(&store));
-    g_dirty_hook_result = true;
-    prsl_store_check_dirty(&store);
-    TEST_ASSERT_TRUE(prsl_store_is_dirty(&store));
-}
-
-void test_clear_dirty_resets(void) {
-    prsl_store_set_dirty_hook(&store, dirty_hook_true);
-    g_dirty_hook_result = true;
-    prsl_store_add_group(&store, "wifi", "WiFi");
-    prsl_field_t f = make_field("wifi", "ssid", PRSL_TEXT, false);
-    prsl_store_add_field(&store, &f);
-    prsl_store_set_value(&store, "wifi", "ssid", "new");
-    TEST_ASSERT_TRUE(prsl_store_is_dirty(&store));
-    prsl_store_clear_dirty(&store);
-    TEST_ASSERT_FALSE(prsl_store_is_dirty(&store));
-}
-
-void test_legacy_null_hook_marks_dirty(void) {
-    prsl_store_set_dirty_hook(&store, NULL);
-    prsl_store_add_group(&store, "wifi", "WiFi");
-    prsl_field_t f = make_field("wifi", "ssid", PRSL_TEXT, false);
-    prsl_store_add_field(&store, &f);
-    prsl_store_clear_dirty(&store);
-    prsl_store_set_value(&store, "wifi", "ssid", "new");
-    TEST_ASSERT_TRUE(prsl_store_is_dirty(&store));
-}
-
 void test_load_values_calls_on_get(void) {
     prsl_store_add_group(&store, "wifi", "WiFi");
     prsl_field_t f = make_field("wifi", "ssid", PRSL_TEXT, false);
@@ -340,6 +260,48 @@ void test_set_dirty_direct(void) {
     TEST_ASSERT_FALSE(prsl_store_is_dirty(&store));
 }
 
+void test_prsl_set_dirty_sets_flag(void) {
+    prsl_store_t s;
+    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_init(&s));
+    TEST_ASSERT_FALSE(prsl_store_is_dirty(&s));
+    prsl_store_set_dirty(&s, true);
+    TEST_ASSERT_TRUE(prsl_store_is_dirty(&s));
+    prsl_store_set_dirty(&s, false);
+    TEST_ASSERT_FALSE(prsl_store_is_dirty(&s));
+    prsl_store_deinit(&s);
+}
+
+void test_prsl_store_set_value_does_not_set_dirty(void) {
+    prsl_store_t s;
+    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_init(&s));
+    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_add_group(&s, "g", NULL));
+    prsl_field_t f = { .group_id = "g", .key = "k", .label = "L", .type = PRSL_TEXT,
+                       .is_status = false, .help = "", .attrs = "" };
+    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_add_field(&s, &f));
+    TEST_ASSERT_FALSE(prsl_store_is_dirty(&s));
+    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_set_value(&s, "g", "k", "hello"));
+    TEST_ASSERT_FALSE(prsl_store_is_dirty(&s));
+    prsl_store_deinit(&s);
+}
+
+void test_recursive_mutex_allows_reentry(void) {
+    prsl_store_t s;
+    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_init(&s));
+    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_add_group(&s, "g", NULL));
+    prsl_field_t f = { .group_id = "g", .key = "k", .label = "L", .type = PRSL_TEXT,
+                       .is_status = false, .help = "", .attrs = "" };
+    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_add_field(&s, &f));
+
+    xSemaphoreTakeRecursive(s.mutex, portMAX_DELAY);
+    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_set_value(&s, "g", "k", "v"));
+    xSemaphoreGiveRecursive(s.mutex);
+
+    cJSON *v = prsl_store_get_value(&s, "g", "k");
+    TEST_ASSERT_TRUE(v && cJSON_IsString(v) && strcmp(cJSON_GetStringValue(v), "v") == 0);
+    xSemaphoreGiveRecursive(s.mutex);
+    prsl_store_deinit(&s);
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_init_deinit);
@@ -363,12 +325,6 @@ int main(void) {
     RUN_TEST(test_set_value_unknown_field);
     RUN_TEST(test_set_value_overwrite);
     RUN_TEST(test_get_value_unknown);
-    RUN_TEST(test_dirty_hook_true_marks_dirty);
-    RUN_TEST(test_dirty_hook_false_keeps_clean);
-    RUN_TEST(test_status_field_no_dirty);
-    RUN_TEST(test_check_dirty_re_evaluates);
-    RUN_TEST(test_clear_dirty_resets);
-    RUN_TEST(test_legacy_null_hook_marks_dirty);
     RUN_TEST(test_load_values_calls_on_get);
     RUN_TEST(test_reset_values_calls_on_get);
     RUN_TEST(test_reset_values_no_on_get_sets_null);
@@ -379,5 +335,8 @@ int main(void) {
     RUN_TEST(test_field_at_bounds);
     RUN_TEST(test_capacity_growth_fields);
     RUN_TEST(test_set_dirty_direct);
+    RUN_TEST(test_prsl_set_dirty_sets_flag);
+    RUN_TEST(test_prsl_store_set_value_does_not_set_dirty);
+    RUN_TEST(test_recursive_mutex_allows_reentry);
     return UNITY_END();
 }

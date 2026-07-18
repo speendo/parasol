@@ -41,7 +41,6 @@ typedef struct {
     prsl_group_meta_t *groups;
     int group_count;
     int group_capacity;
-    prsl_is_dirty_cb_t is_dirty_hook;
     SemaphoreHandle_t mutex;
 } prsl_store_t;
 
@@ -61,8 +60,6 @@ cJSON *prsl_store_get_value(prsl_store_t *store, const char *group_id, const cha
 bool prsl_store_is_dirty(prsl_store_t *store);
 void prsl_store_set_dirty(prsl_store_t *store, bool d);
 void prsl_store_clear_dirty(prsl_store_t *store);
-void prsl_store_set_dirty_hook(prsl_store_t *store, prsl_is_dirty_cb_t hook);
-void prsl_store_check_dirty(prsl_store_t *store);
 prsl_field_t *prsl_store_field_at(prsl_store_t *store, int i);
 /** @brief Call on_get on every registered field to populate initial values. */
 esp_err_t prsl_store_load_values(prsl_store_t *store);
