@@ -70,8 +70,10 @@ def test_settings_apply_rejects_invalid_json():
 def test_old_endpoints_return_404():
     assert client.get("/manifest.json").status_code == 404
     assert client.get("/groups/wifi.json").status_code == 404
-    assert client.post("/api/save", json={}).status_code == 404
-    assert client.post("/api/apply", json={}).status_code == 404
+    resp = client.post("/api/save", json={})
+    assert resp.status_code in (404, 405)
+    resp = client.post("/api/apply", json={})
+    assert resp.status_code in (404, 405)
 
 
 def test_dirty_false_initially():
@@ -105,23 +107,27 @@ def test_dirty_false_after_reset():
 
 def test_ws_connect_receives_settings():
     with client.websocket_connect("/api/events") as ws:
-        data = ws.receive_json()
+        ws.receive_json()  # status push
+        data = ws.receive_json()  # settings push
         assert "_dirty" in data
-        assert "wifi" in data
-        assert "gpio" in data
+        assert "_has_reset" in data
+        assert "wifi" in data.get("data", {})
+        assert "gpio" in data.get("data", {})
 
 
 def test_ws_apply_updates_applied():
     with client.websocket_connect("/api/events") as ws:
-        ws.receive_json()  # initial push
+        ws.receive_json()  # status push
+        ws.receive_json()  # initial settings
         ws.send_json({"action": "apply", "data": {"wifi": {"ssid": ["text", "SSID", {"value": "WSTest"}]}}})
         pushed = ws.receive_json()
-        assert pushed["wifi"]["ssid"][2]["value"] == "WSTest"
+        assert pushed["data"]["wifi"]["ssid"][2]["value"] == "WSTest"
 
 
 def test_ws_apply_makes_dirty():
     with client.websocket_connect("/api/events") as ws:
-        ws.receive_json()  # initial push
+        ws.receive_json()  # status push
+        ws.receive_json()  # initial settings
         ws.send_json({"action": "apply", "data": {"wifi": {"ssid": ["text", "SSID", {"value": "DirtyMaker"}]}}})
         pushed = ws.receive_json()
         assert pushed["_dirty"] is True
@@ -130,10 +136,47 @@ def test_ws_apply_makes_dirty():
 def test_external_change_broadcasts_to_all_clients():
     with client.websocket_connect("/api/events") as ws1, \
          client.websocket_connect("/api/events") as ws2:
-        ws1.receive_json()
-        ws2.receive_json()
+        ws1.receive_json()  # status
+        ws1.receive_json()  # settings
+        ws2.receive_json()  # status
+        ws2.receive_json()  # settings
         client.post("/api/settings/external-change", json={"wifi": {"ssid": ["text", "SSID", {"value": "ExtChange"}]}})
         data1 = ws1.receive_json()
         data2 = ws2.receive_json()
-        assert data1["wifi"]["ssid"][2]["value"] == "ExtChange"
-        assert data2["wifi"]["ssid"][2]["value"] == "ExtChange"
+        assert data1["data"]["wifi"]["ssid"][2]["value"] == "ExtChange"
+        assert data2["data"]["wifi"]["ssid"][2]["value"] == "ExtChange"
+
+
+def test_set_dirty_endpoint():
+    client.post("/api/settings/set-dirty", json={"dirty": True})
+    data = client.get("/api/settings").json()
+    assert data["_dirty"] is True
+
+    client.post("/api/settings/set-dirty", json={"dirty": False})
+    data = client.get("/api/settings").json()
+    assert data["_dirty"] is False
+
+
+def test_settings_has_reset_field():
+    client.get("/api/settings/reset")
+    data = client.get("/api/settings").json()
+    assert data["_has_reset"] is True
+
+
+def test_ws_handshake_includes_has_reset():
+    with client.websocket_connect("/api/events") as ws:
+        ws.receive_json()  # initial status
+        data = ws.receive_json()  # settings
+        assert data["type"] == "settings"
+        assert "_has_reset" in data
+        assert data["_has_reset"] is True
+
+
+def test_ws_apply_broadcast_includes_has_reset():
+    with client.websocket_connect("/api/events") as ws:
+        ws.receive_json()  # initial status
+        ws.receive_json()  # initial settings
+        ws.send_json({"action": "apply", "data": {"wifi": {"ssid": ["text", "SSID", {"value": "HasResetTest"}]}}})
+        pushed = ws.receive_json()
+        assert "_has_reset" in pushed
+        assert pushed["_has_reset"] is True

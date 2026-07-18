@@ -76,6 +76,8 @@ applied_store: dict[str, object] = {}
 status_store: dict[str, object] = {}
 start_time = time.time()
 connected: set[WebSocket] = set()
+_dirty: bool = False
+_has_reset: bool = True
 
 
 @app.on_event("startup")
@@ -103,7 +105,8 @@ async def startup():
 
 def build_settings():
     result = {}
-    result["_dirty"] = nvs_store != applied_store
+    result["_dirty"] = _dirty
+    result["_has_reset"] = _has_reset
     for group_id, fields in SETTINGS.items():
         group = {}
         for key, field_def in fields.items():
@@ -164,6 +167,11 @@ async def status_broadcaster():
 
 
 
+@app.get("/api/settings")
+async def api_get_settings():
+    return build_settings()
+
+
 @app.post("/api/settings/save")
 async def api_settings_save(request: Request):
     try:
@@ -183,6 +191,8 @@ async def api_settings_save(request: Request):
                 store_key = group_id + "." + key
                 nvs_store[store_key] = opts["value"]
                 applied_store[store_key] = opts["value"]
+    global _dirty
+    _dirty = False
     return {}
 
 
@@ -191,9 +201,10 @@ async def api_settings_save(request: Request):
 async def events_ws(ws: WebSocket):
     await ws.accept()
     connected.add(ws)
+    global _dirty
     try:
         await ws.send_json({"type": "status", "data": build_status()})
-        await ws.send_json({"type": "settings", "_dirty": nvs_store != applied_store, "data": build_settings()})
+        await ws.send_json({"type": "settings", "_dirty": _dirty, "_has_reset": _has_reset, "data": build_settings()})
         while True:
             raw = await ws.receive_text()
             msg = json.loads(raw)
@@ -206,10 +217,11 @@ async def events_ws(ws: WebSocket):
                         _, _, opts = schema_entry
                         store_key = group_key + "." + field_key
                         applied_store[store_key] = field_arr[2]["value"]
+                _dirty = True
                 payload = build_settings()
                 for client in list(connected):
                     try:
-                        await client.send_json({"type": "settings", "_dirty": nvs_store != applied_store, "data": payload})
+                        await client.send_json({"type": "settings", "_dirty": _dirty, "_has_reset": _has_reset, "data": payload})
                     except Exception:
                         connected.discard(client)
     except WebSocketDisconnect:
@@ -232,9 +244,16 @@ async def external_change(body: dict):
     payload = build_settings()
     for client in list(connected):
         try:
-            await client.send_json({"type": "settings", "_dirty": nvs_store != applied_store, "data": payload})
+            await client.send_json({"type": "settings", "_dirty": _dirty, "_has_reset": _has_reset, "data": payload})
         except Exception:
             connected.discard(client)
+    return {"ok": True}
+
+
+@app.post("/api/settings/set-dirty")
+async def api_set_dirty(body: dict):
+    global _dirty
+    _dirty = body.get("dirty", True)
     return {"ok": True}
 
 
@@ -271,11 +290,14 @@ async def api_settings_apply(request: Request):
                 continue
             store_key = group_key + "." + field_key
             applied_store[store_key] = field_arr[2].get("value", "")
+    global _dirty
+    _dirty = True
     return {}
 
 
 @app.api_route("/api/settings/reset", methods=["GET", "POST"])
 async def api_settings_reset():
+    global _dirty
     nvs_store.clear()
     applied_store.clear()
     for group_id, fields in SETTINGS.items():
@@ -287,6 +309,7 @@ async def api_settings_reset():
             store_key = group_id + "." + key
             nvs_store[store_key] = val
             applied_store[store_key] = val
+    _dirty = False
     return {}
 
 
