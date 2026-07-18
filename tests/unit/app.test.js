@@ -168,8 +168,9 @@ describe('updateUI', () => {
     expect(document.getElementById('btn-save-apply').hidden).toBe(true)
   })
 
-  it('btn-reset does not exist in DOM', () => {
-    expect(document.getElementById('btn-reset')).toBeNull()
+  it('btn-reset exists in DOM and is hidden by default', () => {
+    expect(document.getElementById('btn-reset')).not.toBeNull()
+    expect(document.getElementById('btn-reset').hidden).toBe(true)
   })
 })
 

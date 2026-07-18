@@ -6,6 +6,7 @@ var parasol = (function () {
   var statusBar = document.getElementById('status-bar');
   var footer = document.querySelector('footer');
   var btnSaveApply = document.getElementById('btn-save-apply');
+  var btnReset = document.getElementById('btn-reset');
 
   var baseline = null;
   var groups = [];
@@ -348,6 +349,9 @@ var parasol = (function () {
 
     if (echoMatched) {
       dirty = msg._dirty;
+      if (msg._has_reset !== undefined) {
+        btnReset.hidden = !msg._has_reset;
+      }
       var queuedKeys = [];
       for (var key in inFlight) {
         if (inFlight[key]) continue;
@@ -374,6 +378,9 @@ var parasol = (function () {
     if (hasInFlight && configForm.getAttribute('aria-busy') !== 'true') return;
     if (hasInFlight) {
       dirty = msg._dirty;
+      if (msg._has_reset !== undefined) {
+        btnReset.hidden = !msg._has_reset;
+      }
       updateAV(data);
       for (var sk in inFlight) { inFlight[sk] = false; }
       for (var sk in lastSent) { lastSent[sk] = undefined; }
@@ -396,6 +403,9 @@ var parasol = (function () {
     }
 
     dirty = msg._dirty;
+    if (msg._has_reset !== undefined) {
+      btnReset.hidden = !msg._has_reset;
+    }
 
     // Initial load — no groups yet, process settings directly
     if (groups.length === 0) {
@@ -769,9 +779,18 @@ var parasol = (function () {
     }
   }
 
-  /** Wire up button click handlers (Save, notification bar actions). */
+  /** Wire up button click handlers (Save, Reset, notification bar actions). */
   function wireButtons() {
     btnSaveApply.addEventListener('click', handleSaveApply);
+    btnReset.addEventListener('click', function () {
+      postJSON('/api/settings/reset', {}).then(function (ok) {
+        if (ok) {
+          syncLS();
+          setBaseline();
+          updateUI();
+        }
+      });
+    });
     document.getElementById('notif-load').addEventListener('click', function () {
       hideNotification();
       applyAV();
@@ -811,7 +830,7 @@ var parasol = (function () {
    * Bound to DOMContentLoaded.
    */
   async function init() {
-    if (!configForm || !navList || !statusBar || !footer || !btnSaveApply) return;
+    if (!configForm || !navList || !statusBar || !footer || !btnSaveApply || !btnReset) return;
     wireButtons();
     connectWS();
     window.addEventListener('beforeunload', disconnectWS);
