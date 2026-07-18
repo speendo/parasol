@@ -63,11 +63,12 @@ static void on_event(AsyncWebSocket *server, AsyncWebSocketClient *client,
                                          group->string, field->string);
                                 client->text(err);
                             } else {
-                                prsl_store_set_value(g_store, group->string, field->string, val_str);
                                 any_applied = true;
                             }
                         } else if (f) {
-                            prsl_store_set_value(g_store, group->string, field->string, val_str);
+                            char path[PRSL_MAX_PATH];
+                            snprintf(path, sizeof(path), "%s.%s", group->string, field->string);
+                            prsl_set_str(path, val_str);
                             any_applied = true;
                         }
                         field = field->next;
@@ -80,6 +81,7 @@ static void on_event(AsyncWebSocket *server, AsyncWebSocketClient *client,
                     cJSON *resp = cJSON_CreateObject();
                     cJSON_AddStringToObject(resp, "type", "settings");
                     cJSON_AddBoolToObject(resp, "_dirty", prsl_store_is_dirty(g_store));
+                    cJSON_AddBoolToObject(resp, "_has_reset", prsl_has_reset());
                     cJSON_AddItemToObject(resp, "data", prsl_json_build_settings(g_store));
                     char *out = cJSON_PrintUnformatted(resp);
                     cJSON_Delete(resp);
