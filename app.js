@@ -117,7 +117,9 @@ var parasol = (function () {
    */
   function updateUI() {
     var formOk = formInteracted ? configForm.checkValidity() : true;
-    var showBtn = dirty && formOk;
+    var alwaysShow = document.querySelector('meta[name="parasol-always-show-save"]');
+    alwaysShow = alwaysShow && alwaysShow.content === '1';
+    var showBtn = (dirty || alwaysShow) && formOk;
     btnSaveApply.hidden = !showBtn;
     btnSaveApply.disabled = !showBtn;
   }
