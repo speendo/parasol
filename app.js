@@ -785,11 +785,9 @@ var parasol = (function () {
           var field = grp.fields[fi];
           var fv = readFormValue([grp.id, field.key]);
           if (fv === undefined) continue;
-          field.opts.value = fv;
+          sendToServer(grp.id + '.' + field.key, fv);
         }
       }
-      syncLS();
-      setBaseline();
       updateUI();
     });
     document.getElementById('notif-keep-local').addEventListener('click', function () {
