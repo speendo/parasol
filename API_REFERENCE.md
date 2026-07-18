@@ -13,10 +13,12 @@ all from firmware.
 - [Field Options Struct](#field-options-struct)
 - [Attrs Format](#attrs-format)
 - [Field Types](#field-types)
-- [Dirty Check](#dirty-check)
+- [Dirty](#dirty)
 - [Runtime Value Access](#runtime-value-access)
 - [Push and Broadcast](#push-and-broadcast)
 - [Save Callback](#save-callback)
+- [Reset Callback](#reset-callback)
+- [Build-Time Configuration](#build-time-configuration)
 - [Full Example](#full-example)
 
 ## Quick Start
@@ -34,9 +36,8 @@ to the sections below for details on each function.
  *
  * Steps in order:
  *   1. Register groups and fields (structure)
- *   2. Set dirty check hook
- *   3. prsl_init + prsl_start (lifecycle)
- *   4. Loop: prsl_set + prsl_broadcast_status (runtime)
+ *   2. prsl_init + prsl_start (lifecycle)
+ *   3. Loop: prsl_set_str + prsl_broadcast_status (runtime)
  */
 
 #include "prsl.h"                /**< The only header you need */
@@ -79,37 +80,35 @@ static esp_err_t on_ssid_change(const char *group_id, const char *key,
 
 /* ── Save callback ─────────────────────────────────────────────────
  * Called once per Save, after all on_set callbacks have passed.
- * Receives an array of [path, value] pairs for single-cycle NVS
- * persistence.
+ * Read current values via prsl_get() and persist.
  */
 
-static void save_to_nvs(const char *pairs[][2], int count) {
+static esp_err_t save_to_nvs(void) {
     nvs_handle_t h;
-    if (nvs_open("parasol", NVS_READWRITE, &h) != ESP_OK) return;
-    for (int i = 0; i < count; i++) {
-        nvs_set_str(h, pairs[i][0], pairs[i][1]);
-    }
+    if (nvs_open("parasol", NVS_READWRITE, &h) != ESP_OK) return ESP_FAIL;
+
+    const char *ssid = prsl_get("wifi.ssid");
+    if (ssid) nvs_set_str(h, "wifi.ssid", ssid);
+
+    const char *pass = prsl_get("wifi.password");
+    if (pass) nvs_set_str(h, "wifi.password", pass);
+
     nvs_commit(h);
     nvs_close(h);
-    printf("Saved %d field(s) to NVS\n", count);
+    return ESP_OK;
 }
 
-/* ── Dirty check hook ──────────────────────────────────────────────
- * Optional: compare current value against persisted storage.
- * If not set, any change marks dirty (legacy behavior).
+/* ── Reset callback (optional) ────────────────────────────────────
+ * Called via prsl_reset. Reload saved values into AV store.
  */
 
-static bool check_dirty(const char *group_id, const char *key,
-                         const char *current_value) {
+static esp_err_t on_reset(void) {
     nvs_handle_t h;
-    if (nvs_open("parasol", NVS_READONLY, &h) != ESP_OK) return true;
-    char saved[64]; size_t len = sizeof(saved);
-    char path[128];
-    snprintf(path, sizeof(path), "%s.%s", group_id, key);
-    bool differs = (nvs_get_str(h, path, saved, &len) != ESP_OK ||
-                    strcmp(saved, current_value ? current_value : ""));
+    if (nvs_open("parasol", NVS_READONLY, &h) != ESP_OK) return ESP_FAIL;
+    char buf[64]; size_t len = sizeof(buf);
+    if (nvs_get_str(h, "wifi.ssid", buf, &len) == ESP_OK) prsl_set_str("wifi.ssid", buf);
     nvs_close(h);
-    return differs;
+    return ESP_OK;
 }
 
 /* ── Main ─────────────────────────────────────────────────────────── */
@@ -121,10 +120,7 @@ void app_main(void) {
     WiFi.softAP("parasol-config", NULL);
     AsyncWebServer server(80);
 
-    /* 2. Configure dirty check (optional, call before prsl_init) */
-    prsl_set_dirty_check(check_dirty);
-
-    /* 3. Register groups and fields (BEFORE prsl_init!) */
+    /* 2. Register groups and fields (BEFORE prsl_init!) */
     prsl_add_group("wifi", "Wi-Fi Setup");
     prsl_add_group("system", "System Status");
 
@@ -145,18 +141,18 @@ void app_main(void) {
     prsl_add_field(PRSL_TEXT, "system", "uptime", "Uptime",
         &(prsl_field_opts_t){ .is_status = true });
 
-    /* 4. Configure and start */
-    prsl_init(&server, save_to_nvs);
+    /* 3. Configure and start */
+    prsl_init(&server, save_to_nvs, on_reset);
     prsl_start();
 
-    /* 5. Runtime loop — push live status every 3 seconds */
+    /* 4. Runtime loop — push live status every 3 seconds */
     int seconds = 0;
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(3000));
         seconds += 3;
         char buf[64];
         snprintf(buf, sizeof(buf), "%ds", seconds);
-        prsl_set("system.uptime", buf);
+        prsl_set_str("system.uptime", buf);
         prsl_broadcast_status();
     }
 }
@@ -171,19 +167,23 @@ the web server lives for the ESP32's full uptime.
 
 ```c
 /**
- * @brief Initialize prsl with a web server and save callback.
+ * @brief Initialize prsl with a web server, save callback, and optional
+ *        reset callback.
  *
  * Wires up HTTP routes (GET /api/settings, POST /api/settings/save)
  * and WebSocket endpoint (/api/events).  Serves static assets from flash.
  *
- * @param server  Pointer to an initialized AsyncWebServer (port 80).
- * @param on_save Callback for single-cycle NVS persistence.
- *                May be NULL if you don't need persistence.
+ * @param server   Pointer to an initialized AsyncWebServer (port 80).
+ * @param on_save  Callback to persist current values (prsl_save_cb_t).
+ *                 May be NULL if you don't need persistence.
+ * @param on_reset Callback to reload saved values (prsl_reset_cb_t).
+ *                 May be NULL.
  * @return ESP_OK on success, ESP_ERR_* on failure.
  *
  * @warning All groups and fields MUST be registered BEFORE calling
  *          this function.  The store snapshot is taken at init time. */
-esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save);
+esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
+                    prsl_reset_cb_t on_reset);
 ```
 
 ```c
@@ -202,13 +202,12 @@ esp_err_t prsl_start(void);
 ```
 nvs_flash_init()                  /* hardware                   */
 WiFi.softAP(...)                  /* network                    */
-prsl_set_dirty_check(...)         /* optional dirty hook        */
 prsl_add_group(...)               /* register groups            */
 prsl_add_field(...)               /* register fields            */
-prsl_init(&server, on_save)       /* wire routes, snapshot store */
+prsl_init(&server, on_save, on_reset) /* wire routes, snapshot store */
 prsl_start()                      /* begin serving              */
 /* --- enter runtime loop --- */
-prsl_set(...)                     /* update values              */
+prsl_set_str(...)                 /* update values              */
 prsl_broadcast_status()           /* push to clients            */
 ```
 
@@ -418,90 +417,65 @@ happens (no single quotes to replace).
 
 ---
 
-## Dirty Check
+## Build-Time Configuration
 
-Register an optional hook that compares current values against persisted
-storage. This drives the Save button: enabled only when dirty is true.
+`parasol_config.json` supports these keys:
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `title` | string | `"PARASOL"` | Page title |
+| `logo` | string | `"/logo.png"` | Navbar logo URL |
+| `favicon` | string | `"/favicon.ico"` | Favicon URL |
+| `always_show_save` | bool | `false` | Always show Save button, ignore dirty flag |
+
+---
+
+## Dirty
+
+The `_dirty` flag is exclusively developer-driven. Set it true when applied values
+diverge from saved values. Parasol clears it to `false` after a successful `on_save`.
 
 ```c
 /**
- * @brief Register a dirty check hook. Call before prsl_init.
- * @param is_dirty NULL = any change is dirty (legacy behavior). */
-void prsl_set_dirty_check(prsl_is_dirty_cb_t is_dirty);
+ * @brief Set the dirty flag. Parasol clears it after successful on_save.
+ * @param dirty true = show Save button, false = hide Save button. */
+void prsl_set_dirty(bool dirty);
 
 /**
- * @brief Query whether any unsaved changes exist. */
+ * @brief Query whether unsaved changes exist. */
 bool prsl_is_dirty(void);
 ```
 
-The dirty hook signature:
+**When to call `prsl_set_dirty(true)`:**
+- Inside `on_set` (fires on every validated change)
+- Once after loading NVS at startup (to always show Save)
+- From a hardware event or timer that detects external changes
 
-```c
-typedef bool (*prsl_is_dirty_cb_t)(const char *group_id, const char *key,
-                                    const char *current_value);
-```
-
-**Example:**
-
-```c
-static bool check_dirty(const char *group_id, const char *key,
-                         const char *current_value) {
-    nvs_handle_t h;
-    if (nvs_open("parasol", NVS_READONLY, &h) != ESP_OK) return true;
-    char saved[64]; size_t len = sizeof(saved);
-    char path[128];
-    snprintf(path, sizeof(path), "%s.%s", group_id, key);
-    bool differs = (nvs_get_str(h, path, saved, &len) != ESP_OK ||
-                    strcmp(saved, current_value ? current_value : ""));
-    nvs_close(h);
-    return differs;
-}
-
-prsl_set_dirty_check(check_dirty);
-```
+Alternatively, set `"always_show_save": true` in `parasol_config.json` to force
+the Save button visible always.
 
 ---
 
 ## Runtime Value Access
 
-Read and write field values at runtime by dot-path (`"group_id.field_key"`).
+Typed setters for compile-time safety. None broadcast to clients —
+call `prsl_push()` or `prsl_broadcast_status()` after batch updates.
 
 ```c
-/**
- * @brief Set a field's value in the store.
- *
- * Paths are dot-separated: "group_id.key".  The value is always a string.
- * Setting the value does NOT broadcast to clients — call prsl_push() or
- * prsl_broadcast_status() after.
- *
- * @param path  Dot-path string, e.g. "wifi.ssid".
- * @param value New value as string.
- * @return ESP_OK on success, ESP_ERR_NOT_FOUND if path doesn't match
- *         any registered field. */
-esp_err_t prsl_set(const char *path, const char *value);
+esp_err_t prsl_set_str(const char *path, const char *value);
+esp_err_t prsl_set_int(const char *path, int value);
+esp_err_t prsl_set_float(const char *path, float value);
+esp_err_t prsl_set_bool(const char *path, bool value);
+esp_err_t prsl_set_null(const char *path);
 ```
 
 ```c
 /**
- * @brief Get a field's current value from the store.
- *
+ * @brief Get a field's current value from AV store.
  * @param path Dot-path string, e.g. "system.uptime".
- * @return Pointer to the value string, or NULL if not found.
- *         The returned pointer is valid until the next prsl_set for
- *         the same path. Do NOT free it. */
+ * @return Pointer to value string, or NULL. Valid until next prsl_set_*
+ *         for the same path. Do NOT free. */
 const char *prsl_get(const char *path);
-```
-
-**Example — read-modify-write:**
-
-```c
-const char *current = prsl_get("led.brightness");
-int b = atoi(current);
-b = (b + 16) % 256;
-char buf[16];
-snprintf(buf, sizeof(buf), "%d", b);
-prsl_set("led.brightness", buf);
-prsl_push();
 ```
 
 ---
@@ -557,41 +531,58 @@ while (1) {
 
 ## Save Callback
 
-Registered via `prsl_init` at init time. Called once per Save, after all
-`on_set` callbacks have returned `ESP_OK`.
+Registered via `prsl_init` at init time. Called after all `on_set` callbacks pass.
+Read current values via `prsl_get()` and persist.
 
 ```c
 /**
  * @brief Save callback signature.
  *
- * Called once per Save, after all on_set callbacks have passed.
- * Receive an array of [path, value] pairs for single-cycle NVS
- * persistence (one open/write/commit).
+ * Called without arguments. Developer reads each field via prsl_get()
+ * and persists to storage. The AV store is locked during execution.
  *
- * @param pairs  Array of [path, value] pairs. pairs[i][0] = "group_id.key",
- *               pairs[i][1] = "value".
- * @param count  Number of pairs. */
-typedef void (*prsl_save_cb_t)(const char *pairs[][2], int count);
+ * @return ESP_OK on success (dirty cleared, clients updated).
+ *         ESP_ERR_* on failure (dirty stays set). */
+typedef esp_err_t (*prsl_save_cb_t)(void);
 ```
 
 **Example — persist to NVS:**
 
 ```c
-static void save_to_nvs(const char *pairs[][2], int count) {
+static esp_err_t save_to_nvs(void) {
     nvs_handle_t h;
-    if (nvs_open("parasol", NVS_READWRITE, &h) != ESP_OK) return;
+    if (nvs_open("parasol", NVS_READWRITE, &h) != ESP_OK) return ESP_FAIL;
 
-    for (int i = 0; i < count; i++) {
-        char current[64];
-        size_t len = sizeof(current);
-        if (nvs_get_str(h, pairs[i][0], current, &len) == ESP_OK
-            && strcmp(current, pairs[i][1]) == 0) continue;
-        nvs_set_str(h, pairs[i][0], pairs[i][1]);
-    }
+    const char *ssid = prsl_get("wifi.ssid");
+    if (ssid) nvs_set_str(h, "wifi.ssid", ssid);
+
+    const char *pass = prsl_get("wifi.password");
+    if (pass) nvs_set_str(h, "wifi.password", pass);
 
     nvs_commit(h);
     nvs_close(h);
-    printf("Saved %d changed field(s) to NVS\n", count);
+    return ESP_OK;
+}
+```
+
+## Reset Callback
+
+Optional callback registered via `prsl_init`. Reload saved values into AV.
+
+```c
+typedef esp_err_t (*prsl_reset_cb_t)(void);
+```
+
+**Example:**
+
+```c
+static esp_err_t on_reset(void) {
+    nvs_handle_t h;
+    if (nvs_open("parasol", NVS_READONLY, &h) != ESP_OK) return ESP_FAIL;
+    char buf[64]; size_t len = sizeof(buf);
+    if (nvs_get_str(h, "wifi.ssid", buf, &len) == ESP_OK) prsl_set_str("wifi.ssid", buf);
+    nvs_close(h);
+    return ESP_OK;
 }
 ```
 
