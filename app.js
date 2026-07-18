@@ -838,7 +838,6 @@ var parasol = (function () {
       input.type = 'checkbox';
       if (type === 'switch') input.role = 'switch';
       input.name = input.id = effectivePrefix + '.' + key;
-      if (opts.value) input.checked = true;
       applyAttrs(input, opts.attrs);
       if (isStatus) input.disabled = true;
       var label = document.createElement('label');
@@ -865,9 +864,6 @@ var parasol = (function () {
           radio.name = effectivePrefix + '.' + key;
           radio.id = radioId;
           radio.value = opt[0];
-          if (opts.value !== undefined && String(opt[0]) === String(opts.value)) {
-            radio.checked = true;
-          }
           if (isStatus) radio.disabled = true;
           var radioLabel = document.createElement('label');
           radioLabel.setAttribute('for', radioId);
@@ -891,14 +887,12 @@ var parasol = (function () {
       input = document.createElement('input');
       input.type = type;
       input.name = input.id = effectivePrefix + '.' + key;
-      if (opts.value !== undefined) input.value = opts.value;
       applyAttrs(input, opts.attrs);
       if (isStatus) input.disabled = true;
     } else if (type === 'range') {
       input = document.createElement('input');
       input.type = 'range';
       input.name = input.id = effectivePrefix + '.' + key;
-      if (opts.value !== undefined) input.value = opts.value;
       applyAttrs(input, opts.attrs);
       if (isStatus) input.disabled = true;
       var valueDisplay = document.createElement('output');
@@ -917,9 +911,6 @@ var parasol = (function () {
           var option = document.createElement('option');
           option.value = opt[0];
           option.textContent = opt[1];
-          if (opts.value !== undefined && String(opt[0]) === String(opts.value)) {
-            option.selected = true;
-          }
           input.appendChild(option);
         }
       }
@@ -928,7 +919,6 @@ var parasol = (function () {
     } else if (type === 'textarea') {
       input = document.createElement('textarea');
       input.name = input.id = effectivePrefix + '.' + key;
-      if (opts.value !== undefined) input.value = opts.value;
       applyAttrs(input, opts.attrs);
       if (isStatus) input.disabled = true;
     } else {

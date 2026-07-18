@@ -212,7 +212,7 @@ describe('createField', () => {
     var input = field.querySelector('input')
     expect(input.type).toBe('checkbox')
     expect(input.role).toBe('switch')
-    expect(input.checked).toBe(true)
+    expect(input.checked).toBe(false)
     expect(input.id).toBe('wifi.hidden')
   })
 
@@ -235,7 +235,7 @@ describe('createField', () => {
     var input = field.querySelector('input[type="number"]')
     expect(input.min).toBe('0')
     expect(input.max).toBe('39')
-    expect(input.value).toBe('2')
+    expect(input.value).toBe('')
     expect(input.id).toBe('gpio.pin')
   })
 
@@ -246,7 +246,7 @@ describe('createField', () => {
     })
     expect(field.querySelector('label').getAttribute('for')).toBe('gpio.led_color')
     var input = field.querySelector('input[type="color"]')
-    expect(input.value).toBe('#ff9500')
+    expect(input.value).toBe('#000000')
     expect(input.id).toBe('gpio.led_color')
   })
 
