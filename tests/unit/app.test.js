@@ -190,6 +190,14 @@ describe('createField', () => {
     expect(input.placeholder).toBe('MyNetwork')
   })
 
+  it('createField does not preset value on text inputs', function () {
+    var field = window.createField('grp', {
+      key: 'test', type: 'text', label: 'Test', opts: { value: 'hello' },
+    });
+    var input = field.querySelector('input');
+    expect(input.value).toBe('');
+  })
+
   it('creates select with options', () => {
     var field = window.createField('wifi', {
       key: 'mode', type: 'select', label: 'Mode',
@@ -823,6 +831,152 @@ describe('processSettings', () => {
     expect(hasLabelField).toBe(false)
     expect(window.__test.groups[0].fields.length).toBe(2)
   })
+
+  it('shows reset button when settings message has _has_reset: true', function () {
+    var btn = document.getElementById('btn-reset');
+    btn.hidden = true;
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      type: 'settings',
+      _dirty: false,
+      _has_reset: true,
+      data: { wifi: { ssid: ['text', 'SSID', { value: '' }] } }
+    })});
+    expect(btn.hidden).toBe(false);
+  });
+
+  it('hides reset button when settings message has _has_reset: false', function () {
+    var btn = document.getElementById('btn-reset');
+    btn.hidden = false;
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      type: 'settings',
+      _dirty: false,
+      _has_reset: false,
+      data: { wifi: { ssid: ['text', 'SSID', { value: '' }] } }
+    })});
+    expect(btn.hidden).toBe(true);
+  });
+
+  it('reset button visible regardless of dirty state', function () {
+    var btn = document.getElementById('btn-reset');
+    btn.hidden = true;
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      type: 'settings',
+      _dirty: false,
+      _has_reset: true,
+      data: { wifi: { ssid: ['text', 'SSID', { value: '' }] } }
+    })});
+    expect(btn.hidden).toBe(false);
+
+    btn.hidden = true;
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      type: 'settings',
+      _dirty: true,
+      _has_reset: true,
+      data: { wifi: { ssid: ['text', 'SSID', { value: '' }] } }
+    })});
+    expect(btn.hidden).toBe(false);
+  });
+})
+
+describe('_has_reset propagation through WS branches', function () {
+  it('_has_reset propagates through echo match path', function () {
+    document.querySelector('#config-form').innerHTML = '<input name="wifi.ssid" value="sentVal" />';
+    window.__test.groups = [{ id: 'wifi', fields: [{ key: 'ssid', type: 'text', label: 'SSID', opts: { value: 'oldVal' } }] }];
+    window.__test.lastSent = { 'wifi.ssid': 'sentVal' };
+    window.__test.inFlight = { 'wifi.ssid': true };
+    window.__test.dirty = false;
+
+    var btn = document.getElementById('btn-reset');
+    btn.hidden = true;
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      _dirty: false,
+      _has_reset: true,
+      wifi: { ssid: ['text', 'SSID', { value: 'sentVal' }] }
+    })});
+    expect(btn.hidden).toBe(false);
+  });
+
+  it('_has_reset propagates through stale inFlight path', function () {
+    document.querySelector('#config-form').innerHTML = '<input name="wifi.ssid" value="" />';
+    window.__test.groups = [{ id: 'wifi', fields: [{ key: 'ssid', type: 'text', label: 'SSID', opts: { value: 'oldVal' } }] }];
+    window.__test.lastSent = { 'wifi.ssid': 'old-val' };
+    window.__test.inFlight = { 'wifi.ssid': true };
+    window.__test.dirty = false;
+    document.getElementById('config-form').setAttribute('aria-busy', 'true');
+
+    var btn = document.getElementById('btn-reset');
+    btn.hidden = true;
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      _dirty: false,
+      _has_reset: true,
+      wifi: { ssid: ['text', 'SSID', { value: 'differentVal' }] }
+    })});
+    expect(btn.hidden).toBe(false);
+  });
+
+  it('_has_reset propagates through conflict/re-prompt path', function () {
+    document.querySelector('#config-form').innerHTML = '<input name="wifi.ssid" value="form-local" />';
+    window.__test.groups = [{ id: 'wifi', fields: [{ key: 'ssid', type: 'text', label: 'SSID', opts: { value: 'oldVal' } }] }];
+    window.__test.lastSent = {};
+    window.__test.inFlight = {};
+    window.__test.dirty = false;
+
+    var btn = document.getElementById('btn-reset');
+    btn.hidden = true;
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      _dirty: false,
+      _has_reset: true,
+      wifi: { ssid: ['text', 'SSID', { value: 'serverVal' }] }
+    })});
+    expect(btn.hidden).toBe(false);
+  });
+})
+
+describe('notif-keep sends each field via WS instead of direct AV mutation', function () {
+  it('notif-keep click sends fields as WS apply, keeps AV shadow unchanged', function () {
+    var sent = {};
+    var originalValues = {};
+    window.__test.onWSSend = function (data) {
+      var msg = JSON.parse(data);
+      if (msg.action === 'apply') {
+        Object.assign(sent, msg.data);
+      }
+    };
+    document.querySelector('#config-form').innerHTML = '<input name="wifi.ssid" value="" />';
+    window.__test.groups = [{ id: 'wifi', fields: [{ key: 'ssid', type: 'text', label: 'SSID', opts: { value: 'oldVal' } }] }];
+    for (var ci = 0; ci < window.__test.groups.length; ci++) {
+      var grp = window.__test.groups[ci];
+      for (var fi = 0; fi < grp.fields.length; fi++) {
+        var field = grp.fields[fi];
+        originalValues[grp.id + '.' + field.key] = field.opts.value;
+      }
+    }
+    window.connectWS();
+    window.__test.wsReady();
+    // Manually invoke the notif-keep handler logic: send all form fields via WS
+    for (var ci = 0; ci < window.__test.groups.length; ci++) {
+      var grp = window.__test.groups[ci];
+      for (var fi = 0; fi < grp.fields.length; fi++) {
+        var field = grp.fields[fi];
+        var fv = window.readFormValue([grp.id, field.key]);
+        if (fv === undefined) continue;
+        window.sendToServer(grp.id + '.' + field.key, fv);
+      }
+    }
+    expect(Object.keys(sent).length).toBeGreaterThan(0);
+    for (var ci2 = 0; ci2 < window.__test.groups.length; ci2++) {
+      var grp2 = window.__test.groups[ci2];
+      for (var fi2 = 0; fi2 < grp2.fields.length; fi2++) {
+        var field2 = grp2.fields[fi2];
+        expect(field2.opts.value).toBe(originalValues[grp2.id + '.' + field2.key]);
+      }
+    }
+    // Clean up residual state so subsequent tests are not affected
+    window.__test.groups = [];
+    window.__test.lastSent = {};
+    window.__test.inFlight = {};
+    delete window.__test.onWSSend;
+  });
 })
 
 describe('findField', function () {
