@@ -953,16 +953,8 @@ describe('notif-keep sends each field via WS instead of direct AV mutation', fun
     }
     window.connectWS();
     window.__test.wsReady();
-    // Manually invoke the notif-keep handler logic: send all form fields via WS
-    for (var ci = 0; ci < window.__test.groups.length; ci++) {
-      var grp = window.__test.groups[ci];
-      for (var fi = 0; fi < grp.fields.length; fi++) {
-        var field = grp.fields[fi];
-        var fv = window.readFormValue([grp.id, field.key]);
-        if (fv === undefined) continue;
-        window.sendToServer(grp.id + '.' + field.key, fv);
-      }
-    }
+    window.wireButtons();
+    document.getElementById('notif-keep').click();
     expect(Object.keys(sent).length).toBeGreaterThan(0);
     for (var ci2 = 0; ci2 < window.__test.groups.length; ci2++) {
       var grp2 = window.__test.groups[ci2];
