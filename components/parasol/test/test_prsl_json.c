@@ -16,7 +16,7 @@ static void add_field(const char *group, const char *key, prsl_type_t type,
     f.is_status = is_status;
     prsl_store_add_group(&store, group, NULL);
     prsl_store_add_field(&store, &f);
-    prsl_store_set_value(&store, group, key, val);
+    prsl_store_set_json(&store, group, key, cJSON_CreateString(val));
 }
 
 void setUp(void) {
@@ -65,7 +65,7 @@ void test_build_with_options(void) {
     f.option_count = 2;
     prsl_store_add_group(&store, "wifi", NULL);
     prsl_store_add_field(&store, &f);
-    prsl_store_set_value(&store, "wifi", "mode", "ap");
+    prsl_store_set_json(&store, "wifi", "mode", cJSON_CreateString("ap"));
 
     cJSON *out = prsl_json_build_settings(&store);
     cJSON *wifi = cJSON_GetObjectItem(out, "wifi");
@@ -129,7 +129,7 @@ void test_build_with_help(void) {
     f.help = "The network name";
     prsl_store_add_group(&store, "wifi", NULL);
     prsl_store_add_field(&store, &f);
-    prsl_store_set_value(&store, "wifi", "ssid", "MyNet");
+    prsl_store_set_json(&store, "wifi", "ssid", cJSON_CreateString("MyNet"));
 
     cJSON *out = prsl_json_build_settings(&store);
     cJSON *wifi = cJSON_GetObjectItem(out, "wifi");
@@ -182,7 +182,7 @@ void test_build_interleaved_fields(void) {
     f1.type = PRSL_TEXT;
     f1.is_status = false;
     prsl_store_add_field(&store, &f1);
-    prsl_store_set_value(&store, "groupA", "f1", "valA1");
+    prsl_store_set_json(&store, "groupA", "f1", cJSON_CreateString("valA1"));
 
     prsl_field_t f2 = {0};
     f2.group_id = "groupB";
@@ -191,7 +191,7 @@ void test_build_interleaved_fields(void) {
     f2.type = PRSL_NUMBER;
     f2.is_status = false;
     prsl_store_add_field(&store, &f2);
-    prsl_store_set_value(&store, "groupB", "f1", "42");
+    prsl_store_set_json(&store, "groupB", "f1", cJSON_CreateNumber(42));
 
     prsl_field_t f3 = {0};
     f3.group_id = "groupA";
@@ -200,7 +200,7 @@ void test_build_interleaved_fields(void) {
     f3.type = PRSL_SWITCH;
     f3.is_status = false;
     prsl_store_add_field(&store, &f3);
-    prsl_store_set_value(&store, "groupA", "f2", "true");
+    prsl_store_set_json(&store, "groupA", "f2", cJSON_CreateBool(true));
 
     cJSON *out = prsl_json_build_settings(&store);
     TEST_ASSERT_NOT_NULL(out);
