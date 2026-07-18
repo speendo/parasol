@@ -122,6 +122,74 @@ test.describe('Save & Apply button', () => {
   })
 })
 
+test.describe('Reset button', () => {
+  test('Reset button visible when _has_reset is true', async ({ page }) => {
+    await page.goto('/')
+    await page.waitForSelector('#config-form:not([aria-busy])')
+    await expect(page.locator('#btn-reset')).toBeVisible()
+  })
+
+  test('Reset button click clears dirty and reverts values', async ({ page }) => {
+    await page.goto('/')
+    await page.waitForSelector('#config-form:not([aria-busy])')
+
+    // Make a change
+    await page.fill('[name="wifi.ssid"]', 'ChangedSSID')
+    await page.fill('[name="wifi.password"]', 'secret')
+    await page.locator('[name="wifi.ssid"]').focus()
+    await page.waitForSelector('#config-form:not([aria-busy])', { timeout: 5000 })
+
+    // Verify save button appears (dirty)
+    await expect(page.locator('#btn-save-apply')).toBeVisible({ timeout: 5000 })
+
+    // Click reset
+    await page.locator('#btn-reset').click()
+    await page.waitForTimeout(500)
+
+    // Verify value reverted
+    await expect(page.locator('[name="wifi.ssid"]')).toHaveValue('MyNetwork')
+
+    // Verify save button hidden (clean)
+    await expect(page.locator('#btn-save-apply')).toBeHidden()
+  })
+
+  test('save failure keeps dirty and Save button visible', async ({ page }) => {
+    await page.goto('/')
+    await page.waitForSelector('#config-form:not([aria-busy])')
+
+    // Make a change
+    await page.fill('[name="wifi.ssid"]', 'ChangedSSID')
+    await page.fill('[name="wifi.password"]', 'secret')
+    await page.locator('[name="wifi.ssid"]').focus()
+    await page.waitForSelector('#config-form:not([aria-busy])', { timeout: 5000 })
+    await expect(page.locator('#btn-save-apply')).toBeVisible({ timeout: 5000 })
+
+    // Intercept save to return 500
+    await page.route('**/api/settings/save', function (route) {
+      route.fulfill({ status: 500, body: 'Save failed' });
+    })
+    await page.locator('#btn-save-apply').click()
+    await page.waitForTimeout(500)
+
+    // Verify dirty stays (button still visible)
+    await expect(page.locator('#btn-save-apply')).toBeVisible()
+  })
+
+  test('reset with no changes is a no-op', async ({ page }) => {
+    await page.goto('/')
+    await page.waitForSelector('#config-form:not([aria-busy])')
+
+    // Reset without making any changes
+    await page.locator('#btn-reset').click()
+    await page.waitForTimeout(500)
+
+    // Values unchanged, no errors
+    await expect(page.locator('[name="wifi.ssid"]')).toHaveValue('MyNetwork')
+    await expect(page.locator('#btn-save-apply')).toBeHidden()
+    await expect(page.locator('#status-bar')).toBeEmpty()
+  })
+})
+
 test.describe('Navigation and hash', () => {
   test('nav click opens accordion', async ({ page }) => {
     await page.goto('/')

@@ -785,9 +785,11 @@ var parasol = (function () {
     btnReset.addEventListener('click', function () {
       postJSON('/api/settings/reset', {}).then(function (ok) {
         if (ok) {
-          syncLS();
-          setBaseline();
-          updateUI();
+          configForm.setAttribute('aria-busy', 'true');
+          fetch('/api/settings').then(function (res) { return res.json(); }).then(function (data) {
+            processSettings(data, data._dirty);
+            syncLS();
+          });
         }
       });
     });
