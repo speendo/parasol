@@ -25,6 +25,15 @@ current architecture and API design.
 - Does the net byte change in minified output justify the feature?
 - Are there any new runtime allocations (strings, objects, closures) without explicit need?
 
+# Branch Convention
+
+Development work takes place on feature branches branched from `main`.
+Create a branch before starting any non-trivial change:
+
+```bash
+git checkout -b feature/<short-description>
+```
+
 # Commands
 
 Node.js is at `/config/.nvm/versions/node/v24.17.0/bin/`. Source nvm first:
