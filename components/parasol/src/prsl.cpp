@@ -13,6 +13,7 @@ static prsl_store_t g_store;
 static AsyncWebServer *g_server = NULL;
 static AsyncWebSocket g_ws("/api/events");
 static prsl_save_cb_t g_on_save = NULL;
+static prsl_reset_cb_t g_on_reset = NULL;
 static bool g_initialized = false;
 
 /* ── Group registration ─────────────────────────────────────── */
@@ -89,13 +90,15 @@ bool prsl_is_dirty(void) {
 
 /* ── Lifecycle ───────────────────────────────────────────────── */
 
-esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save) {
+esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
+                    prsl_reset_cb_t on_reset) {
     if (!server) return ESP_ERR_INVALID_ARG;
 
     prsl_store_load_values(&g_store);
 
     g_server = server;
     g_on_save = on_save;
+    g_on_reset = on_reset;
 
     for (size_t i = 0; i < prsl_assets_count; i++) {
         const prsl_asset_t *a = &prsl_assets[i];
@@ -111,6 +114,7 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save) {
         cJSON *json = prsl_json_build_settings(&g_store);
         if (json) {
             cJSON_AddBoolToObject(json, "_dirty", prsl_store_is_dirty(&g_store));
+            cJSON_AddBoolToObject(json, "_has_reset", g_on_reset != NULL);
             char *str = cJSON_PrintUnformatted(json);
             cJSON_Delete(json);
             if (str) {
@@ -138,20 +142,10 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save) {
                 return;
             }
 
-            /* Single pass: validate, apply, and collect pairs */
-            int total_fields = g_store.count;
-            prsl_save_pair_t *all_pairs = NULL;
-            int pair_count = 0;
+            /* Lock AV store for the entire transaction */
+            xSemaphoreTakeRecursive(g_store.mutex, portMAX_DELAY);
 
-            if (g_on_save && total_fields > 0) {
-                all_pairs = (prsl_save_pair_t *)calloc(total_fields, sizeof(prsl_save_pair_t));
-                if (!all_pairs) {
-                    cJSON_Delete(msg);
-                    req->send(500, "text/plain", "Out of memory");
-                    return;
-                }
-            }
-
+            /* Walk fields, call on_set or prsl_set_str */
             cJSON *group = body->child;
             while (group) {
                 if (!cJSON_IsObject(group) || group->string[0] == '_') {
@@ -172,40 +166,15 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save) {
                         if (ae != ESP_OK) {
                             char err[128];
                             snprintf(err, sizeof(err), "on_set rejected %s.%s", group->string, field->string);
-                            for (int i = 0; i < pair_count; i++) {
-                                free((void *)all_pairs[i].path);
-                                free((void *)all_pairs[i].value);
-                            }
-                            free(all_pairs);
+                            xSemaphoreGiveRecursive(g_store.mutex);
                             cJSON_Delete(msg);
                             req->send(400, "text/plain", err);
                             return;
                         }
-                    }
-                    if (f) {
-                        prsl_store_set_json(&g_store, group->string, field->string, cJSON_CreateString(val_str));
-                        if (all_pairs) {
-                            cJSON *sv = prsl_store_get_value(&g_store, group->string, field->string);
-                            if (sv && !cJSON_IsNull(sv)) {
-                                char val_buf2[64];
-                                const char *vstr = prsl_json_value_str(sv, val_buf2, sizeof(val_buf2));
-                                if (vstr) {
-                                    char *dupval = strdup(vstr);
-                                    if (dupval) {
-                                        size_t plen = snprintf(NULL, 0, "%s.%s", group->string, field->string);
-                                        char *path = (char *)malloc(plen + 1);
-                                        if (path) {
-                                            snprintf(path, plen + 1, "%s.%s", group->string, field->string);
-                                            all_pairs[pair_count].path = path;
-                                            all_pairs[pair_count].value = dupval;
-                                            pair_count++;
-                                        } else {
-                                            free(dupval);
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                    } else if (f) {
+                        char path[PRSL_MAX_PATH];
+                        snprintf(path, sizeof(path), "%s.%s", group->string, field->string);
+                        prsl_set_str(path, val_str);
                     }
                     field = field->next;
                 }
@@ -213,29 +182,37 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save) {
             }
             cJSON_Delete(msg);
 
-            /* Batch calls to on_save */
-            if (g_on_save && pair_count > 0 && all_pairs) {
-#ifndef PRSL_SAVE_MAX_FIELDS
-#define PRSL_SAVE_MAX_FIELDS 32
-#endif
-                int offset = 0;
-                while (offset < pair_count) {
-                    int batch = pair_count - offset;
-                    if (batch > PRSL_SAVE_MAX_FIELDS) batch = PRSL_SAVE_MAX_FIELDS;
-                    g_on_save(&all_pairs[offset], batch);
-                    offset += batch;
-                }
-
-                for (int i = 0; i < pair_count; i++) {
-                    free((void *)all_pairs[i].path);
-                    free((void *)all_pairs[i].value);
-                }
-                free(all_pairs);
-            } else if (all_pairs) {
-                free(all_pairs);
+            /* Call on_save */
+            esp_err_t save_result = ESP_OK;
+            if (g_on_save) {
+                save_result = g_on_save();
             }
 
-            req->send(200, "text/plain", "OK");
+            /* Clear or keep dirty, push, respond */
+            if (save_result == ESP_OK) {
+                prsl_store_clear_dirty(&g_store);
+                xSemaphoreGiveRecursive(g_store.mutex);
+                prsl_push();
+                req->send(200, "text/plain", "OK");
+            } else {
+                xSemaphoreGiveRecursive(g_store.mutex);
+                req->send(500, "text/plain", "Save failed");
+            }
+        });
+
+    server->on("/api/settings/reset", HTTP_POST,
+        [](AsyncWebServerRequest *req) {
+            if (!g_on_reset) {
+                req->send(404, "text/plain", "Not Found");
+                return;
+            }
+            esp_err_t result = g_on_reset();
+            if (result == ESP_OK) {
+                prsl_push();
+                req->send(200, "text/plain", "OK");
+            } else {
+                req->send(500, "text/plain", "Reset failed");
+            }
         });
 
     return ESP_OK;
@@ -315,12 +292,19 @@ const char *prsl_get(const char *path) {
     return cJSON_GetStringValue(v);
 }
 
+/* ── Has reset ────────────────────────────────────────────────── */
+
+bool prsl_has_reset(void) {
+    return g_on_reset != NULL;
+}
+
 /* ── Push / broadcast ───────────────────────────────────────── */
 
 esp_err_t prsl_push(void) {
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "type", "settings");
     cJSON_AddBoolToObject(root, "_dirty", prsl_store_is_dirty(&g_store));
+    cJSON_AddBoolToObject(root, "_has_reset", g_on_reset != NULL);
     cJSON *data = prsl_json_build_settings(&g_store);
     cJSON_AddItemToObject(root, "data", data);
     char *str = cJSON_PrintUnformatted(root);

@@ -40,34 +40,17 @@ static esp_err_t on_ssid_change(const char *group_id, const char *key,
     return ESP_OK;
 }
 
-static void save_to_nvs(const char *pairs[][2], int count) {
+static esp_err_t save_to_nvs(void) {
     nvs_handle_t h;
-    if (nvs_open("parasol", NVS_READWRITE, &h) != ESP_OK) return;
-
-    for (int i = 0; i < count; i++) {
-        char current[64];
-        size_t len = sizeof(current);
-        if (nvs_get_str(h, pairs[i][0], current, &len) == ESP_OK
-            && strcmp(current, pairs[i][1]) == 0) continue;
-        nvs_set_str(h, pairs[i][0], pairs[i][1]);
-    }
-
+    if (nvs_open("parasol", NVS_READWRITE, &h) != ESP_OK) return ESP_FAIL;
+    const char *ssid = prsl_get("wifi.ssid");
+    if (ssid) nvs_set_str(h, "wifi.ssid", ssid);
+    const char *pass = prsl_get("wifi.pass");
+    if (pass) nvs_set_str(h, "wifi.pass", pass);
     nvs_commit(h);
     nvs_close(h);
-    printf("Saved %d changed field(s) to NVS\n", count);
-}
-
-static bool check_dirty(const char *group_id, const char *key,
-                         const char *current_value) {
-    nvs_handle_t h;
-    if (nvs_open("parasol", NVS_READONLY, &h) != ESP_OK) return true;
-    char saved[64]; size_t len = sizeof(saved);
-    char path[128];
-    snprintf(path, sizeof(path), "%s.%s", group_id, key);
-    bool differs = (nvs_get_str(h, path, saved, &len) != ESP_OK ||
-                    strcmp(saved, current_value ? current_value : ""));
-    nvs_close(h);
-    return differs;
+    printf("Saved to NVS\n");
+    return ESP_OK;
 }
 
 void app_main(void) {
@@ -75,8 +58,6 @@ void app_main(void) {
     WiFi.mode(WIFI_AP);
     WiFi.softAP("parasol-config", NULL);
     AsyncWebServer server(80);
-
-    prsl_set_dirty_check(check_dirty);
 
     prsl_add_group("wifi", "Wi-Fi Setup");
     prsl_add_group("system", "System Status");
@@ -98,7 +79,7 @@ void app_main(void) {
     prsl_add_field(PRSL_TEXT, "system", "uptime", "Uptime",
         &(prsl_field_opts_t){ .is_status = true });
 
-    prsl_init(&server, save_to_nvs);
+    prsl_init(&server, save_to_nvs, NULL);
     prsl_start();
 
     int seconds = 0;
@@ -107,7 +88,7 @@ void app_main(void) {
         seconds += 3;
         char buf[64];
         snprintf(buf, sizeof(buf), "%ds", seconds);
-        prsl_set("system.uptime", buf);
+        prsl_set_str("system.uptime", buf);
         prsl_broadcast_status();
     }
 }

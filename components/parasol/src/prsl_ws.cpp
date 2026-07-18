@@ -1,4 +1,5 @@
 #include "prsl_ws.h"
+#include "prsl.h"
 #include "prsl_store.h"
 #include "prsl_json.h"
 #include "ESPAsyncWebServer.h"
@@ -20,6 +21,7 @@ static void on_event(AsyncWebSocket *server, AsyncWebSocketClient *client,
         cJSON *settings = cJSON_CreateObject();
         cJSON_AddStringToObject(settings, "type", "settings");
         cJSON_AddBoolToObject(settings, "_dirty", prsl_store_is_dirty(g_store));
+        cJSON_AddBoolToObject(settings, "_has_reset", prsl_has_reset());
         cJSON_AddItemToObject(settings, "data", prsl_json_build_settings(g_store));
         char *s2 = cJSON_PrintUnformatted(settings);
         cJSON_Delete(settings);

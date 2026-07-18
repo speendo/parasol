@@ -35,27 +35,14 @@ typedef const char *(*prsl_get_cb_t)(void);
 typedef esp_err_t (*prsl_set_cb_t)(const char *group_id, const char *key,
                                     const char *value);
 
-/** @brief A single path/value pair passed to the save callback.
- *  @var path   "group_id.key" — heap-allocated, caller must free after callback.
- *  @var value  String representation of the field's value. For all field types
- *              (text, number, checkbox, switch, range, select, radio, etc.),
- *              the save callback always receives a string. Checkbox/switch values
- *              are "true"/"false", numbers are stringified (e.g., "6", "2.5"),
- *              text fields are the raw text. Developers are responsible for
- *              converting back to their expected type (atoi, strcmp, etc.). */
-typedef struct {
-    const char *path;
-    const char *value;
-} prsl_save_pair_t;
+/** @brief Save callback. Reads AV via prsl_get(), persists to storage.
+ *  @return ESP_OK on success (parasol clears dirty, pushes to clients),
+ *          ESP_ERR_* on failure (dirty stays true). */
+typedef esp_err_t (*prsl_save_cb_t)(void);
 
-/** @brief Called once per batch after on_set callbacks return ESP_OK.
- *  May be called multiple times per HTTP save request if the store has more
- *  fields than PRSL_SAVE_MAX_FIELDS (see parasol_config.json).
- *  @param pairs  Array of prsl_save_pair_t structures. Every pair.value is a
- *                string (including for boolean and numeric field types).
- *  @param count  Number of pairs in this batch.
- *  Use for single-cycle NVS persistence (one open/write/commit per batch). */
-typedef void (*prsl_save_cb_t)(const prsl_save_pair_t *pairs, int count);
+/** @brief Reset callback. Reload saved values into AV via prsl_set_*().
+ *  @return ESP_OK on success. May be NULL — if so, Reset button hidden. */
+typedef esp_err_t (*prsl_reset_cb_t)(void);
 
 /** @brief Per-field options. All fields are required; pass NULL to opt out.
  *  @var is_status false by default (via designated initializer). true = read-only status field.
@@ -102,12 +89,16 @@ bool prsl_is_dirty(void);
 
 /* ── Lifecycle ──────────────────────────────────────────────── */
 
-/** @brief Initialize prsl with a web server and save callback.
+bool prsl_has_reset(void);
+
+/** @brief Initialize prsl with a web server, save callback, and optional reset callback.
  *  @param server   Initialized AsyncWebServer (port 80).
  *  @param on_save  Called on Save after all on_set pass. NULL = no persistence.
+ *  @param on_reset Called on Reset. NULL = no Reset button (hidden).
  *  @return ESP_OK on success.
  *  @warning All groups and fields MUST be registered BEFORE calling this. */
-esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save);
+esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
+                    prsl_reset_cb_t on_reset);
 
 /** @brief Start the async web server. */
 esp_err_t prsl_start(void);
