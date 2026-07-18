@@ -5,6 +5,7 @@ find_program(GZIP gzip REQUIRED)
 set(PARASOL_TITLE "PARASOL")
 set(PARASOL_LOGO "/logo.png")
 set(PARASOL_FAVICON "/favicon.ico")
+set(PARASOL_ALWAYS_SHOW_SAVE "0")
 
 # Read config if present
 if(EXISTS "${CONFIG_FILE}")
@@ -12,6 +13,10 @@ if(EXISTS "${CONFIG_FILE}")
     string(JSON PARASOL_TITLE ERROR_VARIABLE _ GET "${PARASOL_JSON}" title)
     string(JSON PARASOL_LOGO ERROR_VARIABLE _ GET "${PARASOL_JSON}" logo)
     string(JSON PARASOL_FAVICON ERROR_VARIABLE _ GET "${PARASOL_JSON}" favicon)
+    string(JSON _always ERROR_VARIABLE _ GET "${PARASOL_JSON}" always_show_save)
+    if(_always)
+        set(PARASOL_ALWAYS_SHOW_SAVE "1")
+    endif()
 endif()
 
 # Read and inject config into HTML
@@ -19,6 +24,7 @@ file(READ "${ASSETS_SRC}/index.html" HTML_CONTENT)
 string(REPLACE "{{TITLE}}" "${PARASOL_TITLE}" HTML_CONTENT "${HTML_CONTENT}")
 string(REPLACE "{{LOGO}}" "${PARASOL_LOGO}" HTML_CONTENT "${HTML_CONTENT}")
 string(REPLACE "{{FAVICON}}" "${PARASOL_FAVICON}" HTML_CONTENT "${HTML_CONTENT}")
+string(REPLACE "{{ALWAYS_SHOW_SAVE}}" "${PARASOL_ALWAYS_SHOW_SAVE}" HTML_CONTENT "${HTML_CONTENT}")
 
 # Read JS and CSS
 file(READ "${ASSETS_SRC}/app.min.js" JS_CONTENT)

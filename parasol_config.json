@@ -2,5 +2,5 @@
   "title": "PARASOL",
   "logo": "/logo.png",
   "favicon": "/favicon.ico",
-  "save_max_fields": 32
+  "always_show_save": false
 }

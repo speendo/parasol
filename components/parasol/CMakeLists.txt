@@ -9,11 +9,14 @@ set(GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 set(ASSETS_C "${GENERATED_DIR}/prsl_assets.c")
 set(ASSETS_H "${GENERATED_DIR}/prsl_assets.h")
 
-# Read save_max_fields from config (default 32)
-set(PRSL_SAVE_MAX_FIELDS 32)
+# Read always_show_save from config (default false)
+set(PRSL_ALWAYS_SHOW_SAVE 0)
 if(EXISTS "${CMAKE_SOURCE_DIR}/parasol_config.json")
     file(READ "${CMAKE_SOURCE_DIR}/parasol_config.json" PARASOL_JSON)
-    string(JSON PRSL_SAVE_MAX_FIELDS ERROR_VARIABLE _ GET "${PARASOL_JSON}" save_max_fields)
+    string(JSON _always ERROR_VARIABLE _ GET "${PARASOL_JSON}" always_show_save)
+    if(_always)
+        set(PRSL_ALWAYS_SHOW_SAVE 1)
+    endif()
 endif()
 
 add_custom_command(
@@ -36,5 +39,5 @@ idf_component_register(
     INCLUDE_DIRS "include" "src" "dependencies/cJSON" "${GENERATED_DIR}"
     REQUIRES cJSON
     PRIV_REQUIRES AsyncTCP ESPAsyncWebServer
-    COMPILE_DEFINITIONS PRSL_SAVE_MAX_FIELDS=${PRSL_SAVE_MAX_FIELDS}
+    COMPILE_DEFINITIONS PRSL_ALWAYS_SHOW_SAVE=${PRSL_ALWAYS_SHOW_SAVE}
 )
