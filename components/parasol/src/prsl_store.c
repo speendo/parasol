@@ -14,7 +14,7 @@ esp_err_t prsl_store_init(prsl_store_t *store) {
         free(store->fields);
         return ESP_ERR_NO_MEM;
     }
-    store->mutex = xSemaphoreCreateMutex();
+    store->mutex = xSemaphoreCreateRecursiveMutex();
     if (!store->mutex) {
         free(store->groups);
         free(store->fields);
@@ -40,12 +40,12 @@ void prsl_store_deinit(prsl_store_t *store) {
 esp_err_t prsl_store_add_field(prsl_store_t *store, const prsl_field_t *field) {
     if (!store || !field) return ESP_ERR_INVALID_ARG;
     if (!prsl_store_has_group(store, field->group_id)) return ESP_ERR_NOT_FOUND;
-    xSemaphoreTake(store->mutex, portMAX_DELAY);
+    xSemaphoreTakeRecursive(store->mutex, portMAX_DELAY);
     if (store->count >= store->capacity) {
         int new_cap = store->capacity * 2;
         prsl_field_t *new_fields = realloc(store->fields, new_cap * sizeof(prsl_field_t));
         if (!new_fields) {
-            xSemaphoreGive(store->mutex);
+            xSemaphoreGiveRecursive(store->mutex);
             return ESP_ERR_NO_MEM;
         }
         store->fields = new_fields;
@@ -54,21 +54,21 @@ esp_err_t prsl_store_add_field(prsl_store_t *store, const prsl_field_t *field) {
     store->fields[store->count] = *field;
     store->fields[store->count].value = NULL;
     store->count++;
-    xSemaphoreGive(store->mutex);
+    xSemaphoreGiveRecursive(store->mutex);
     return ESP_OK;
 }
 
 prsl_field_t *prsl_store_find(prsl_store_t *store, const char *group_id, const char *key) {
     if (!store || !group_id || !key) return NULL;
-    xSemaphoreTake(store->mutex, portMAX_DELAY);
+    xSemaphoreTakeRecursive(store->mutex, portMAX_DELAY);
     for (int i = 0; i < store->count; i++) {
         if (strcmp(store->fields[i].group_id, group_id) == 0 &&
             strcmp(store->fields[i].key, key) == 0) {
-            xSemaphoreGive(store->mutex);
+            xSemaphoreGiveRecursive(store->mutex);
             return &store->fields[i];
         }
     }
-    xSemaphoreGive(store->mutex);
+    xSemaphoreGiveRecursive(store->mutex);
     return NULL;
 }
 
@@ -80,7 +80,7 @@ prsl_field_t *prsl_store_field_at(prsl_store_t *store, int i) {
 esp_err_t prsl_store_set_json(prsl_store_t *store, const char *group_id,
                                const char *key, cJSON *value) {
     if (!store || !group_id || !key) return ESP_ERR_INVALID_ARG;
-    xSemaphoreTake(store->mutex, portMAX_DELAY);
+    xSemaphoreTakeRecursive(store->mutex, portMAX_DELAY);
 
     prsl_field_t *f = NULL;
     for (int i = 0; i < store->count; i++) {
@@ -92,20 +92,20 @@ esp_err_t prsl_store_set_json(prsl_store_t *store, const char *group_id,
     }
     if (!f) {
         if (value) cJSON_Delete(value);
-        xSemaphoreGive(store->mutex);
+        xSemaphoreGiveRecursive(store->mutex);
         return ESP_ERR_NOT_FOUND;
     }
 
     cJSON_Delete(f->value);
     f->value = value ? value : cJSON_CreateNull();
 
-    xSemaphoreGive(store->mutex);
+    xSemaphoreGiveRecursive(store->mutex);
     return ESP_OK;
 }
 
 cJSON *prsl_store_get_value(prsl_store_t *store, const char *group_id, const char *key) {
     if (!store || !group_id || !key) return NULL;
-    xSemaphoreTake(store->mutex, portMAX_DELAY);
+    xSemaphoreTakeRecursive(store->mutex, portMAX_DELAY);
     /* Inline find to avoid re-entrant mutex */
     prsl_field_t *f = NULL;
     for (int i = 0; i < store->count; i++) {
@@ -116,7 +116,7 @@ cJSON *prsl_store_get_value(prsl_store_t *store, const char *group_id, const cha
         }
     }
     cJSON *v = f ? f->value : NULL;
-    xSemaphoreGive(store->mutex);
+    xSemaphoreGiveRecursive(store->mutex);
     return v;
 }
 
@@ -134,19 +134,19 @@ void prsl_store_clear_dirty(prsl_store_t *store) {
 
 esp_err_t prsl_store_add_group(prsl_store_t *store, const char *group_id, const char *label) {
     if (!store || !group_id) return ESP_ERR_INVALID_ARG;
-    xSemaphoreTake(store->mutex, portMAX_DELAY);
+    xSemaphoreTakeRecursive(store->mutex, portMAX_DELAY);
     for (int i = 0; i < store->group_count; i++) {
         if (strcmp(store->groups[i].group_id, group_id) == 0) {
             if (!label && !store->groups[i].label) {
-                xSemaphoreGive(store->mutex);
+                xSemaphoreGiveRecursive(store->mutex);
                 return ESP_OK;
             }
             if (label && store->groups[i].label
                 && strcmp(store->groups[i].label, label) == 0) {
-                xSemaphoreGive(store->mutex);
+                xSemaphoreGiveRecursive(store->mutex);
                 return ESP_OK;
             }
-            xSemaphoreGive(store->mutex);
+            xSemaphoreGiveRecursive(store->mutex);
             return ESP_ERR_INVALID_STATE;
         }
     }
@@ -154,7 +154,7 @@ esp_err_t prsl_store_add_group(prsl_store_t *store, const char *group_id, const 
         int new_cap = store->group_capacity * 2;
         prsl_group_meta_t *new_groups = realloc(store->groups, new_cap * sizeof(prsl_group_meta_t));
         if (!new_groups) {
-            xSemaphoreGive(store->mutex);
+            xSemaphoreGiveRecursive(store->mutex);
             return ESP_ERR_NO_MEM;
         }
         store->groups = new_groups;
@@ -163,7 +163,7 @@ esp_err_t prsl_store_add_group(prsl_store_t *store, const char *group_id, const 
     store->groups[store->group_count].group_id = group_id;
     store->groups[store->group_count].label = label;
     store->group_count++;
-    xSemaphoreGive(store->mutex);
+    xSemaphoreGiveRecursive(store->mutex);
     return ESP_OK;
 }
 
@@ -186,7 +186,7 @@ const char *prsl_store_get_label(prsl_store_t *store, const char *group_id) {
 
 esp_err_t prsl_store_load_values(prsl_store_t *store) {
     if (!store) return ESP_ERR_INVALID_ARG;
-    xSemaphoreTake(store->mutex, portMAX_DELAY);
+    xSemaphoreTakeRecursive(store->mutex, portMAX_DELAY);
     for (int i = 0; i < store->count; i++) {
         prsl_field_t *f = &store->fields[i];
         if (!f->on_get) continue;
@@ -200,13 +200,13 @@ esp_err_t prsl_store_load_values(prsl_store_t *store) {
         }
     }
     store->dirty = false;
-    xSemaphoreGive(store->mutex);
+    xSemaphoreGiveRecursive(store->mutex);
     return ESP_OK;
 }
 
 esp_err_t prsl_store_reset_values(prsl_store_t *store) {
     if (!store) return ESP_ERR_INVALID_ARG;
-    xSemaphoreTake(store->mutex, portMAX_DELAY);
+    xSemaphoreTakeRecursive(store->mutex, portMAX_DELAY);
     for (int i = 0; i < store->count; i++) {
         prsl_field_t *f = &store->fields[i];
         const char *val = f->on_get ? f->on_get() : NULL;
@@ -219,6 +219,6 @@ esp_err_t prsl_store_reset_values(prsl_store_t *store) {
         }
     }
     store->dirty = false;
-    xSemaphoreGive(store->mutex);
+    xSemaphoreGiveRecursive(store->mutex);
     return ESP_OK;
 }
