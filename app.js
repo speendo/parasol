@@ -20,6 +20,7 @@ var parasol = (function () {
   var wsRetries = 0;
   var formInteracted = false;
   var pendingConflicts = [];
+  var resetInProgress = false;
 
   /** Show an error message in the status bar. @param {string} msg */
   function showError(msg) {
@@ -330,6 +331,7 @@ var parasol = (function () {
     if (msg.type === 'status') { processStatus(msg.data); return; }
     if (msg.type === 'error') { showError(msg.message); return; }
     if (msg.type !== 'settings' && msg._dirty === undefined) return;
+    if (resetInProgress) return;
     wsRetries = 0;
 
     var data = msg.data || msg;
@@ -787,8 +789,12 @@ var parasol = (function () {
     btnReset.addEventListener('click', function () {
       postJSON('/api/settings/reset', {}).then(function (ok) {
         if (ok) {
+          resetInProgress = true;
           configForm.setAttribute('aria-busy', 'true');
-          syncLS();
+          fetch('/api/settings').then(function (res) { return res.json(); }).then(function (data) {
+            processSettings(data, data._dirty);
+            resetInProgress = false;
+          });
         }
       });
     });
