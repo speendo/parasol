@@ -77,20 +77,11 @@ prsl_field_t *prsl_store_field_at(prsl_store_t *store, int i) {
     return &store->fields[i];
 }
 
-static bool is_bool_type(prsl_type_t t) {
-    return t == PRSL_CHECKBOX || t == PRSL_SWITCH;
-}
-
-static bool is_number_type(prsl_type_t t) {
-    return t == PRSL_NUMBER || t == PRSL_RANGE;
-}
-
-esp_err_t prsl_store_set_value(prsl_store_t *store, const char *group_id,
-                                const char *key, const char *value_str) {
+esp_err_t prsl_store_set_json(prsl_store_t *store, const char *group_id,
+                               const char *key, cJSON *value) {
     if (!store || !group_id || !key) return ESP_ERR_INVALID_ARG;
     xSemaphoreTake(store->mutex, portMAX_DELAY);
 
-    /* Inline find to avoid re-entrant mutex in prsl_store_find */
     prsl_field_t *f = NULL;
     for (int i = 0; i < store->count; i++) {
         if (strcmp(store->fields[i].group_id, group_id) == 0 &&
@@ -100,23 +91,14 @@ esp_err_t prsl_store_set_value(prsl_store_t *store, const char *group_id,
         }
     }
     if (!f) {
+        if (value) cJSON_Delete(value);
         xSemaphoreGive(store->mutex);
         return ESP_ERR_NOT_FOUND;
     }
 
     cJSON_Delete(f->value);
-    f->value = NULL;
+    f->value = value ? value : cJSON_CreateNull();
 
-    if (value_str == NULL || (is_bool_type(f->type) && value_str[0] == '\0')) {
-        f->value = cJSON_CreateNull();
-    } else if (is_bool_type(f->type)) {
-        bool v = (strcmp(value_str, "true") == 0 || strcmp(value_str, "1") == 0);
-        f->value = cJSON_CreateBool(v);
-    } else if (is_number_type(f->type)) {
-        f->value = cJSON_CreateNumber(atof(value_str));
-    } else {
-        f->value = cJSON_CreateString(value_str);
-    }
     xSemaphoreGive(store->mutex);
     return ESP_OK;
 }

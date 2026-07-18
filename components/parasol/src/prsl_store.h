@@ -55,7 +55,8 @@ bool prsl_store_has_group(prsl_store_t *store, const char *group_id);
 esp_err_t prsl_store_add_field(prsl_store_t *store, const prsl_field_t *field);
 const char *prsl_store_get_label(prsl_store_t *store, const char *group_id);
 prsl_field_t *prsl_store_find(prsl_store_t *store, const char *group_id, const char *key);
-esp_err_t prsl_store_set_value(prsl_store_t *store, const char *group_id, const char *key, const char *value_str);
+/** @brief Store a cJSON value. Takes ownership of @p value (caller must NOT free). */
+esp_err_t prsl_store_set_json(prsl_store_t *store, const char *group_id, const char *key, cJSON *value);
 cJSON *prsl_store_get_value(prsl_store_t *store, const char *group_id, const char *key);
 bool prsl_store_is_dirty(prsl_store_t *store);
 void prsl_store_set_dirty(prsl_store_t *store, bool d);

@@ -148,24 +148,24 @@ void test_set_get_value_string(void) {
     prsl_store_add_group(&store, "wifi", "WiFi Settings");
     prsl_field_t f = make_field("wifi", "ssid", PRSL_TEXT, false);
     prsl_store_add_field(&store, &f);
-    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_set_value(&store, "wifi", "ssid", "MyNet"));
+    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_set_json(&store, "wifi", "ssid", cJSON_CreateString("MyNet")));
     cJSON *v = prsl_store_get_value(&store, "wifi", "ssid");
     TEST_ASSERT_TRUE(cJSON_IsString(v));
     TEST_ASSERT_EQUAL_STRING("MyNet", cJSON_GetStringValue(v));
 }
 
 void test_set_value_unknown_field(void) {
-    TEST_ASSERT_EQUAL(ESP_ERR_NOT_FOUND, prsl_store_set_value(&store, "nope", "nope", "x"));
+    TEST_ASSERT_EQUAL(ESP_ERR_NOT_FOUND, prsl_store_set_json(&store, "nope", "nope", cJSON_CreateString("x")));
 }
 
 void test_set_value_overwrite(void) {
     prsl_store_add_group(&store, "wifi", "WiFi Settings");
     prsl_field_t f = make_field("wifi", "ssid", PRSL_TEXT, false);
     prsl_store_add_field(&store, &f);
-    prsl_store_set_value(&store, "wifi", "ssid", "first");
+    prsl_store_set_json(&store, "wifi", "ssid", cJSON_CreateString("first"));
     cJSON *v1 = prsl_store_get_value(&store, "wifi", "ssid");
     TEST_ASSERT_EQUAL_STRING("first", cJSON_GetStringValue(v1));
-    prsl_store_set_value(&store, "wifi", "ssid", "second");
+    prsl_store_set_json(&store, "wifi", "ssid", cJSON_CreateString("second"));
     cJSON *v2 = prsl_store_get_value(&store, "wifi", "ssid");
     TEST_ASSERT_EQUAL_STRING("second", cJSON_GetStringValue(v2));
 }
@@ -193,7 +193,7 @@ void test_reset_values_calls_on_get(void) {
     f.on_get = get_persisted_val;
     prsl_store_add_field(&store, &f);
     prsl_store_load_values(&store);
-    prsl_store_set_value(&store, "wifi", "ssid", "changed");
+    prsl_store_set_json(&store, "wifi", "ssid", cJSON_CreateString("changed"));
     cJSON *v1 = prsl_store_get_value(&store, "wifi", "ssid");
     TEST_ASSERT_EQUAL_STRING("changed", cJSON_GetStringValue(v1));
     prsl_store_reset_values(&store);
@@ -208,7 +208,7 @@ void test_reset_values_no_on_get_sets_null(void) {
     f.on_get = NULL;
     prsl_store_add_field(&store, &f);
     prsl_store_load_values(&store);
-    prsl_store_set_value(&store, "wifi", "ssid", "val");
+    prsl_store_set_json(&store, "wifi", "ssid", cJSON_CreateString("val"));
     prsl_store_reset_values(&store);
     cJSON *v = prsl_store_get_value(&store, "wifi", "ssid");
     TEST_ASSERT_TRUE(cJSON_IsNull(v));
@@ -271,7 +271,7 @@ void test_prsl_set_dirty_sets_flag(void) {
     prsl_store_deinit(&s);
 }
 
-void test_prsl_store_set_value_does_not_set_dirty(void) {
+void test_prsl_store_set_json_does_not_set_dirty(void) {
     prsl_store_t s;
     TEST_ASSERT_EQUAL(ESP_OK, prsl_store_init(&s));
     TEST_ASSERT_EQUAL(ESP_OK, prsl_store_add_group(&s, "g", NULL));
@@ -279,7 +279,7 @@ void test_prsl_store_set_value_does_not_set_dirty(void) {
                        .is_status = false, .help = "", .attrs = "" };
     TEST_ASSERT_EQUAL(ESP_OK, prsl_store_add_field(&s, &f));
     TEST_ASSERT_FALSE(prsl_store_is_dirty(&s));
-    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_set_value(&s, "g", "k", "hello"));
+    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_set_json(&s, "g", "k", cJSON_CreateString("hello")));
     TEST_ASSERT_FALSE(prsl_store_is_dirty(&s));
     prsl_store_deinit(&s);
 }
@@ -293,13 +293,67 @@ void test_recursive_mutex_allows_reentry(void) {
     TEST_ASSERT_EQUAL(ESP_OK, prsl_store_add_field(&s, &f));
 
     xSemaphoreTakeRecursive(s.mutex, portMAX_DELAY);
-    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_set_value(&s, "g", "k", "v"));
+    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_set_json(&s, "g", "k", cJSON_CreateString("v")));
     xSemaphoreGiveRecursive(s.mutex);
 
     cJSON *v = prsl_store_get_value(&s, "g", "k");
     TEST_ASSERT_TRUE(v && cJSON_IsString(v) && strcmp(cJSON_GetStringValue(v), "v") == 0);
     xSemaphoreGiveRecursive(s.mutex);
     prsl_store_deinit(&s);
+}
+
+void test_prsl_set_str_roundtrip(void) {
+    prsl_store_t store;
+    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_init(&store));
+    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_add_group(&store, "g", NULL));
+    prsl_field_t f = { .group_id = "g", .key = "k", .label = "L", .type = PRSL_TEXT,
+                       .is_status = false, .help = "", .attrs = "" };
+    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_add_field(&store, &f));
+
+    /* Store as cJSON string, verify prsl_get returns the string */
+    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_set_json(&store, "g", "k", cJSON_CreateString("hello")));
+    cJSON *v = prsl_store_get_value(&store, "g", "k");
+    TEST_ASSERT_TRUE(v && cJSON_IsString(v));
+    TEST_ASSERT_EQUAL_STRING("hello", cJSON_GetStringValue(v));
+
+    /* Store as cJSON null, verify get_value returns null */
+    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_set_json(&store, "g", "k", cJSON_CreateNull()));
+    v = prsl_store_get_value(&store, "g", "k");
+    TEST_ASSERT_TRUE(v && cJSON_IsNull(v));
+
+    prsl_store_deinit(&store);
+}
+
+void test_prsl_set_json_typed(void) {
+    prsl_store_t store;
+    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_init(&store));
+    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_add_group(&store, "g", NULL));
+    prsl_field_t f = { .group_id = "g", .key = "k", .label = "L", .type = PRSL_TEXT,
+                       .is_status = false, .help = "", .attrs = "" };
+    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_add_field(&store, &f));
+
+    /* int round-trip */
+    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_set_json(&store, "g", "k", cJSON_CreateNumber(42)));
+    cJSON *v = prsl_store_get_value(&store, "g", "k");
+    TEST_ASSERT_TRUE(v && cJSON_IsNumber(v));
+    TEST_ASSERT_EQUAL(42, (int)cJSON_GetNumberValue(v));
+
+    /* bool round-trip */
+    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_set_json(&store, "g", "k", cJSON_CreateBool(true)));
+    v = prsl_store_get_value(&store, "g", "k");
+    TEST_ASSERT_TRUE(v && cJSON_IsBool(v) && cJSON_IsTrue(v));
+
+    /* float round-trip */
+    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_set_json(&store, "g", "k", cJSON_CreateNumber(3.14)));
+    v = prsl_store_get_value(&store, "g", "k");
+    TEST_ASSERT_TRUE(v && cJSON_IsNumber(v));
+
+    /* null round-trip */
+    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_set_json(&store, "g", "k", NULL));
+    v = prsl_store_get_value(&store, "g", "k");
+    TEST_ASSERT_TRUE(v && cJSON_IsNull(v));
+
+    prsl_store_deinit(&store);
 }
 
 int main(void) {
@@ -336,7 +390,9 @@ int main(void) {
     RUN_TEST(test_capacity_growth_fields);
     RUN_TEST(test_set_dirty_direct);
     RUN_TEST(test_prsl_set_dirty_sets_flag);
-    RUN_TEST(test_prsl_store_set_value_does_not_set_dirty);
+    RUN_TEST(test_prsl_store_set_json_does_not_set_dirty);
     RUN_TEST(test_recursive_mutex_allows_reentry);
+    RUN_TEST(test_prsl_set_str_roundtrip);
+    RUN_TEST(test_prsl_set_json_typed);
     return UNITY_END();
 }

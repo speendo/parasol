@@ -183,7 +183,7 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save) {
                         }
                     }
                     if (f) {
-                        prsl_store_set_value(&g_store, group->string, field->string, val_str);
+                        prsl_store_set_json(&g_store, group->string, field->string, cJSON_CreateString(val_str));
                         if (all_pairs) {
                             cJSON *sv = prsl_store_get_value(&g_store, group->string, field->string);
                             if (sv && !cJSON_IsNull(sv)) {
@@ -259,31 +259,57 @@ esp_err_t prsl_reset(void) {
 
 /* ── Runtime value access ───────────────────────────────────── */
 
-esp_err_t prsl_set(const char *path, const char *value) {
-    char group_id[PRSL_MAX_PATH] = {0};
-    char key[PRSL_MAX_PATH] = {0};
+static esp_err_t parse_dot_path(const char *path, char *group_id, char *key) {
     const char *dot = strchr(path, '.');
     if (!dot) return ESP_ERR_INVALID_ARG;
-    size_t clen = dot - path;
-    if (clen >= PRSL_MAX_PATH) return ESP_ERR_INVALID_ARG;
-    memcpy(group_id, path, clen);
-    group_id[clen] = '\0';
+    size_t glen = dot - path;
+    if (glen >= PRSL_MAX_PATH) return ESP_ERR_INVALID_ARG;
+    memcpy(group_id, path, glen);
+    group_id[glen] = '\0';
     strncpy(key, dot + 1, PRSL_MAX_PATH - 1);
     key[PRSL_MAX_PATH - 1] = '\0';
-    return prsl_store_set_value(&g_store, group_id, key, value);
+    return ESP_OK;
+}
+
+esp_err_t prsl_set_str(const char *path, const char *value) {
+    char group_id[PRSL_MAX_PATH] = {0};
+    char key[PRSL_MAX_PATH] = {0};
+    if (parse_dot_path(path, group_id, key) != ESP_OK) return ESP_ERR_INVALID_ARG;
+    return prsl_store_set_json(&g_store, group_id, key, value ? cJSON_CreateString(value) : cJSON_CreateNull());
+}
+
+esp_err_t prsl_set_int(const char *path, int value) {
+    char group_id[PRSL_MAX_PATH] = {0};
+    char key[PRSL_MAX_PATH] = {0};
+    if (parse_dot_path(path, group_id, key) != ESP_OK) return ESP_ERR_INVALID_ARG;
+    return prsl_store_set_json(&g_store, group_id, key, cJSON_CreateNumber(value));
+}
+
+esp_err_t prsl_set_float(const char *path, float value) {
+    char group_id[PRSL_MAX_PATH] = {0};
+    char key[PRSL_MAX_PATH] = {0};
+    if (parse_dot_path(path, group_id, key) != ESP_OK) return ESP_ERR_INVALID_ARG;
+    return prsl_store_set_json(&g_store, group_id, key, cJSON_CreateNumber(value));
+}
+
+esp_err_t prsl_set_bool(const char *path, bool value) {
+    char group_id[PRSL_MAX_PATH] = {0};
+    char key[PRSL_MAX_PATH] = {0};
+    if (parse_dot_path(path, group_id, key) != ESP_OK) return ESP_ERR_INVALID_ARG;
+    return prsl_store_set_json(&g_store, group_id, key, cJSON_CreateBool(value));
+}
+
+esp_err_t prsl_set_null(const char *path) {
+    char group_id[PRSL_MAX_PATH] = {0};
+    char key[PRSL_MAX_PATH] = {0};
+    if (parse_dot_path(path, group_id, key) != ESP_OK) return ESP_ERR_INVALID_ARG;
+    return prsl_store_set_json(&g_store, group_id, key, cJSON_CreateNull());
 }
 
 const char *prsl_get(const char *path) {
     char group_id[PRSL_MAX_PATH] = {0};
     char key[PRSL_MAX_PATH] = {0};
-    const char *dot = strchr(path, '.');
-    if (!dot) return NULL;
-    size_t clen = dot - path;
-    if (clen >= PRSL_MAX_PATH) return NULL;
-    memcpy(group_id, path, clen);
-    group_id[clen] = '\0';
-    strncpy(key, dot + 1, PRSL_MAX_PATH - 1);
-    key[PRSL_MAX_PATH - 1] = '\0';
+    if (parse_dot_path(path, group_id, key) != ESP_OK) return NULL;
     cJSON *v = prsl_store_get_value(&g_store, group_id, key);
     if (!v || !cJSON_IsString(v)) return NULL;
     return cJSON_GetStringValue(v);

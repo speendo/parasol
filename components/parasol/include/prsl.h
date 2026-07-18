@@ -118,7 +118,14 @@ esp_err_t prsl_reset(void);
 
 /* ── Runtime value access ──────────────────────────────────── */
 
-esp_err_t prsl_set(const char *path, const char *value);
+/** @brief Typed setters for compile-time safety. Each maps to cJSON type.
+ *  Does NOT broadcast. Call prsl_push() or prsl_broadcast_status() after. */
+esp_err_t prsl_set_str(const char *path, const char *value);
+esp_err_t prsl_set_int(const char *path, int value);
+esp_err_t prsl_set_float(const char *path, float value);
+esp_err_t prsl_set_bool(const char *path, bool value);
+esp_err_t prsl_set_null(const char *path);
+
 const char *prsl_get(const char *path);
 
 /* ── Push / broadcast ──────────────────────────────────────── */
