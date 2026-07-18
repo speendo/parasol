@@ -415,21 +415,6 @@ happens (no single quotes to replace).
 | `PRSL_RADIO` | Radio group in `<fieldset>` | Use `prsl_add_field_opts` |
 | `PRSL_SELECT` | `<select>` | Use `prsl_add_field_opts` |
 
----
-
-## Build-Time Configuration
-
-`parasol_config.json` supports these keys:
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `title` | string | `"PARASOL"` | Page title |
-| `logo` | string | `"/logo.png"` | Navbar logo URL |
-| `favicon` | string | `"/favicon.ico"` | Favicon URL |
-| `always_show_save` | bool | `false` | Always show Save button, ignore dirty flag |
-
----
-
 ## Dirty
 
 The `_dirty` flag is exclusively developer-driven. Set it true when applied values
@@ -585,6 +570,19 @@ static esp_err_t on_reset(void) {
     return ESP_OK;
 }
 ```
+
+---
+
+## Build-Time Configuration
+
+`parasol_config.json` supports these keys:
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `title` | string | `"PARASOL"` | Page title |
+| `logo` | string | `"/logo.png"` | Navbar logo URL |
+| `favicon` | string | `"/favicon.ico"` | Favicon URL |
+| `always_show_save` | bool | `false` | Always show Save button, ignore dirty flag |
 
 ---
 
