@@ -40,6 +40,8 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build-and-test
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     container:
       image: debian:trixie-slim
     steps:
