@@ -35,6 +35,8 @@ after the WS + blur refactor.
 
 ### 2. ESP32 backend implementation
 
+**Status:** Completed — 2026-07-17
+
 **Goal:** A reusable C/C++ library (ESP-IDF component) that implements the API
 contract the Python test server currently provides.
 
@@ -52,7 +54,7 @@ image. The library should:
   settings and status components
 
 **Out of scope (for now):**
-- Reboot and firmware upload endpoints (see separate items)
+- Firmware upload endpoint (see separate item)
 - Auth
 - mDNS
 - Any project-specific business logic
@@ -62,11 +64,17 @@ serialize/deserialize settings, NVS persistence, WS lifecycle). The developer
 supplies the component JSON definitions, status variable callbacks, and any
 custom API endpoints beyond settings.
 
+**Implemented:** `prsl_init`, `prsl_start`, `prsl_push`, `prsl_broadcast_status`,
+full save/reset lifecycle, typed setters, developer-driven dirty flag,
+recursive mutex, status variables, `_show_reset` wire flag.
+
 ---
 
 ## Medium Priority
 
 ### 3. Edge cases — concurrent updates
+
+**Status:** Completed — 2026-06-27
 
 **What:** Review and harden the state machine for edge cases not well covered:
 
@@ -79,6 +87,8 @@ custom API endpoints beyond settings.
 - Save-and-apply with empty diff (only dirty flag set)
 
 ### 4. Navbar image + favicon
+
+**Status:** Completed — 2026-06-26
 
 **What:** Support a logo image in the nav header and a favicon, both served as
 static files from SPIFFS.
@@ -93,6 +103,8 @@ build time.
 - Max 2-3 lines of HTML
 
 ### 5. Group name labels
+
+**Status:** Completed — 2026-06-26
 
 **What:** Optional `"label"` field in component JSON to override the
 auto-derived label from `camelCase`/`snake_case` parsing.
@@ -121,6 +133,8 @@ object and is a user-facing attribute, so it does not need the `_` prefix.
 **Changes:** 4 lines in `processSettings` and `processStatus`.
 
 ### 6. Reset to saved state
+
+**Status:** Completed — 2026-07-17
 
 **What:** A "Reset" button that tells the server to reload NVS settings into
 applied values, then pushes the result to the client over WS.
@@ -169,13 +183,18 @@ checkbox fails validation; otherwise `null` submits as-is.
 
 ### 8. Reboot server
 
-**What:** A "Reboot" button that POSTs to `/api/system/reboot`.
+**Status:** In Progress — design spec: `2026-07-19-reboot-button-and-v060-release-design.md`
 
-**Flow:** Click → confirm dialog → POST → show "Rebooting..." with countdown →
-WS will naturally disconnect → show "Connection lost, retrying..." → reconnect
-automatically when device comes back.
+**What:** A "Reboot" action in the nav dropdown, with a Pico CSS confirmation
+modal. POSTs to `/api/system/reboot`.
 
-**ESP32 side:** `esp_restart()` call on endpoint hit.
+**Flow:** Click "Reboot" in nav dropdown → confirmation modal → Confirm →
+POST → show "Rebooting…" → WS disconnects → exponential backoff reconnect
+when device comes back.
+
+**ESP32 side:** Developer provides `on_reboot` callback (nullable) via
+`prsl_init()`. Callback should call `esp_restart()`. Parasol provides the
+HTTP endpoint and `_show_reboot` wire flag.
 
 ### 9. Firmware upload
 
@@ -236,25 +255,42 @@ spec. The implementation plan lived at `docs/superpowers/plans/2026-06-24-doc-ti
 - ESP32 integration example (ESP-IDF component setup)
 - Link to a demo/test project
 
+### 14. v0.6.0 housekeeping
+
+**Status:** In Progress — bundled with reboot button release
+
+**What:** Cleanup and release prep for v0.6.0:
+
+- Version bump `library.json` → 0.6.0
+- Update README install example from `v0.1.0` to `v0.6.0`
+- Add CHANGELOG covering features since initial release
+- Remove `__test` scaffold from `app.js` (lines 999-1011, guarded by `__DEV__`
+  but still in source). Requires refactoring unit tests that use
+  `window.__test` to access internals.
+- Fix stale "tooltip" → "help text" wording in `API_REFERENCE.md:355,365`
+  and `prsl.h:51`
+
 ---
 
 ## Dependency Chain
 
 ```
 Validation fix ──┐
-                 ├──> ESP32 backend ──> (base for all ESP32-side items)
+                 ├──> ESP32 backend ✅ ──> (base for all ESP32-side items)
 Edge cases ──────┘
 
-Group name labels ────> (trivial, can be done anytime)
-Nav image/favicon ────> (trivial, can be done anytime)
-Reset button ─────────> (needs ESP32 backend for NVS reload)
-Checkbox revival ─────> (pure client, can be done anytime)
-Doc tidy ─────────────> (can be done anytime)
+Group name labels ────> ✅
+Nav image/favicon ────> ✅
+Reset button ─────────> ✅
+Checkbox revival ─────> ✅
+Doc tidy ─────────────> ✅
 
-Reboot ────────────> (needs ESP32 backend + reset endpoint pattern)
-Firmware upload ───> (needs ESP32 backend, most complex)
+Reboot ────────────> (in progress, design spec written)
+Firmware upload ───> (needs nothing, but most complex)
 Export/import ─────> (needs nothing, pure client + save endpoint)
+Basic auth ────────> (out of scope for library)
 GitHub/docs ───────> (can be done anytime, best after features stabilize)
+v0.6.0 housekeeping > (in progress, bundled with reboot release)
 ```
 
 ## Recommended Order
@@ -262,12 +298,12 @@ GitHub/docs ───────> (can be done anytime, best after features sta
 1. ~~Doc tidy~~ ✅ (completed 2026-06-24)
 2. ~~Validation fix~~ ✅ (resolved 2026-06-25)
 3. ~~Group name labels~~ ✅ (completed 2026-06-26)
-4. Nav image/favicon (trivial, 5-minute change)
-5. Edge cases audit (important before backend, could catch JS protocol issues) ✅ (completed 2026-06-27)
+4. ~~Nav image/favicon~~ ✅ (completed 2026-06-26)
+5. ~~Edge cases audit~~ ✅ (completed 2026-06-27)
 6. ~~Checkbox revival~~ ✅ (completed 2026-06-26)
-7. ESP32 backend (biggest item, enables everything else)
-8. Reset button (needs backend)
-9. Reboot (needs backend)
-10. Firmware upload (needs backend, most complex)
+7. ~~ESP32 backend~~ ✅ (completed 2026-07-17)
+8. ~~Reset button~~ ✅ (completed 2026-07-17)
+9. Reboot + v0.6.0 housekeeping (in progress)
+10. Firmware upload (needs nothing, most complex)
 11. Export/import (can be done independently)
 12. GitHub/docs (last, to reflect final state)
