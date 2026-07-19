@@ -114,7 +114,7 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
         cJSON *json = prsl_json_build_settings(&g_store);
         if (json) {
             cJSON_AddBoolToObject(json, "_dirty", prsl_store_is_dirty(&g_store));
-            cJSON_AddBoolToObject(json, "_has_reset", g_on_reset != NULL);
+            cJSON_AddBoolToObject(json, "_show_reset", g_on_reset != NULL);
             char *str = cJSON_PrintUnformatted(json);
             cJSON_Delete(json);
             if (str) {
@@ -304,7 +304,7 @@ esp_err_t prsl_push(void) {
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "type", "settings");
     cJSON_AddBoolToObject(root, "_dirty", prsl_store_is_dirty(&g_store));
-    cJSON_AddBoolToObject(root, "_has_reset", g_on_reset != NULL);
+    cJSON_AddBoolToObject(root, "_show_reset", g_on_reset != NULL);
     cJSON *data = prsl_json_build_settings(&g_store);
     cJSON_AddItemToObject(root, "data", data);
     char *str = cJSON_PrintUnformatted(root);

@@ -19,6 +19,7 @@ var parasol = (function () {
   var wsReconnectTimer = null;
   var wsRetries = 0;
   var formInteracted = false;
+  var showReset = false;
   var pendingConflicts = [];
   var resetInProgress = false;
 
@@ -123,6 +124,7 @@ var parasol = (function () {
     var showBtn = (dirty || alwaysShow) && formOk;
     btnSaveApply.hidden = !showBtn;
     btnSaveApply.disabled = !showBtn;
+    btnReset.hidden = !(dirty || showReset);
   }
 
   /**
@@ -270,6 +272,7 @@ var parasol = (function () {
     renderForm();
     bindChangeListeners();
     populateFromGroups();
+    revalidateAll();
     setBaseline();
     configForm.removeAttribute('aria-busy');
     clearError();
@@ -295,6 +298,7 @@ var parasol = (function () {
         renderForm();
         populateFromGroups(statusGroups, 'st-');
         populateFromGroups();
+        revalidateAll();
         setBaseline();
         updateUI();
       }
@@ -353,8 +357,8 @@ var parasol = (function () {
 
     if (echoMatched) {
       dirty = msg._dirty;
-      if (msg._has_reset !== undefined) {
-        btnReset.hidden = !msg._has_reset;
+      if (msg._show_reset !== undefined) {
+        showReset = msg._show_reset;
       }
       var queuedKeys = [];
       for (var key in inFlight) {
@@ -382,8 +386,8 @@ var parasol = (function () {
     if (hasInFlight && configForm.getAttribute('aria-busy') !== 'true') return;
     if (hasInFlight) {
       dirty = msg._dirty;
-      if (msg._has_reset !== undefined) {
-        btnReset.hidden = !msg._has_reset;
+      if (msg._show_reset !== undefined) {
+        showReset = msg._show_reset;
       }
       updateAV(data);
       for (var sk in inFlight) { inFlight[sk] = false; }
@@ -407,9 +411,10 @@ var parasol = (function () {
     }
 
     dirty = msg._dirty;
-    if (msg._has_reset !== undefined) {
-      btnReset.hidden = !msg._has_reset;
+    if (msg._show_reset !== undefined) {
+      showReset = msg._show_reset;
     }
+    updateUI();
 
     // Initial load — no groups yet, process settings directly
     if (groups.length === 0) {
@@ -680,6 +685,17 @@ var parasol = (function () {
     navList.appendChild(li);
   }
 
+  function revalidateAll() {
+    var fields = configForm.querySelectorAll('input, select, textarea');
+    for (var fi = 0; fi < fields.length; fi++) {
+      if (fields[fi].name) fields[fi].setAttribute('aria-invalid', fields[fi].checkValidity() ? 'false' : 'true');
+    }
+    var details = configForm.querySelectorAll('details');
+    for (var di = 0; di < details.length; di++) {
+      if (details[di].querySelector('[aria-invalid="true"]')) details[di].open = true;
+    }
+  }
+
   function renderForm() {
     configForm.innerHTML = '';
     var seen = {};
@@ -696,14 +712,6 @@ var parasol = (function () {
         seen[grp.id] = true;
         renderSection(grp.id, grp.label, grp.fields, false, null);
       }
-    }
-    var fields = configForm.querySelectorAll('input, select, textarea');
-    for (var fi = 0; fi < fields.length; fi++) {
-      if (fields[fi].name) fields[fi].setAttribute('aria-invalid', fields[fi].checkValidity() ? 'false' : 'true');
-    }
-    var details = configForm.querySelectorAll('details');
-    for (var di = 0; di < details.length; di++) {
-      if (details[di].querySelector('[aria-invalid="true"]')) details[di].open = true;
     }
   }
 
@@ -996,6 +1004,7 @@ var parasol = (function () {
     Object.defineProperty(window.__test, 'inFlight', { get: function () { return inFlight; }, set: function (v) { inFlight = v; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'lastSent', { get: function () { return lastSent; }, set: function (v) { lastSent = v; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'formInteracted', { get: function () { return formInteracted; }, set: function (v) { formInteracted = v; }, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'showReset', { get: function () { return showReset; }, set: function (v) { showReset = v; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'statusGroups', { get: function () { return statusGroups; }, set: function (v) { statusGroups = v; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'receiveWSMessage', { get: function () { return onWSMessage; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'wsReady', { get: function () { return function () { if (ws) ws.readyState = 1; }; }, enumerable: true, configurable: true });
@@ -1019,6 +1028,7 @@ var parasol = (function () {
     handleSaveApply: handleSaveApply,
     renderNav: renderNav,
     renderForm: renderForm,
+    revalidateAll: revalidateAll,
     handleHash: handleHash,
     wireButtons: wireButtons,
     bindChangeListeners: bindChangeListeners,

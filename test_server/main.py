@@ -77,7 +77,6 @@ status_store: dict[str, object] = {}
 start_time = time.time()
 connected: set[WebSocket] = set()
 _dirty: bool = False
-_has_reset: bool = True
 
 
 @app.on_event("startup")
@@ -106,7 +105,6 @@ async def startup():
 def build_settings():
     result = {}
     result["_dirty"] = _dirty
-    result["_has_reset"] = _has_reset
     for group_id, fields in SETTINGS.items():
         group = {}
         for key, field_def in fields.items():
@@ -204,7 +202,7 @@ async def events_ws(ws: WebSocket):
     global _dirty
     try:
         await ws.send_json({"type": "status", "data": build_status()})
-        await ws.send_json({"type": "settings", "_dirty": _dirty, "_has_reset": _has_reset, "data": build_settings()})
+        await ws.send_json({"type": "settings", "_dirty": _dirty, "data": build_settings()})
         while True:
             raw = await ws.receive_text()
             msg = json.loads(raw)
@@ -221,7 +219,7 @@ async def events_ws(ws: WebSocket):
                 payload = build_settings()
                 for client in list(connected):
                     try:
-                        await client.send_json({"type": "settings", "_dirty": _dirty, "_has_reset": _has_reset, "data": payload})
+                        await client.send_json({"type": "settings", "_dirty": _dirty, "data": payload})
                     except Exception:
                         connected.discard(client)
     except WebSocketDisconnect:
@@ -244,7 +242,7 @@ async def external_change(body: dict):
     payload = build_settings()
     for client in list(connected):
         try:
-            await client.send_json({"type": "settings", "_dirty": _dirty, "_has_reset": _has_reset, "data": payload})
+            await client.send_json({"type": "settings", "_dirty": _dirty, "data": payload})
         except Exception:
             connected.discard(client)
     return {"ok": True}

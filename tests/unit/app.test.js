@@ -168,9 +168,25 @@ describe('updateUI', () => {
     expect(document.getElementById('btn-save-apply').hidden).toBe(true)
   })
 
-  it('btn-reset exists in DOM and is hidden by default', () => {
-    expect(document.getElementById('btn-reset')).not.toBeNull()
+  it('reset hidden when not dirty and showReset is false', () => {
+    window.__test.dirty = false
+    window.__test.showReset = false
+    window.updateUI()
     expect(document.getElementById('btn-reset').hidden).toBe(true)
+  })
+
+  it('reset visible when dirty', () => {
+    window.__test.dirty = true
+    window.__test.showReset = false
+    window.updateUI()
+    expect(document.getElementById('btn-reset').hidden).toBe(false)
+  })
+
+  it('reset visible when showReset is true even if clean', () => {
+    window.__test.dirty = false
+    window.__test.showReset = true
+    window.updateUI()
+    expect(document.getElementById('btn-reset').hidden).toBe(false)
   })
 })
 
@@ -832,103 +848,97 @@ describe('processSettings', () => {
     expect(window.__test.groups[0].fields.length).toBe(2)
   })
 
-  it('shows reset button when settings message has _has_reset: true', function () {
-    var btn = document.getElementById('btn-reset');
-    btn.hidden = true;
+  it('sets showReset to true when _show_reset: true', function () {
+    window.__test.showReset = false;
     window.__test.receiveWSMessage({ data: JSON.stringify({
       type: 'settings',
       _dirty: false,
-      _has_reset: true,
+      _show_reset: true,
       data: { wifi: { ssid: ['text', 'SSID', { value: '' }] } }
     })});
-    expect(btn.hidden).toBe(false);
+    expect(window.__test.showReset).toBe(true);
   });
 
-  it('hides reset button when settings message has _has_reset: false', function () {
-    var btn = document.getElementById('btn-reset');
-    btn.hidden = false;
+  it('sets showReset to false when _show_reset: false', function () {
+    window.__test.showReset = true;
     window.__test.receiveWSMessage({ data: JSON.stringify({
       type: 'settings',
       _dirty: false,
-      _has_reset: false,
+      _show_reset: false,
       data: { wifi: { ssid: ['text', 'SSID', { value: '' }] } }
     })});
+    expect(window.__test.showReset).toBe(false);
+  });
+
+  it('reset button visible when dirty or showReset', function () {
+    var btn = document.getElementById('btn-reset');
+    // clean + no showReset → hidden
+    window.__test.dirty = false;
+    window.__test.showReset = false;
+    window.updateUI();
     expect(btn.hidden).toBe(true);
-  });
 
-  it('reset button visible regardless of dirty state', function () {
-    var btn = document.getElementById('btn-reset');
-    btn.hidden = true;
-    window.__test.receiveWSMessage({ data: JSON.stringify({
-      type: 'settings',
-      _dirty: false,
-      _has_reset: true,
-      data: { wifi: { ssid: ['text', 'SSID', { value: '' }] } }
-    })});
+    // dirty makes it visible
+    window.__test.dirty = true;
+    window.updateUI();
     expect(btn.hidden).toBe(false);
 
-    btn.hidden = true;
-    window.__test.receiveWSMessage({ data: JSON.stringify({
-      type: 'settings',
-      _dirty: true,
-      _has_reset: true,
-      data: { wifi: { ssid: ['text', 'SSID', { value: '' }] } }
-    })});
+    // showReset makes it visible even when clean
+    window.__test.dirty = false;
+    window.__test.showReset = true;
+    window.updateUI();
     expect(btn.hidden).toBe(false);
   });
 })
 
-describe('_has_reset propagation through WS branches', function () {
-  it('_has_reset propagates through echo match path', function () {
+describe('_show_reset propagation through WS branches', function () {
+  it('_show_reset propagates through echo match path', function () {
     document.querySelector('#config-form').innerHTML = '<input name="wifi.ssid" value="sentVal" />';
     window.__test.groups = [{ id: 'wifi', fields: [{ key: 'ssid', type: 'text', label: 'SSID', opts: { value: 'oldVal' } }] }];
     window.__test.lastSent = { 'wifi.ssid': 'sentVal' };
     window.__test.inFlight = { 'wifi.ssid': true };
     window.__test.dirty = false;
+    window.__test.showReset = false;
 
-    var btn = document.getElementById('btn-reset');
-    btn.hidden = true;
     window.__test.receiveWSMessage({ data: JSON.stringify({
       _dirty: false,
-      _has_reset: true,
+      _show_reset: true,
       wifi: { ssid: ['text', 'SSID', { value: 'sentVal' }] }
     })});
-    expect(btn.hidden).toBe(false);
+    expect(window.__test.showReset).toBe(true);
   });
 
-  it('_has_reset propagates through stale inFlight path', function () {
+  it('_show_reset propagates through stale inFlight path', function () {
     document.querySelector('#config-form').innerHTML = '<input name="wifi.ssid" value="" />';
     window.__test.groups = [{ id: 'wifi', fields: [{ key: 'ssid', type: 'text', label: 'SSID', opts: { value: 'oldVal' } }] }];
     window.__test.lastSent = { 'wifi.ssid': 'old-val' };
     window.__test.inFlight = { 'wifi.ssid': true };
     window.__test.dirty = false;
+    window.__test.showReset = false;
     document.getElementById('config-form').setAttribute('aria-busy', 'true');
 
-    var btn = document.getElementById('btn-reset');
-    btn.hidden = true;
     window.__test.receiveWSMessage({ data: JSON.stringify({
       _dirty: false,
-      _has_reset: true,
+      _show_reset: true,
       wifi: { ssid: ['text', 'SSID', { value: 'differentVal' }] }
     })});
-    expect(btn.hidden).toBe(false);
+    expect(window.__test.showReset).toBe(true);
   });
 
-  it('_has_reset propagates through conflict/re-prompt path', function () {
+  it('_show_reset propagates through conflict/re-prompt path', function () {
     document.querySelector('#config-form').innerHTML = '<input name="wifi.ssid" value="form-local" />';
     window.__test.groups = [{ id: 'wifi', fields: [{ key: 'ssid', type: 'text', label: 'SSID', opts: { value: 'oldVal' } }] }];
     window.__test.lastSent = {};
     window.__test.inFlight = {};
     window.__test.dirty = false;
+    window.__test.showReset = false;
 
-    var btn = document.getElementById('btn-reset');
-    btn.hidden = true;
     window.__test.receiveWSMessage({ data: JSON.stringify({
       _dirty: false,
-      _has_reset: true,
+      _show_reset: true,
       wifi: { ssid: ['text', 'SSID', { value: 'serverVal' }] }
     })});
-    expect(btn.hidden).toBe(false);
+    expect(window.__test.showReset).toBe(true);
   });
 })
 
@@ -2121,6 +2131,7 @@ describe('aria-invalid', function () {
     ]}]
     window.__test.statusGroups = []
     window.renderForm()
+    window.revalidateAll()
     var input = document.querySelector('[name="wifi.ssid"]')
     expect(input.getAttribute('aria-invalid')).toBe('false')
   })
@@ -2153,6 +2164,7 @@ describe('aria-invalid', function () {
     ]}]
     window.__test.statusGroups = []
     window.renderForm()
+    window.revalidateAll()
     var input = document.querySelector('[name="wifi.password"]')
     expect(input.getAttribute('aria-invalid')).toBe('true')
   })
@@ -2164,6 +2176,7 @@ describe('aria-invalid', function () {
     ]}]
     window.__test.statusGroups = []
     window.renderForm()
+    window.revalidateAll()
     var details = document.getElementById('wifi')
         expect(details.open).toBe(true)
   })

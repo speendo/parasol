@@ -123,9 +123,19 @@ test.describe('Save & Apply button', () => {
 })
 
 test.describe('Reset button', () => {
-  test('Reset button visible when _has_reset is true', async ({ page }) => {
+  test('Reset button appears when form is dirty and reverts changes', async ({ page }) => {
     await page.goto('/')
     await page.waitForSelector('#config-form:not([aria-busy])')
+
+    // Hidden when clean
+    await expect(page.locator('#btn-reset')).toBeHidden()
+
+    // Make a change — blur a field to trigger WS send
+    await page.fill('[name="wifi.ssid"]', 'ChangedSSID')
+    await page.locator('[name="wifi.password"]').focus()
+    await page.waitForSelector('#config-form:not([aria-busy])', { timeout: 5000 })
+
+    // Now visible
     await expect(page.locator('#btn-reset')).toBeVisible()
   })
 
@@ -175,11 +185,17 @@ test.describe('Reset button', () => {
     await expect(page.locator('#btn-save-apply')).toBeVisible()
   })
 
-  test('reset with no changes is a no-op', async ({ page }) => {
+  test('reset reverts form and leaves clean state', async ({ page }) => {
     await page.goto('/')
     await page.waitForSelector('#config-form:not([aria-busy])')
 
-    // Reset without making any changes
+    // Make a change to make dirty
+    await page.fill('[name="wifi.ssid"]', 'TempChange')
+    await page.locator('[name="wifi.password"]').focus()
+    await page.waitForSelector('#config-form:not([aria-busy])', { timeout: 5000 })
+    await expect(page.locator('#btn-reset')).toBeVisible()
+
+    // Reset
     await page.locator('#btn-reset').click()
     await page.waitForTimeout(500)
 

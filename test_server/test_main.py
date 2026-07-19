@@ -110,7 +110,6 @@ def test_ws_connect_receives_settings():
         ws.receive_json()  # status push
         data = ws.receive_json()  # settings push
         assert "_dirty" in data
-        assert "_has_reset" in data
         assert "wifi" in data.get("data", {})
         assert "gpio" in data.get("data", {})
 
@@ -157,26 +156,4 @@ def test_set_dirty_endpoint():
     assert data["_dirty"] is False
 
 
-def test_settings_has_reset_field():
-    client.get("/api/settings/reset")
-    data = client.get("/api/settings").json()
-    assert data["_has_reset"] is True
 
-
-def test_ws_handshake_includes_has_reset():
-    with client.websocket_connect("/api/events") as ws:
-        ws.receive_json()  # initial status
-        data = ws.receive_json()  # settings
-        assert data["type"] == "settings"
-        assert "_has_reset" in data
-        assert data["_has_reset"] is True
-
-
-def test_ws_apply_broadcast_includes_has_reset():
-    with client.websocket_connect("/api/events") as ws:
-        ws.receive_json()  # initial status
-        ws.receive_json()  # initial settings
-        ws.send_json({"action": "apply", "data": {"wifi": {"ssid": ["text", "SSID", {"value": "HasResetTest"}]}}})
-        pushed = ws.receive_json()
-        assert "_has_reset" in pushed
-        assert pushed["_has_reset"] is True

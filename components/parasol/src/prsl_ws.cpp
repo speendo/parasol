@@ -21,7 +21,7 @@ static void on_event(AsyncWebSocket *server, AsyncWebSocketClient *client,
         cJSON *settings = cJSON_CreateObject();
         cJSON_AddStringToObject(settings, "type", "settings");
         cJSON_AddBoolToObject(settings, "_dirty", prsl_store_is_dirty(g_store));
-        cJSON_AddBoolToObject(settings, "_has_reset", prsl_has_reset());
+        cJSON_AddBoolToObject(settings, "_show_reset", prsl_has_reset());
         cJSON_AddItemToObject(settings, "data", prsl_json_build_settings(g_store));
         char *s2 = cJSON_PrintUnformatted(settings);
         cJSON_Delete(settings);
@@ -81,7 +81,7 @@ static void on_event(AsyncWebSocket *server, AsyncWebSocketClient *client,
                     cJSON *resp = cJSON_CreateObject();
                     cJSON_AddStringToObject(resp, "type", "settings");
                     cJSON_AddBoolToObject(resp, "_dirty", prsl_store_is_dirty(g_store));
-                    cJSON_AddBoolToObject(resp, "_has_reset", prsl_has_reset());
+                    cJSON_AddBoolToObject(resp, "_show_reset", prsl_has_reset());
                     cJSON_AddItemToObject(resp, "data", prsl_json_build_settings(g_store));
                     char *out = cJSON_PrintUnformatted(resp);
                     cJSON_Delete(resp);
