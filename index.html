@@ -51,7 +51,7 @@
     <header class="container-fluid">
         <nav>
             <ul>
-                <li><img id="nav-logo" src="{{LOGO}}" alt="Logo" style="height:2rem;vertical-align:middle;margin-right:0.5rem" onerror="this.style.display='none'"><h1>{{TITLE}}</h1></li>
+                <li style="display:flex;align-items:center"><img id="nav-logo" src="{{LOGO}}" alt="Logo" style="height:2rem;margin-right:0.5rem" onerror="this.style.display='none'"><h1 style="margin:0">{{TITLE}}</h1></li>
             </ul>
             <ul id="nav-list">
                 <!-- JS populates nav links here -->
@@ -77,8 +77,8 @@
       <div class="container">
         <mark id="status-bar"></mark>
         <div role="group">
+          <button id="btn-reset" class="secondary" hidden>Reset</button>
           <button id="btn-save-apply" disabled hidden>Save</button>
-          <button id="btn-reset" hidden>Reset</button>
         </div>
       </div>
     </footer>
