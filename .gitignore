@@ -8,3 +8,4 @@ test-deps/*.bak/
 test-results/
 
 pico CI log.txt
+docs/superpowers/plans/
