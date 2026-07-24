@@ -112,20 +112,6 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
         });
     }
 
-    server->on("/api/settings", HTTP_GET, [](AsyncWebServerRequest *req) {
-        cJSON *json = prsl_build_settings_payload(&g_store);
-        if (json) {
-            char *str = cJSON_PrintUnformatted(json);
-            cJSON_Delete(json);
-            if (str) {
-                req->send(200, "application/json", str);
-                free(str);
-                return;
-            }
-        }
-        req->send(500, "text/plain", "Serialization error");
-    });
-
     server->on("/api/settings/save", HTTP_POST,
         [](AsyncWebServerRequest *req) {}, NULL,
         [](AsyncWebServerRequest *req, uint8_t *data, size_t len,
