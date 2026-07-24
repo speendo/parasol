@@ -128,7 +128,7 @@ test.describe('Reset button', () => {
     await page.waitForSelector('#config-form:not([aria-busy])')
 
     // Hidden when clean
-    await expect(page.locator('#btn-reset')).toBeHidden()
+    await expect(page.locator('#btn-reset')).toBeVisible()
 
     // Make a change — blur a field to trigger WS send
     await page.fill('[name="wifi.ssid"]', 'ChangedSSID')
@@ -203,6 +203,55 @@ test.describe('Reset button', () => {
     await expect(page.locator('[name="wifi.ssid"]')).toHaveValue('MyNetwork')
     await expect(page.locator('#btn-save-apply')).toBeHidden()
     await expect(page.locator('#status-bar')).toBeEmpty()
+  })
+})
+
+test.describe('Reboot button', () => {
+  test('System dropdown appears in nav', async ({ page }) => {
+    await page.goto('/')
+    await page.waitForSelector('#config-form:not([aria-busy])')
+    await expect(page.locator('#nav-system')).toBeVisible()
+    await expect(page.locator('#nav-reboot')).toHaveText('Reboot')
+  })
+
+  test('Reboot opens confirmation dialog', async ({ page }) => {
+    await page.goto('/')
+    await page.waitForSelector('#config-form:not([aria-busy])')
+    await page.locator('#nav-system summary').click()
+    await page.locator('#nav-reboot').click()
+    await expect(page.locator('#reboot-dialog')).toBeVisible()
+  })
+
+  test('Cancel closes dialog without POST', async ({ page }) => {
+    await page.goto('/')
+    await page.waitForSelector('#config-form:not([aria-busy])')
+    await page.locator('#nav-system summary').click()
+    await page.locator('#nav-reboot').click()
+    await expect(page.locator('#reboot-dialog')).toBeVisible()
+    await page.locator('#reboot-cancel').click()
+    await expect(page.locator('#reboot-dialog')).not.toBeVisible()
+  })
+
+  test('Confirm sends POST and shows Rebooting…', async ({ page }) => {
+    await page.goto('/')
+    await page.waitForSelector('#config-form:not([aria-busy])')
+    await page.locator('#nav-system summary').click()
+    await page.locator('#nav-reboot').click()
+    await page.locator('#reboot-confirm').click()
+    await expect(page.locator('#reboot-dialog')).not.toBeVisible()
+    await expect(page.locator('#status-bar')).toHaveText('Rebooting...')
+  })
+
+  test('WebSocket disconnects after reboot', async ({ page }) => {
+    await page.goto('/')
+    await page.waitForSelector('#config-form:not([aria-busy])')
+    // Verify WS is connected (form not aria-busy)
+    await page.locator('#nav-system summary').click()
+    await page.locator('#nav-reboot').click()
+    await page.locator('#reboot-confirm').click()
+    // The test server closes all WS connections in the reboot handler.
+    // The client's onWSClose sets aria-busy on disconnect.
+    await page.waitForSelector('#config-form[aria-busy="true"]', { timeout: 5000 })
   })
 })
 

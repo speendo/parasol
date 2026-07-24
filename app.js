@@ -340,7 +340,6 @@ var parasol = (function () {
     if (msg.type === 'status') { processStatus(msg.data); return; }
     if (msg.type === 'error') { showError(msg.message); return; }
     if (msg.type !== 'settings' && msg._dirty === undefined) return;
-    if (resetInProgress) return;
     wsRetries = 0;
 
     var data = msg.data || msg;
@@ -475,7 +474,11 @@ var parasol = (function () {
     var notifBar = document.getElementById('server-changed');
     var promptActive = notifBar && !notifBar.hidden;
 
-    if (conflicts.length > 0) {
+    if (resetInProgress) {
+      applyAV();
+      syncLS();
+      resetInProgress = false;
+    } else if (conflicts.length > 0) {
       if (!promptActive) showConflictPrompt(conflicts);
     } else if (externalFields.length > 0) {
       if (!promptActive) showExternalNotification(externalFields);
@@ -693,6 +696,12 @@ var parasol = (function () {
       a.href = '#';
       a.id = 'nav-reboot';
       a.textContent = 'Reboot';
+      a.addEventListener('click', function (e) {
+        e.preventDefault();
+        if (details) details.open = false;
+        var dd = document.getElementById('reboot-dialog');
+        if (dd) dd.showModal();
+      });
       ali.appendChild(a);
       ul.appendChild(ali);
       details.appendChild(ul);
@@ -830,24 +839,15 @@ var parasol = (function () {
   function wireButtons() {
     btnSaveApply.addEventListener('click', handleSaveApply);
     btnReset.addEventListener('click', function () {
+      resetInProgress = true;
+      configForm.setAttribute('aria-busy', 'true');
       postJSON('/api/settings/reset', {}).then(function (ok) {
-        if (ok) {
-          resetInProgress = true;
-          configForm.setAttribute('aria-busy', 'true');
-          // WS push from prsl_push() delivers updated settings.
-          // processSettings() clears resetInProgress when settings arrive.
+        if (!ok) {
+          resetInProgress = false;
+          configForm.removeAttribute('aria-busy');
         }
       });
     });
-    var rebootLink = document.getElementById('nav-reboot');
-    if (rebootLink) {
-      rebootLink.addEventListener('click', function (e) {
-        e.preventDefault();
-        var dd = document.getElementById('nav-system');
-        if (dd) dd.open = false;
-        document.getElementById('reboot-dialog').showModal();
-      });
-    }
     var rebootConfirm = document.getElementById('reboot-confirm');
     if (rebootConfirm) {
       rebootConfirm.addEventListener('click', function () {
