@@ -40,7 +40,11 @@ npm run build
 Add to `platformio.ini`:
 
 ```ini
-lib_deps = https://github.com/speendo/parasol.git#v0.1.0
+; Tarball — clean, minimal (recommended):
+lib_deps = https://github.com/speendo/parasol/releases/download/v0.5.0/parasol-v0.5.0.tar.gz
+
+; Git — full repo (for development):
+lib_deps = https://github.com/speendo/parasol.git#v0.5.0
 ```
 
 See [`API_REFERENCE.md`](API_REFERENCE.md) for the complete C API.

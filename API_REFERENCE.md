@@ -589,7 +589,7 @@ static esp_err_t on_reset(void) {
 ## Full Example
 
 The complete, runnable example lives at:
-[`components/parasol/examples/basic/main.c`](components/parasol/examples/basic/main.c)
+[`examples/basic/main.c`](examples/basic/main.c)
 
 For the WebSocket protocol used between the device and browser, see
 [`WS_PROTOCOL.md`](WS_PROTOCOL.md).
