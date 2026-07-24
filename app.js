@@ -20,6 +20,7 @@ var parasol = (function () {
   var wsRetries = 0;
   var formInteracted = false;
   var showReset = false;
+  var showReboot = false;
   var pendingConflicts = [];
   var resetInProgress = false;
 
@@ -360,6 +361,9 @@ var parasol = (function () {
       if (msg._show_reset !== undefined) {
         showReset = msg._show_reset;
       }
+      if (msg._show_reboot !== undefined) {
+        showReboot = msg._show_reboot;
+      }
       var queuedKeys = [];
       for (var key in inFlight) {
         if (inFlight[key]) continue;
@@ -389,6 +393,9 @@ var parasol = (function () {
       if (msg._show_reset !== undefined) {
         showReset = msg._show_reset;
       }
+      if (msg._show_reboot !== undefined) {
+        showReboot = msg._show_reboot;
+      }
       updateAV(data);
       for (var sk in inFlight) { inFlight[sk] = false; }
       for (var sk in lastSent) { lastSent[sk] = undefined; }
@@ -411,9 +418,12 @@ var parasol = (function () {
     }
 
     dirty = msg._dirty;
-    if (msg._show_reset !== undefined) {
-      showReset = msg._show_reset;
-    }
+      if (msg._show_reset !== undefined) {
+        showReset = msg._show_reset;
+      }
+      if (msg._show_reboot !== undefined) {
+        showReboot = msg._show_reboot;
+      }
     updateUI();
 
     // Initial load — no groups yet, process settings directly
@@ -664,6 +674,27 @@ var parasol = (function () {
       seen[groups[gi].id] = true;
       renderLink(groups[gi]);
     }
+    if (showReboot) {
+      var li = document.createElement('li');
+      var details = document.createElement('details');
+      details.className = 'dropdown';
+      details.id = 'nav-system';
+      var summary = document.createElement('summary');
+      summary.textContent = 'System';
+      details.appendChild(summary);
+      var ul = document.createElement('ul');
+      ul.setAttribute('dir', 'rtl');
+      var ali = document.createElement('li');
+      var a = document.createElement('a');
+      a.href = '#';
+      a.id = 'nav-reboot';
+      a.textContent = 'Reboot';
+      ali.appendChild(a);
+      ul.appendChild(ali);
+      details.appendChild(ul);
+      li.appendChild(details);
+      navList.appendChild(li);
+    }
     if (navList._clickWired) return;
     navList._clickWired = true;
     navList.addEventListener('click', function (e) {
@@ -806,6 +837,30 @@ var parasol = (function () {
         }
       });
     });
+    var rebootLink = document.getElementById('nav-reboot');
+    if (rebootLink) {
+      rebootLink.addEventListener('click', function (e) {
+        e.preventDefault();
+        var dd = document.getElementById('nav-system');
+        if (dd) dd.open = false;
+        document.getElementById('reboot-dialog').showModal();
+      });
+    }
+    var rebootConfirm = document.getElementById('reboot-confirm');
+    if (rebootConfirm) {
+      rebootConfirm.addEventListener('click', function () {
+        document.getElementById('reboot-dialog').close();
+        postJSON('/api/system/reboot', {}).then(function () {
+          statusBar.textContent = 'Rebooting...';
+        });
+      });
+    }
+    var rebootCancel = document.getElementById('reboot-cancel');
+    if (rebootCancel) {
+      rebootCancel.addEventListener('click', function () {
+        document.getElementById('reboot-dialog').close();
+      });
+    }
     document.getElementById('notif-load').addEventListener('click', function () {
       hideNotification();
       applyAV();
@@ -1005,6 +1060,8 @@ var parasol = (function () {
     Object.defineProperty(window.__test, 'lastSent', { get: function () { return lastSent; }, set: function (v) { lastSent = v; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'formInteracted', { get: function () { return formInteracted; }, set: function (v) { formInteracted = v; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'showReset', { get: function () { return showReset; }, set: function (v) { showReset = v; }, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'showReboot', { get: function () { return showReboot; }, set: function (v) { showReboot = v; }, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'resetInProgress', { get: function () { return resetInProgress; }, set: function (v) { resetInProgress = v; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'statusGroups', { get: function () { return statusGroups; }, set: function (v) { statusGroups = v; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'receiveWSMessage', { get: function () { return onWSMessage; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'wsReady', { get: function () { return function () { if (ws) ws.readyState = 1; }; }, enumerable: true, configurable: true });
