@@ -202,7 +202,7 @@ async def events_ws(ws: WebSocket):
     global _dirty
     try:
         await ws.send_json({"type": "status", "data": build_status()})
-        await ws.send_json({"type": "settings", "_dirty": _dirty, "data": build_settings()})
+        await ws.send_json({"type": "settings", "_dirty": _dirty, "_show_reset": True, "_show_reboot": True, "data": build_settings()})
         while True:
             raw = await ws.receive_text()
             msg = json.loads(raw)
@@ -219,13 +219,24 @@ async def events_ws(ws: WebSocket):
                 payload = build_settings()
                 for client in list(connected):
                     try:
-                        await client.send_json({"type": "settings", "_dirty": _dirty, "data": payload})
+                        await client.send_json({"type": "settings", "_dirty": _dirty, "_show_reset": True, "_show_reboot": True, "data": payload})
                     except Exception:
                         connected.discard(client)
     except WebSocketDisconnect:
         pass
     finally:
         connected.discard(ws)
+
+
+@app.post("/api/system/reboot")
+async def api_system_reboot():
+    for client in list(connected):
+        try:
+            await client.close()
+        except Exception:
+            pass
+    connected.clear()
+    return {"ok": True}
 
 
 @app.post("/api/settings/external-change")
@@ -242,7 +253,7 @@ async def external_change(body: dict):
     payload = build_settings()
     for client in list(connected):
         try:
-            await client.send_json({"type": "settings", "_dirty": _dirty, "data": payload})
+            await client.send_json({"type": "settings", "_dirty": _dirty, "_show_reset": True, "_show_reboot": True, "data": payload})
         except Exception:
             connected.discard(client)
     return {"ok": True}
@@ -308,6 +319,12 @@ async def api_settings_reset():
             nvs_store[store_key] = val
             applied_store[store_key] = val
     _dirty = False
+    payload = build_settings()
+    for client in list(connected):
+        try:
+            await client.send_json({"type": "settings", "_dirty": _dirty, "_show_reset": True, "_show_reboot": True, "data": payload})
+        except Exception:
+            connected.discard(client)
     return {}
 
 
