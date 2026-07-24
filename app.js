@@ -418,12 +418,12 @@ var parasol = (function () {
     }
 
     dirty = msg._dirty;
-      if (msg._show_reset !== undefined) {
-        showReset = msg._show_reset;
-      }
-      if (msg._show_reboot !== undefined) {
-        showReboot = msg._show_reboot;
-      }
+    if (msg._show_reset !== undefined) {
+      showReset = msg._show_reset;
+    }
+    if (msg._show_reboot !== undefined) {
+      showReboot = msg._show_reboot;
+    }
     updateUI();
 
     // Initial load — no groups yet, process settings directly
