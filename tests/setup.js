@@ -12,6 +12,19 @@ document.body.innerHTML = `
   <footer></footer>
   <button id="btn-save-apply"></button>
   <button id="btn-reset" hidden></button>
+  <dialog id="reboot-dialog">
+    <article>
+      <header>
+        <button aria-label="Close" rel="prev"></button>
+        <p><strong>Reboot device?</strong></p>
+      </header>
+      <p>The device will restart. You will lose connection briefly.</p>
+      <footer>
+        <button id="reboot-cancel" class="secondary">Cancel</button>
+        <button id="reboot-confirm">Reboot</button>
+      </footer>
+    </article>
+  </dialog>
   <mark id="server-changed" hidden>
     <span id="notif-text"></span>
     <button id="notif-load" hidden></button>
