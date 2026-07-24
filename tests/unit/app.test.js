@@ -942,6 +942,125 @@ describe('_show_reset propagation through WS branches', function () {
   });
 })
 
+describe('showReboot state', function () {
+  it('sets showReboot to true when _show_reboot: true', function () {
+    window.__test.showReboot = false;
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      type: 'settings',
+      _dirty: false,
+      _show_reboot: true,
+      data: { wifi: { ssid: ['text', 'SSID', { value: '' }] } }
+    })});
+    expect(window.__test.showReboot).toBe(true);
+  });
+
+  it('sets showReboot to false when _show_reboot: false', function () {
+    window.__test.showReboot = true;
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      type: 'settings',
+      _dirty: false,
+      _show_reboot: false,
+      data: { wifi: { ssid: ['text', 'SSID', { value: '' }] } }
+    })});
+    expect(window.__test.showReboot).toBe(false);
+  });
+
+  it('showReboot unchanged when _show_reboot is missing', function () {
+    window.__test.showReboot = true;
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      type: 'settings',
+      _dirty: false,
+      data: { wifi: { ssid: ['text', 'SSID', { value: '' }] } }
+    })});
+    expect(window.__test.showReboot).toBe(true);
+  });
+});
+
+describe('renderNav reboot dropdown', function () {
+  it('adds System dropdown when showReboot is true', function () {
+    window.__test.showReboot = true;
+    window.__test.groups = [];
+    window.renderNav();
+    var dd = document.getElementById('nav-system');
+    expect(dd).not.toBeNull();
+    var rebootLink = document.getElementById('nav-reboot');
+    expect(rebootLink).not.toBeNull();
+    expect(rebootLink.textContent).toBe('Reboot');
+  });
+
+  it('omits System dropdown when showReboot is false', function () {
+    window.__test.showReboot = false;
+    window.__test.groups = [];
+    window.renderNav();
+    expect(document.getElementById('nav-system')).toBeNull();
+    expect(document.getElementById('nav-reboot')).toBeNull();
+  });
+});
+
+describe('processSettings clears resetInProgress', function () {
+  it('clears resetInProgress and aria-busy', function () {
+    document.getElementById('config-form').setAttribute('aria-busy', 'true');
+    window.__test.resetInProgress = true;
+    window.processSettings({ wifi: { ssid: ['text', 'SSID', { value: 'Net' }] } }, false);
+    expect(window.__test.resetInProgress).toBe(false);
+    expect(document.getElementById('config-form').hasAttribute('aria-busy')).toBe(false);
+  });
+
+  it('does nothing when resetInProgress is false', function () {
+    window.__test.resetInProgress = false;
+    window.processSettings({ wifi: { ssid: ['text', 'SSID', { value: 'Net' }] } }, false);
+    expect(window.__test.resetInProgress).toBe(false);
+  });
+});
+
+describe('_show_reboot propagation through WS branches', function () {
+  it('_show_reboot propagates through echo match path', function () {
+    document.querySelector('#config-form').innerHTML = '<input name="wifi.ssid" value="sentVal" />';
+    window.__test.groups = [{ id: 'wifi', fields: [{ key: 'ssid', type: 'text', label: 'SSID', opts: { value: 'oldVal' } }] }];
+    window.__test.lastSent = { 'wifi.ssid': 'sentVal' };
+    window.__test.inFlight = { 'wifi.ssid': true };
+    window.__test.showReboot = false;
+
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      _dirty: false,
+      _show_reboot: true,
+      wifi: { ssid: ['text', 'SSID', { value: 'sentVal' }] }
+    })});
+    expect(window.__test.showReboot).toBe(true);
+  });
+
+  it('_show_reboot propagates through stale inFlight path', function () {
+    document.querySelector('#config-form').innerHTML = '<input name="wifi.ssid" value="" />';
+    window.__test.groups = [{ id: 'wifi', fields: [{ key: 'ssid', type: 'text', label: 'SSID', opts: { value: 'oldVal' } }] }];
+    window.__test.lastSent = { 'wifi.ssid': 'old-val' };
+    window.__test.inFlight = { 'wifi.ssid': true };
+    window.__test.showReboot = false;
+    document.getElementById('config-form').setAttribute('aria-busy', 'true');
+
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      _dirty: false,
+      _show_reboot: true,
+      wifi: { ssid: ['text', 'SSID', { value: 'differentVal' }] }
+    })});
+    expect(window.__test.showReboot).toBe(true);
+  });
+
+  it('_show_reboot propagates through conflict/re-prompt path', function () {
+    document.querySelector('#config-form').innerHTML = '<input name="wifi.ssid" value="form-local" />';
+    window.__test.groups = [{ id: 'wifi', fields: [{ key: 'ssid', type: 'text', label: 'SSID', opts: { value: 'oldVal' } }] }];
+    window.__test.lastSent = {};
+    window.__test.inFlight = {};
+    window.__test.showReboot = false;
+
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      _dirty: false,
+      _show_reboot: true,
+      wifi: { ssid: ['text', 'SSID', { value: 'serverVal' }] }
+    })});
+    expect(window.__test.showReboot).toBe(true);
+  });
+});
+
 describe('notif-keep sends each field via WS instead of direct AV mutation', function () {
   it('notif-keep click sends fields as WS apply, keeps AV shadow unchanged', function () {
     var sent = {};
