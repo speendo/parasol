@@ -117,7 +117,7 @@ parasol/
 The tarball root is `parasol/` (not `parasol-v0.5.0/`) so users can extract directly into their `components/` directory:
 
 ```bash
-tar xzf parasol-v0.5.0.tar.gz -C components/
+tar xzf parasol-v0.5.1.tar.gz -C components/
 # → components/parasol/CMakeLists.txt — ESP-IDF discovers by directory name
 ```
 
@@ -158,10 +158,10 @@ Upload only `parasol-v<VERSION>.tar.gz`. Remove the individual `app.min.js`, `in
 
 ```ini
 ; Tarball — clean, minimal (recommended):
-lib_deps = https://github.com/speendo/parasol/releases/download/v0.5.0/parasol-v0.5.0.tar.gz
+lib_deps = https://github.com/speendo/parasol/releases/download/v0.5.1/parasol-v0.5.1.tar.gz
 
 ; Git — full repo (for development or running tests):
-lib_deps = https://github.com/speendo/parasol.git#v0.5.0
+lib_deps = https://github.com/speendo/parasol.git#v0.5.1
 ```
 
 Both work because the flat layout serves both paths without configuration.

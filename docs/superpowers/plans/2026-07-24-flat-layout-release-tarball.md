@@ -469,14 +469,14 @@ Expected: no matches in active code (specs and .superpowers history are exempt).
 - [ ] **Step 3: Verify tarball can be created locally**
 
 ```bash
-VERSION="0.6.0"
+VERSION="0.5.1"
 mkdir -p /tmp/tarball-test
 mkdir /tmp/tarball-test/parasol
 cp library.json CMakeLists.txt /tmp/tarball-test/parasol/
 cp -r cmake src include examples /tmp/tarball-test/parasol/
 cp app.min.js index.html pico.jade.min.css /tmp/tarball-test/parasol/
-tar czf /tmp/tarball-test/parasol-v0.6.0.tar.gz -C /tmp/tarball-test parasol
-tar tzf /tmp/tarball-test/parasol-v0.6.0.tar.gz
+tar czf /tmp/tarball-test/parasol-v0.5.1.tar.gz -C /tmp/tarball-test parasol
+tar tzf /tmp/tarball-test/parasol-v0.5.1.tar.gz
 ```
 
 Expected output:
