@@ -79,7 +79,7 @@ void app_main(void) {
     prsl_add_field(PRSL_TEXT, "system", "uptime", "Uptime",
         &(prsl_field_opts_t){ .is_status = true });
 
-    prsl_init(&server, save_to_nvs, NULL);
+    prsl_init(&server, save_to_nvs, NULL, NULL);
     prsl_start();
 
     int seconds = 0;
