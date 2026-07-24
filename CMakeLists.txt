@@ -2,7 +2,7 @@
 set(COMPONENT_SRCS "src/prsl_store.c" "src/prsl_json.c" "src/prsl.cpp" "src/prsl_ws.cpp")
 
 # Asset files to watch for changes (relative to repo root)
-set(ASSETS_SRC "${CMAKE_CURRENT_LIST_DIR}/../../..")
+set(ASSETS_SRC "${CMAKE_CURRENT_LIST_DIR}")
 
 # Generated asset files
 set(GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
