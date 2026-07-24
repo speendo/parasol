@@ -54,10 +54,15 @@ jobs:
         with:
           node-version: '24'
       - run: npm ci && npm run build
+      - name: Build release tarball
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir parasol
+          cp library.json CMakeLists.txt parasol/
+          cp -r cmake src include examples parasol/
+          cp app.min.js index.html pico.jade.min.css parasol/
+          tar czf "parasol-v${VERSION}.tar.gz" parasol
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          files: |
-            app.min.js
-            index.html
-            pico.jade.min.css
+          files: parasol-v*.tar.gz
