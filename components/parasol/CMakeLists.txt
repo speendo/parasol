@@ -36,7 +36,7 @@ add_custom_command(
 
 idf_component_register(
     SRCS ${COMPONENT_SRCS} ${ASSETS_C}
-    INCLUDE_DIRS "include" "src" "dependencies/cJSON" "${GENERATED_DIR}"
+    INCLUDE_DIRS "include" "src" "${GENERATED_DIR}"
     REQUIRES cJSON
     PRIV_REQUIRES AsyncTCP ESPAsyncWebServer
     COMPILE_DEFINITIONS PRSL_ALWAYS_SHOW_SAVE=${PRSL_ALWAYS_SHOW_SAVE}
