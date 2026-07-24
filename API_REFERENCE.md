@@ -352,7 +352,7 @@ typedef struct {
     bool           is_status;  /**< true = read-only status field */
     prsl_get_cb_t  on_get;     /**< Load persisted value. NULL = type default */
     prsl_set_cb_t  on_set;     /**< React to value changes. NULL = auto-accept */
-    const char    *help;       /**< Tooltip text. NULL = no tooltip */
+    const char    *help;       /**< Help text. NULL = no help text rendered */
     const char    *attrs;      /**< HTML validation attrs as JSON. NULL = none */
 } prsl_field_opts_t;
 ```
@@ -362,7 +362,7 @@ typedef struct {
 | `is_status` | `bool` | `false` by default. `true` = read-only status field (renders disabled). |
 | `on_get` | `prsl_get_cb_t` | Called once per field at init. Return persisted value string, or NULL for default (checkbox→indeterminate, others→empty). |
 | `on_set` | `prsl_set_cb_t` | Called on every value change (blur/change via WS) and on Save. Return `ESP_OK` to accept, anything else to reject (Save aborts). |
-| `help` | `const char *` | Helper text shown below the field. NULL = no tooltip rendered. |
+| `help` | `const char *` | Helper text shown below the field. NULL = no help text rendered. |
 | `attrs` | `const char *` | JSON string of HTML form attributes (see Attrs Format below). NULL = no validation attributes. |
 
 ---

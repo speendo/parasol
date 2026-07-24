@@ -53,7 +53,7 @@ typedef esp_err_t (*prsl_reboot_cb_t)(void);
  *  @var is_status false by default (via designated initializer). true = read-only status field.
  *  @var on_get    NULL = type-dependent (checkbox→indeterminate, else empty).
  *  @var on_set    NULL = auto-accept any value (returns ESP_OK).
- *  @var help      NULL = no tooltip rendered.
+ *  @var help      NULL = no help text rendered.
  *  @var attrs     NULL = no HTML validation attributes. */
 typedef struct {
     bool           is_status;
