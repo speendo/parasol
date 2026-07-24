@@ -14,6 +14,7 @@ static AsyncWebServer *g_server = NULL;
 static AsyncWebSocket g_ws("/api/events");
 static prsl_save_cb_t g_on_save = NULL;
 static prsl_reset_cb_t g_on_reset = NULL;
+static prsl_reboot_cb_t g_on_reboot = NULL;
 static bool g_initialized = false;
 
 /* ── Group registration ─────────────────────────────────────── */
@@ -91,7 +92,7 @@ bool prsl_is_dirty(void) {
 /* ── Lifecycle ───────────────────────────────────────────────── */
 
 esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
-                    prsl_reset_cb_t on_reset) {
+                    prsl_reset_cb_t on_reset, prsl_reboot_cb_t on_reboot) {
     if (!server) return ESP_ERR_INVALID_ARG;
 
     prsl_store_load_values(&g_store);
@@ -99,6 +100,7 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
     g_server = server;
     g_on_save = on_save;
     g_on_reset = on_reset;
+    g_on_reboot = on_reboot;
 
     for (size_t i = 0; i < prsl_assets_count; i++) {
         const prsl_asset_t *a = &prsl_assets[i];
@@ -215,6 +217,20 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
             }
         });
 
+    server->on("/api/system/reboot", HTTP_POST,
+        [](AsyncWebServerRequest *req) {
+            if (!g_on_reboot) {
+                req->send(404, "text/plain", "Not Found");
+                return;
+            }
+            esp_err_t result = g_on_reboot();
+            if (result == ESP_OK) {
+                req->send(200, "text/plain", "OK");
+            } else {
+                req->send(500, "text/plain", "Reboot failed");
+            }
+        });
+
     return ESP_OK;
 }
 
@@ -296,6 +312,10 @@ const char *prsl_get(const char *path) {
 
 bool prsl_has_reset(void) {
     return g_on_reset != NULL;
+}
+
+bool prsl_has_reboot(void) {
+    return g_on_reboot != NULL;
 }
 
 /* ── Push / broadcast ───────────────────────────────────────── */

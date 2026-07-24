@@ -44,6 +44,11 @@ typedef esp_err_t (*prsl_save_cb_t)(void);
  *  @return ESP_OK on success. May be NULL — if so, Reset button hidden. */
 typedef esp_err_t (*prsl_reset_cb_t)(void);
 
+/** @brief Reboot callback. Performs pre-reboot cleanup then calls esp_restart().
+ *  @return ESP_OK on success (never reached if esp_restart() is called).
+ *          May be NULL — if so, Reboot option hidden. */
+typedef esp_err_t (*prsl_reboot_cb_t)(void);
+
 /** @brief Per-field options. All fields are required; pass NULL to opt out.
  *  @var is_status false by default (via designated initializer). true = read-only status field.
  *  @var on_get    NULL = type-dependent (checkbox→indeterminate, else empty).
@@ -90,15 +95,17 @@ bool prsl_is_dirty(void);
 /* ── Lifecycle ──────────────────────────────────────────────── */
 
 bool prsl_has_reset(void);
+bool prsl_has_reboot(void);
 
-/** @brief Initialize prsl with a web server, save callback, and optional reset callback.
+/** @brief Initialize prsl with a web server, save callback, and optional reset/reboot callbacks.
  *  @param server   Initialized AsyncWebServer (port 80).
  *  @param on_save  Called on Save after all on_set pass. NULL = no persistence.
  *  @param on_reset Called on Reset. NULL = no Reset button (hidden).
+ *  @param on_reboot Called on Reboot. NULL = no Reboot option (hidden).
  *  @return ESP_OK on success.
  *  @warning All groups and fields MUST be registered BEFORE calling this. */
 esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
-                    prsl_reset_cb_t on_reset);
+                    prsl_reset_cb_t on_reset, prsl_reboot_cb_t on_reboot);
 
 /** @brief Start the async web server. */
 esp_err_t prsl_start(void);
