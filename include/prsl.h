@@ -130,6 +130,7 @@ const char *prsl_get(const char *path);
 
 esp_err_t prsl_push(void);
 esp_err_t prsl_broadcast_status(void);
+cJSON *prsl_build_settings_payload(const prsl_store_t *store);
 
 #ifdef __cplusplus
 }

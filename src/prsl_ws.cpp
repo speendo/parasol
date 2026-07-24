@@ -18,11 +18,7 @@ static void on_event(AsyncWebSocket *server, AsyncWebSocketClient *client,
         cJSON_Delete(status);
         if (s) { client->text(s); free(s); }
 
-        cJSON *settings = cJSON_CreateObject();
-        cJSON_AddStringToObject(settings, "type", "settings");
-        cJSON_AddBoolToObject(settings, "_dirty", prsl_store_is_dirty(g_store));
-        cJSON_AddBoolToObject(settings, "_show_reset", prsl_has_reset());
-        cJSON_AddItemToObject(settings, "data", prsl_json_build_settings(g_store));
+        cJSON *settings = prsl_build_settings_payload(g_store);
         char *s2 = cJSON_PrintUnformatted(settings);
         cJSON_Delete(settings);
         if (s2) { client->text(s2); free(s2); }
@@ -78,11 +74,7 @@ static void on_event(AsyncWebSocket *server, AsyncWebSocketClient *client,
 
                 /* Batch: broadcast once after processing all fields */
                 if (any_applied) {
-                    cJSON *resp = cJSON_CreateObject();
-                    cJSON_AddStringToObject(resp, "type", "settings");
-                    cJSON_AddBoolToObject(resp, "_dirty", prsl_store_is_dirty(g_store));
-                    cJSON_AddBoolToObject(resp, "_show_reset", prsl_has_reset());
-                    cJSON_AddItemToObject(resp, "data", prsl_json_build_settings(g_store));
+                    cJSON *resp = prsl_build_settings_payload(g_store);
                     char *out = cJSON_PrintUnformatted(resp);
                     cJSON_Delete(resp);
                     if (out) { server->textAll(out); free(out); }

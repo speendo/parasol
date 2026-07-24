@@ -113,10 +113,8 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
     }
 
     server->on("/api/settings", HTTP_GET, [](AsyncWebServerRequest *req) {
-        cJSON *json = prsl_json_build_settings(&g_store);
+        cJSON *json = prsl_build_settings_payload(&g_store);
         if (json) {
-            cJSON_AddBoolToObject(json, "_dirty", prsl_store_is_dirty(&g_store));
-            cJSON_AddBoolToObject(json, "_show_reset", g_on_reset != NULL);
             char *str = cJSON_PrintUnformatted(json);
             cJSON_Delete(json);
             if (str) {
@@ -318,15 +316,22 @@ bool prsl_has_reboot(void) {
     return g_on_reboot != NULL;
 }
 
+/* ── Shared settings payload builder ─────────────────────────── */
+
+cJSON *prsl_build_settings_payload(const prsl_store_t *store) {
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "type", "settings");
+    cJSON_AddBoolToObject(root, "_dirty", prsl_store_is_dirty(store));
+    cJSON_AddBoolToObject(root, "_show_reset", prsl_has_reset());
+    cJSON_AddBoolToObject(root, "_show_reboot", prsl_has_reboot());
+    cJSON_AddItemToObject(root, "data", prsl_json_build_settings(store));
+    return root;
+}
+
 /* ── Push / broadcast ───────────────────────────────────────── */
 
 esp_err_t prsl_push(void) {
-    cJSON *root = cJSON_CreateObject();
-    cJSON_AddStringToObject(root, "type", "settings");
-    cJSON_AddBoolToObject(root, "_dirty", prsl_store_is_dirty(&g_store));
-    cJSON_AddBoolToObject(root, "_show_reset", g_on_reset != NULL);
-    cJSON *data = prsl_json_build_settings(&g_store);
-    cJSON_AddItemToObject(root, "data", data);
+    cJSON *root = prsl_build_settings_payload(&g_store);
     char *str = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
     if (str) {
