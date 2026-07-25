@@ -2,6 +2,7 @@
 #include "prsl.h"
 #include "prsl_store.h"
 #include "prsl_json.h"
+#include "prsl_body.h"
 #include "ESPAsyncWebServer.h"
 #include <string.h>
 #include <stdio.h>
@@ -38,46 +39,19 @@ static void on_event(AsyncWebSocket *server, AsyncWebSocketClient *client,
                 cJSON *body = cJSON_GetObjectItem(msg, "data");
                 if (!body || !cJSON_IsObject(body)) { cJSON_Delete(msg); return; }
 
-                bool any_applied = false;
-                cJSON *group = body->child;
-                while (group) {
-                    if (!cJSON_IsObject(group) || group->string[0] == '_') {
-                        group = group->next; continue;
-                    }
-                    cJSON *field = group->child;
-                    while (field) {
-                        if (!cJSON_IsArray(field) || cJSON_GetArraySize(field) < 3) {
-                            field = field->next; continue;
-                        }
-                        cJSON *opts = cJSON_GetArrayItem(field, 2);
-                        cJSON *val = cJSON_GetObjectItem(opts, "value");
-                        char val_buf[64];
-                        const char *val_str = prsl_json_value_str(val, val_buf, sizeof(val_buf));
+                prsl_rejection_t rej;
+                int applied = prsl_apply_body(body, g_store, &rej);
 
-                        prsl_field_t *f = prsl_store_find(g_store, group->string, field->string);
-                        if (f && f->on_set) {
-                            esp_err_t ae = f->on_set(group->string, field->string, val_str);
-                            if (ae != ESP_OK) {
-                                char err[128];
-                                snprintf(err, sizeof(err), "{\"type\":\"error\",\"message\":\"on_set rejected %s.%s\"}",
-                                         group->string, field->string);
-                                client->text(err);
-                            } else {
-                                any_applied = true;
-                            }
-                        } else if (f) {
-                            char path[PRSL_MAX_PATH];
-                            snprintf(path, sizeof(path), "%s.%s", group->string, field->string);
-                            prsl_set_str(path, val_str);
-                            any_applied = true;
-                        }
-                        field = field->next;
-                    }
-                    group = group->next;
+                if (rej.group_id) {
+                    char err[128];
+                    snprintf(err, sizeof(err),
+                             "{\"type\":\"error\",\"message\":\"on_set rejected %s.%s\"}",
+                             rej.group_id, rej.key);
+                    client->text(err);
                 }
 
                 /* Batch: broadcast once after processing all fields */
-                if (any_applied) {
+                if (applied > 0) {
                     cJSON *resp = prsl_build_settings_payload(g_store);
                     char *out = cJSON_PrintUnformatted(resp);
                     cJSON_Delete(resp);
