@@ -199,6 +199,36 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
 esp_err_t prsl_start(void);
 ```
 
+```c
+/**
+ * @brief Re-load all persisted values and push to browser.
+ *
+ * Calls each field's on_get callback again and broadcasts the updated
+ * settings payload to all connected WebSocket clients.
+ *
+ * @return ESP_OK on success.
+ */
+esp_err_t prsl_reset(void);
+```
+
+```c
+/**
+ * @brief Check whether a Reset callback was registered (non-NULL on_reset
+ *        passed to prsl_init).
+ * @return true if Reset button should be shown.
+ */
+bool prsl_has_reset(void);
+```
+
+```c
+/**
+ * @brief Check whether a Reboot callback was registered (non-NULL on_reboot
+ *        passed to prsl_init).
+ * @return true if Reboot option should be shown.
+ */
+bool prsl_has_reboot(void);
+```
+
 **Typical call order in `app_main`:**
 
 ```
