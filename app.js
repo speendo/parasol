@@ -23,6 +23,7 @@ var parasol = (function () {
   var showReboot = false;
   var pendingConflicts = [];
   var resetInProgress = false;
+  var rebooting = false;
 
   /** Show an error message in the status bar. @param {string} msg */
   function showError(msg) {
@@ -215,6 +216,7 @@ var parasol = (function () {
   function onWSClose() {
     ws = null;
     configForm.setAttribute('aria-busy', 'true');
+    if (rebooting) return;
     wsRetries++;
     if (wsRetries >= 5) {
       showError('Cannot connect to device');
@@ -843,6 +845,7 @@ var parasol = (function () {
     if (rebootConfirm) {
       rebootConfirm.addEventListener('click', function () {
         document.getElementById('reboot-dialog').close();
+        rebooting = true;
         postJSON('/api/system/reboot', {}).then(function () {
           statusBar.textContent = 'Rebooting...';
         });
@@ -1055,6 +1058,7 @@ var parasol = (function () {
     Object.defineProperty(window.__test, 'showReset', { get: function () { return showReset; }, set: function (v) { showReset = v; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'showReboot', { get: function () { return showReboot; }, set: function (v) { showReboot = v; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'resetInProgress', { get: function () { return resetInProgress; }, set: function (v) { resetInProgress = v; }, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'rebooting', { get: function () { return rebooting; }, set: function (v) { rebooting = v; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'statusGroups', { get: function () { return statusGroups; }, set: function (v) { statusGroups = v; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'receiveWSMessage', { get: function () { return onWSMessage; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'wsReady', { get: function () { return function () { if (ws) ws.readyState = 1; }; }, enumerable: true, configurable: true });
