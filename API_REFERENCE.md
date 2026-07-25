@@ -142,7 +142,7 @@ void app_main(void) {
         &(prsl_field_opts_t){ .is_status = true });
 
     /* 3. Configure and start */
-    prsl_init(&server, save_to_nvs, on_reset);
+    prsl_init(&server, save_to_nvs, on_reset, NULL);
     prsl_start();
 
     /* 4. Runtime loop — push live status every 3 seconds */
@@ -168,22 +168,24 @@ the web server lives for the ESP32's full uptime.
 ```c
 /**
  * @brief Initialize prsl with a web server, save callback, and optional
- *        reset callback.
+ *        reset/reboot callbacks.
  *
- * Wires up HTTP routes (GET /api/settings, POST /api/settings/save)
- * and WebSocket endpoint (/api/events).  Serves static assets from flash.
+ * Wires up HTTP routes (POST /api/settings/save, POST /api/settings/reset,
+ * POST /api/system/reboot) and WebSocket endpoint (/api/events).  Serves static assets from flash.
  *
  * @param server   Pointer to an initialized AsyncWebServer (port 80).
  * @param on_save  Callback to persist current values (prsl_save_cb_t).
  *                 May be NULL if you don't need persistence.
  * @param on_reset Callback to reload saved values (prsl_reset_cb_t).
  *                 May be NULL.
+ * @param on_reboot Callback to restart the device (prsl_reboot_cb_t).
+ *                  May be NULL — if so, Reboot option hidden.
  * @return ESP_OK on success, ESP_ERR_* on failure.
  *
  * @warning All groups and fields MUST be registered BEFORE calling
  *          this function.  The store snapshot is taken at init time. */
 esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
-                    prsl_reset_cb_t on_reset);
+                    prsl_reset_cb_t on_reset, prsl_reboot_cb_t on_reboot);
 ```
 
 ```c
@@ -204,7 +206,7 @@ nvs_flash_init()                  /* hardware                   */
 WiFi.softAP(...)                  /* network                    */
 prsl_add_group(...)               /* register groups            */
 prsl_add_field(...)               /* register fields            */
-prsl_init(&server, on_save, on_reset) /* wire routes, snapshot store */
+prsl_init(&server, on_save, on_reset, on_reboot) /* wire routes, snapshot store */
 prsl_start()                      /* begin serving              */
 /* --- enter runtime loop --- */
 prsl_set_str(...)                 /* update values              */
@@ -568,6 +570,27 @@ static esp_err_t on_reset(void) {
     if (nvs_get_str(h, "wifi.ssid", buf, &len) == ESP_OK) prsl_set_str("wifi.ssid", buf);
     nvs_close(h);
     return ESP_OK;
+}
+```
+
+---
+
+## Reboot Callback
+
+Optional callback registered via `prsl_init`. Performs cleanup then
+restarts the device.
+
+```c
+typedef esp_err_t (*prsl_reboot_cb_t)(void);
+```
+
+**Example:**
+
+```c
+static esp_err_t on_reboot(void) {
+    /* Close any open connections, flush buffers, etc. */
+    esp_restart();
+    return ESP_OK;  /* never reached */
 }
 ```
 
