@@ -104,7 +104,6 @@ async def startup():
 
 def build_settings():
     result = {}
-    result["_dirty"] = _dirty
     for group_id, fields in SETTINGS.items():
         group = {}
         for key, field_def in fields.items():
@@ -163,11 +162,6 @@ async def status_broadcaster():
             except Exception:
                 connected.discard(client)
 
-
-
-@app.get("/api/settings")
-async def api_get_settings():
-    return build_settings()
 
 
 @app.post("/api/settings/save")
