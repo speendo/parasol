@@ -62,6 +62,8 @@ apply). Contains the full settings state.
 {
   "type": "settings",
   "_dirty": true,
+  "_show_reset": true,
+  "_show_reboot": true,
   "data": {
     "wifi": {
       "label": "Wi-Fi Setup",
@@ -89,6 +91,15 @@ apply). Contains the full settings state.
 **`_dirty`:** Boolean owned by the server. `true` when at least one applied
 value differs from the stored (NVS) value. Drives the Save button: enabled
 only when `_dirty` is true AND all form fields pass validation.
+
+**`_show_reset`:** Boolean owned by the server. `true` when an `on_reset`
+callback was registered at `prsl_init()`. Drives the Reset button visibility
+in the footer. Independent of `_dirty` — the button is always visible when
+a reset callback exists.
+
+**`_show_reboot`:** Boolean owned by the server. `true` when an `on_reboot`
+callback was registered at `prsl_init()`. Drives a "System" dropdown in the
+nav bar containing a "Reboot" option with a confirmation dialog.
 
 **`label`:** Optional key within each group object. If present, used as the
 accordion section title. If absent, the group ID is title-cased (e.g.,
@@ -174,10 +185,8 @@ falls back to HTTP:
 
 | Method | Path | Purpose | Body |
 |---|---|---|---|
-| `GET` | `/api/settings` | Full settings load | — |
-| `POST` | `/api/settings/save` | Persist to NVS | Partial settings JSON |
+| `POST` | `/api/settings/save` | Persist settings to NVS | Partial settings JSON |
+| `POST` | `/api/settings/reset` | Reload saved values | — |
+| `POST` | `/api/system/reboot` | Restart device | — |
 
-`GET /api/settings` returns the same structure as the `type: "settings"` WS
-message. `POST /api/settings/save` accepts the partial format, same as the
-`action: "apply"` WS message. Both return HTTP 200 on success, 4xx/5xx with
-plain text error body on failure.
+
