@@ -185,6 +185,12 @@ async def api_settings_save(request: Request):
                 applied_store[store_key] = opts["value"]
     global _dirty
     _dirty = False
+    payload = build_settings()
+    for client in list(connected):
+        try:
+            await client.send_json({"type": "settings", "_dirty": _dirty, "_show_reset": _dirty, "_show_reboot": True, "data": payload})
+        except Exception:
+            connected.discard(client)
     return {}
 
 
@@ -196,7 +202,7 @@ async def events_ws(ws: WebSocket):
     global _dirty
     try:
         await ws.send_json({"type": "status", "data": build_status()})
-        await ws.send_json({"type": "settings", "_dirty": _dirty, "_show_reset": True, "_show_reboot": True, "data": build_settings()})
+        await ws.send_json({"type": "settings", "_dirty": _dirty, "_show_reset": _dirty, "_show_reboot": True, "data": build_settings()})
         while True:
             raw = await ws.receive_text()
             msg = json.loads(raw)
@@ -209,11 +215,11 @@ async def events_ws(ws: WebSocket):
                         _, _, opts = schema_entry
                         store_key = group_key + "." + field_key
                         applied_store[store_key] = field_arr[2]["value"]
-                _dirty = True
+                _dirty = any(applied_store.get(k) != nvs_store.get(k) for k in applied_store)
                 payload = build_settings()
                 for client in list(connected):
                     try:
-                        await client.send_json({"type": "settings", "_dirty": _dirty, "_show_reset": True, "_show_reboot": True, "data": payload})
+                        await client.send_json({"type": "settings", "_dirty": _dirty, "_show_reset": _dirty, "_show_reboot": True, "data": payload})
                     except Exception:
                         connected.discard(client)
     except WebSocketDisconnect:
@@ -247,7 +253,7 @@ async def external_change(body: dict):
     payload = build_settings()
     for client in list(connected):
         try:
-            await client.send_json({"type": "settings", "_dirty": _dirty, "_show_reset": True, "_show_reboot": True, "data": payload})
+            await client.send_json({"type": "settings", "_dirty": _dirty, "_show_reset": _dirty, "_show_reboot": True, "data": payload})
         except Exception:
             connected.discard(client)
     return {"ok": True}
@@ -316,7 +322,7 @@ async def api_settings_reset():
     payload = build_settings()
     for client in list(connected):
         try:
-            await client.send_json({"type": "settings", "_dirty": _dirty, "_show_reset": True, "_show_reboot": True, "data": payload})
+            await client.send_json({"type": "settings", "_dirty": _dirty, "_show_reset": _dirty, "_show_reboot": True, "data": payload})
         except Exception:
             connected.discard(client)
     return {}

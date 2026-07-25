@@ -128,7 +128,7 @@ test.describe('Reset button', () => {
     await page.waitForSelector('#config-form:not([aria-busy])')
 
     // Hidden when clean
-    await expect(page.locator('#btn-reset')).toBeVisible()
+    await expect(page.locator('#btn-reset')).toBeHidden()
 
     // Make a change — blur a field to trigger WS send
     await page.fill('[name="wifi.ssid"]', 'ChangedSSID')
@@ -137,6 +137,38 @@ test.describe('Reset button', () => {
 
     // Now visible
     await expect(page.locator('#btn-reset')).toBeVisible()
+  })
+
+  test('change back to original clears dirty and hides both buttons', async ({ page }) => {
+    await page.goto('/')
+    await page.waitForSelector('#config-form:not([aria-busy])')
+
+    // Pre-fill required password so form stays valid after interaction
+    await page.fill('[name="wifi.password"]', 'secret')
+    await page.locator('[name="wifi.ssid"]').focus()
+    await page.waitForSelector('#config-form:not([aria-busy])', { timeout: 5000 })
+    await expect(page.locator('#btn-save-apply')).toBeVisible({ timeout: 5000 })
+    await expect(page.locator('#btn-reset')).toBeVisible({ timeout: 5000 })
+
+    // Save to reset dirty
+    await page.locator('#btn-save-apply').click()
+    await page.waitForSelector('#config-form:not([aria-busy])', { timeout: 5000 })
+    await expect(page.locator('#btn-save-apply')).toBeHidden({ timeout: 5000 })
+    await expect(page.locator('#btn-reset')).toBeHidden({ timeout: 5000 })
+
+    // Change ssid — dirty, both visible
+    await page.fill('[name="wifi.ssid"]', 'TempChange')
+    await page.locator('[name="wifi.password"]').focus()
+    await page.waitForSelector('#config-form:not([aria-busy])', { timeout: 5000 })
+    await expect(page.locator('#btn-save-apply')).toBeVisible({ timeout: 5000 })
+    await expect(page.locator('#btn-reset')).toBeVisible({ timeout: 5000 })
+
+    // Change ssid back to original — clean, both hidden
+    await page.fill('[name="wifi.ssid"]', 'MyNetwork')
+    await page.locator('[name="wifi.password"]').focus()
+    await page.waitForSelector('#config-form:not([aria-busy])', { timeout: 5000 })
+    await expect(page.locator('#btn-save-apply')).toBeHidden({ timeout: 5000 })
+    await expect(page.locator('#btn-reset')).toBeHidden({ timeout: 5000 })
   })
 
   test('Reset button click clears dirty and reverts values', async ({ page }) => {
