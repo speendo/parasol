@@ -25,6 +25,7 @@ typedef struct {
     prsl_get_cb_t on_get;
     const char *(*options)[2]; /* points to static array of [value,label] pairs */
     int option_count;
+    cJSON *parsed_attrs;       /* pre-parsed attrs JSON (RAM), NULL if none */
     cJSON *value;              /* cJSON value node (RAM) */
 } prsl_field_t;
 

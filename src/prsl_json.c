@@ -87,15 +87,8 @@ static cJSON *build_group(prsl_store_t *store, bool is_status) {
             cJSON_AddItemToObject(opts, "options", options_arr);
         }
 
-        if (f->attrs && f->attrs[0]) {
-            char *fixed = prsl_json_fix_attrs_quotes(f->attrs);
-            cJSON *attrs_json = cJSON_Parse(fixed);
-            if (attrs_json && cJSON_IsObject(attrs_json)) {
-                cJSON_AddItemToObject(opts, "attrs", attrs_json);
-            } else {
-                if (attrs_json) cJSON_Delete(attrs_json);
-            }
-            free(fixed);
+        if (f->parsed_attrs) {
+            cJSON_AddItemToObject(opts, "attrs", cJSON_Duplicate(f->parsed_attrs, 1));
         }
 
         cJSON_AddItemToArray(field_arr, opts);

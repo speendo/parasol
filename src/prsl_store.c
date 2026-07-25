@@ -1,4 +1,5 @@
 #include "prsl_store.h"
+#include "prsl_json.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -27,6 +28,7 @@ void prsl_store_deinit(prsl_store_t *store) {
     if (!store) return;
     for (int i = 0; i < store->count; i++) {
         cJSON_Delete(store->fields[i].value);
+        cJSON_Delete(store->fields[i].parsed_attrs);
     }
     if (store->mutex) {
         vSemaphoreDelete(store->mutex);
@@ -53,6 +55,20 @@ esp_err_t prsl_store_add_field(prsl_store_t *store, const prsl_field_t *field) {
     }
     store->fields[store->count] = *field;
     store->fields[store->count].value = NULL;
+
+    /* Parse attrs once, cache for serialization */
+    store->fields[store->count].parsed_attrs = NULL;
+    if (field->attrs && field->attrs[0]) {
+        char *fixed = prsl_json_fix_attrs_quotes(field->attrs);
+        cJSON *parsed = cJSON_Parse(fixed);
+        free(fixed);
+        if (parsed && cJSON_IsObject(parsed)) {
+            store->fields[store->count].parsed_attrs = parsed;
+        } else {
+            if (parsed) cJSON_Delete(parsed);
+        }
+    }
+
     store->count++;
     xSemaphoreGiveRecursive(store->mutex);
     return ESP_OK;
