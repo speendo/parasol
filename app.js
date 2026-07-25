@@ -332,6 +332,14 @@ var parasol = (function () {
    *
    * @param {MessageEvent} event - WS message with JSON data
    */
+  function updateMetaFlags(msg) {
+    if (msg._show_reset !== undefined) {
+      showReset = msg._show_reset;
+    }
+    if (msg._show_reboot !== undefined) {
+      showReboot = msg._show_reboot;
+    }
+  }
   function onWSMessage(event) {
     var msg = JSON.parse(event.data);
     if (msg.type === 'status') { processStatus(msg.data); return; }
@@ -358,12 +366,7 @@ var parasol = (function () {
 
     if (echoMatched) {
       dirty = msg._dirty;
-      if (msg._show_reset !== undefined) {
-        showReset = msg._show_reset;
-      }
-      if (msg._show_reboot !== undefined) {
-        showReboot = msg._show_reboot;
-      }
+      updateMetaFlags(msg);
       var queuedKeys = [];
       for (var key in inFlight) {
         if (inFlight[key]) continue;
@@ -390,12 +393,7 @@ var parasol = (function () {
     if (hasInFlight && configForm.getAttribute('aria-busy') !== 'true') return;
     if (hasInFlight) {
       dirty = msg._dirty;
-      if (msg._show_reset !== undefined) {
-        showReset = msg._show_reset;
-      }
-      if (msg._show_reboot !== undefined) {
-        showReboot = msg._show_reboot;
-      }
+      updateMetaFlags(msg);
       updateAV(data);
       for (var sk in inFlight) { inFlight[sk] = false; }
       for (var sk in lastSent) { lastSent[sk] = undefined; }
@@ -418,12 +416,7 @@ var parasol = (function () {
     }
 
     dirty = msg._dirty;
-    if (msg._show_reset !== undefined) {
-      showReset = msg._show_reset;
-    }
-    if (msg._show_reboot !== undefined) {
-      showReboot = msg._show_reboot;
-    }
+    updateMetaFlags(msg);
     updateUI();
 
     // Initial load — no groups yet, process settings directly
