@@ -33,25 +33,7 @@ esp_err_t prsl_add_group(const char *group_id, const char *label) {
 
 esp_err_t prsl_add_field(prsl_type_t type, const char *group_id, const char *key,
                          const char *label, const prsl_field_opts_t *opts) {
-    if (!prsl_store_has_group(&g_store, group_id)) return ESP_ERR_NOT_FOUND;
-    prsl_field_t f = {0};
-    f.group_id = group_id;
-    f.key = key;
-    f.label = label;
-    f.type = type;
-
-    if (opts) {
-        f.is_status = opts->is_status;
-        f.on_get    = opts->on_get;
-        f.on_set    = opts->on_set;
-        f.help      = opts->help ? opts->help : "";
-        f.attrs     = opts->attrs ? opts->attrs : "";
-    } else {
-        f.help  = "";
-        f.attrs = "";
-    }
-
-    return prsl_store_add_field(&g_store, &f);
+    return prsl_add_field_opts(type, group_id, key, label, NULL, 0, opts);
 }
 
 esp_err_t prsl_add_field_opts(prsl_type_t type, const char *group_id, const char *key,
