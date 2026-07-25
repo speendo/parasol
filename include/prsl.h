@@ -124,6 +124,8 @@ esp_err_t prsl_set_float(const char *path, float value);
 esp_err_t prsl_set_bool(const char *path, bool value);
 esp_err_t prsl_set_null(const char *path);
 
+/** @brief Get a field's current value. Result valid until next prsl_get()
+ *         call. Copy immediately if you need to keep or compare across calls. */
 const char *prsl_get(const char *path);
 
 /* ── Push / broadcast ──────────────────────────────────────── */

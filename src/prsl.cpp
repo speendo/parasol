@@ -16,6 +16,7 @@ static prsl_save_cb_t g_on_save = NULL;
 static prsl_reset_cb_t g_on_reset = NULL;
 static prsl_reboot_cb_t g_on_reboot = NULL;
 static bool g_initialized = false;
+static char g_get_buf[PRSL_MAX_PATH];
 
 /* ── Group registration ─────────────────────────────────────── */
 
@@ -287,9 +288,25 @@ const char *prsl_get(const char *path) {
     char group_id[PRSL_MAX_PATH] = {0};
     char key[PRSL_MAX_PATH] = {0};
     if (parse_dot_path(path, group_id, key) != ESP_OK) return NULL;
-    cJSON *v = prsl_store_get_value(&g_store, group_id, key);
-    if (!v || !cJSON_IsString(v)) return NULL;
-    return cJSON_GetStringValue(v);
+
+    xSemaphoreTakeRecursive(g_store.mutex, portMAX_DELAY);
+
+    const char *result = NULL;
+    for (int i = 0; i < g_store.count; i++) {
+        if (strcmp(g_store.fields[i].group_id, group_id) == 0 &&
+            strcmp(g_store.fields[i].key, key) == 0) {
+            cJSON *v = g_store.fields[i].value;
+            if (v && cJSON_IsString(v)) {
+                result = cJSON_GetStringValue(v);
+                strncpy(g_get_buf, result, PRSL_MAX_PATH - 1);
+                g_get_buf[PRSL_MAX_PATH - 1] = '\0';
+            }
+            break;
+        }
+    }
+
+    xSemaphoreGiveRecursive(g_store.mutex);
+    return result ? g_get_buf : NULL;
 }
 
 /* ── Has reset ────────────────────────────────────────────────── */
