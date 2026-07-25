@@ -508,7 +508,7 @@ while (1) {
     float temp = read_temperature_sensor();
     char buf[32];
     snprintf(buf, sizeof(buf), "%.1f", temp);
-    prsl_set("sensors.temperature", buf);
+    prsl_set_str("sensors.temperature", buf);
 
     prsl_broadcast_status();
 }
