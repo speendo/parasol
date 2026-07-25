@@ -1,3 +1,8 @@
+> **SUPERSEDED** — This spec describes an intermediate API design (2-param
+> `prsl_init`, `prsl_set()` generic setter, `prsl_set_dirty_check`).
+> The current API (v0.6.0) uses a 4-param `prsl_init`, typed setters, and
+> developer-driven `prsl_set_dirty()`. See `include/prsl.h` for the current API.
+
 # PARASOL API Redesign — 2026-07-09
 
 Rename the project from "pico-settings" (pwui) to "PARASOL" (prsl), rename

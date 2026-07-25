@@ -1,3 +1,9 @@
+> **SUPERSEDED** — This spec describes an earlier API design (varargs registration,
+> `prsl_storage_t` callbacks, `prsl_set()`). The current API (v0.6.0) uses
+> `prsl_field_opts_t` structs, typed setters (`prsl_set_str`, etc.), and
+> `prsl_save_cb_t`/`prsl_reset_cb_t`/`prsl_reboot_cb_t` callbacks passed to
+> `prsl_init`. See `include/prsl.h` and `API_REFERENCE.md` for the current API.
+
 # Pico-Settings ESP32 Backend — Design Spec
 
 Status: **COMPLETE** — ready for implementation planning.
