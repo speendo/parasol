@@ -277,10 +277,7 @@ var parasol = (function () {
     setBaseline();
     configForm.removeAttribute('aria-busy');
     clearError();
-    if (resetInProgress) {
-      resetInProgress = false;
-      configForm.removeAttribute('aria-busy');
-    }
+    if (resetInProgress) resetInProgress = false;
     updateUI();
     handleHash();
   }
@@ -839,6 +836,7 @@ var parasol = (function () {
   function wireButtons() {
     btnSaveApply.addEventListener('click', handleSaveApply);
     btnReset.addEventListener('click', function () {
+      if (resetInProgress) return;
       resetInProgress = true;
       configForm.setAttribute('aria-busy', 'true');
       postJSON('/api/settings/reset', {}).then(function (ok) {
