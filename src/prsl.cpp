@@ -177,8 +177,8 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
             /* Clear or keep dirty, push, respond */
             if (save_result == ESP_OK) {
                 prsl_store_clear_dirty(&g_store);
-                xSemaphoreGiveRecursive(g_store.mutex);
                 prsl_push();
+                xSemaphoreGiveRecursive(g_store.mutex);
                 req->send(200, "text/plain", "OK");
             } else {
                 xSemaphoreGiveRecursive(g_store.mutex);
@@ -317,6 +317,7 @@ cJSON *prsl_build_settings_payload(const prsl_store_t *store) {
 /* ── Push / broadcast ───────────────────────────────────────── */
 
 esp_err_t prsl_push(void) {
+    xSemaphoreTakeRecursive(g_store.mutex, portMAX_DELAY);
     cJSON *root = prsl_build_settings_payload(&g_store);
     char *str = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
@@ -324,10 +325,12 @@ esp_err_t prsl_push(void) {
         g_ws.textAll(str);
         free(str);
     }
+    xSemaphoreGiveRecursive(g_store.mutex);
     return ESP_OK;
 }
 
 esp_err_t prsl_broadcast_status(void) {
+    xSemaphoreTakeRecursive(g_store.mutex, portMAX_DELAY);
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "type", "status");
     cJSON *data = prsl_json_build_status(&g_store);
@@ -338,5 +341,6 @@ esp_err_t prsl_broadcast_status(void) {
         g_ws.textAll(str);
         free(str);
     }
+    xSemaphoreGiveRecursive(g_store.mutex);
     return ESP_OK;
 }

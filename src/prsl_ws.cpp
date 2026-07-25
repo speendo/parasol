@@ -11,6 +11,8 @@ static prsl_store_t *g_store = NULL;
 static void on_event(AsyncWebSocket *server, AsyncWebSocketClient *client,
                      AwsEventType type, void *arg, uint8_t *data, size_t len) {
     if (type == WS_EVT_CONNECT) {
+        xSemaphoreTakeRecursive(g_store->mutex, portMAX_DELAY);
+
         cJSON *status = cJSON_CreateObject();
         cJSON_AddStringToObject(status, "type", "status");
         cJSON_AddItemToObject(status, "data", prsl_json_build_status(g_store));
@@ -22,6 +24,8 @@ static void on_event(AsyncWebSocket *server, AsyncWebSocketClient *client,
         char *s2 = cJSON_PrintUnformatted(settings);
         cJSON_Delete(settings);
         if (s2) { client->text(s2); free(s2); }
+
+        xSemaphoreGiveRecursive(g_store->mutex);
     } else if (type == WS_EVT_DATA) {
         AwsFrameInfo *info = (AwsFrameInfo *)arg;
         if (info->final && info->index == 0 && info->len == len
