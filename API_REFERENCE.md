@@ -124,22 +124,23 @@ void app_main(void) {
     prsl_add_group("wifi", "Wi-Fi Setup");
     prsl_add_group("system", "System Status");
 
-    prsl_add_field(PRSL_TEXT, "wifi", "ssid", "SSID",
-        &(prsl_field_opts_t){
-            .on_get = load_ssid,
-            .on_set = on_ssid_change,
-            .help   = "Network name - 1-32 characters",
-            .attrs  = "{\"required\":true,\"maxlength\":32}",
-        });
+    static const prsl_field_opts_t ssid_opts = {
+        .on_get = load_ssid,
+        .on_set = on_ssid_change,
+        .help   = "Network name - 1-32 characters",
+        .attrs  = "{\"required\":true,\"maxlength\":32}",
+    };
+    static const prsl_field_opts_t pass_opts = {
+        .on_get = load_pass,
+        .help   = "At least 8 characters",
+    };
+    static const prsl_field_opts_t uptime_opts = { .is_status = true };
 
-    prsl_add_field(PRSL_PASSWORD, "wifi", "pass", "Password",
-        &(prsl_field_opts_t){
-            .on_get = load_pass,
-            .help   = "At least 8 characters",
-        });
+    prsl_add_field(PRSL_TEXT, "wifi", "ssid", "SSID", &ssid_opts);
 
-    prsl_add_field(PRSL_TEXT, "system", "uptime", "Uptime",
-        &(prsl_field_opts_t){ .is_status = true });
+    prsl_add_field(PRSL_PASSWORD, "wifi", "pass", "Password", &pass_opts);
+
+    prsl_add_field(PRSL_TEXT, "system", "uptime", "Uptime", &uptime_opts);
 
     /* 3. Configure and start */
     prsl_init(&server, save_to_nvs, on_reset, NULL);
@@ -326,29 +327,29 @@ esp_err_t prsl_add_field_opts(prsl_type_t type, const char *group_id, const char
 
 ```c
 /* Text field with on_get, on_set, help, attrs */
-prsl_add_field(PRSL_TEXT, "wifi", "ssid", "SSID",
-    &(prsl_field_opts_t){
-        .on_get = load_ssid,
-        .on_set = on_ssid_change,
-        .help   = "Network name",
-        .attrs  = "{\"required\":true,\"maxlength\":32}",
-    });
+static const prsl_field_opts_t ssid_opts = {
+    .on_get = load_ssid,
+    .on_set = on_ssid_change,
+    .help   = "Network name",
+    .attrs  = "{\"required\":true,\"maxlength\":32}",
+};
+prsl_add_field(PRSL_TEXT, "wifi", "ssid", "SSID", &ssid_opts);
 
 /* Minimal field (NULL opts) */
 prsl_add_field(PRSL_NUMBER, "gpio", "pin", "Pin Number", NULL);
 
 /* Range slider with min/max */
-prsl_add_field(PRSL_RANGE, "led", "brightness", "Brightness",
-    &(prsl_field_opts_t){
-        .help  = "0-255",
-        .attrs = "{\"min\":0,\"max\":255}",
-    });
+static const prsl_field_opts_t brightness_opts = {
+    .help  = "0-255",
+    .attrs = "{\"min\":0,\"max\":255}",
+};
+prsl_add_field(PRSL_RANGE, "led", "brightness", "Brightness", &brightness_opts);
 
 /* Checkbox with indeterminate state (NULL on_get = indeterminate) */
-prsl_add_field(PRSL_CHECKBOX, "features", "enable_ai", "Enable AI",
-    &(prsl_field_opts_t){
-        .help = "Enable experimental AI features",
-    });
+static const prsl_field_opts_t enable_ai_opts = {
+    .help = "Enable experimental AI features",
+};
+prsl_add_field(PRSL_CHECKBOX, "features", "enable_ai", "Enable AI", &enable_ai_opts);
 
 /* Select field with options */
 static const char *mode_opts[][2] = {
@@ -356,21 +357,23 @@ static const char *mode_opts[][2] = {
     {"ap",      "Access Point"},
     {"ap_sta",  "AP + Station"},
 };
+static const prsl_field_opts_t mode_field_opts = {
+    .on_set = on_mode_change,
+    .help   = "Operating mode",
+};
 prsl_add_field_opts(PRSL_SELECT, "wifi", "mode", "WiFi Mode",
     mode_opts, 3,
-    &(prsl_field_opts_t){
-        .on_set = on_mode_change,
-        .help   = "Operating mode",
-    });
+    &mode_field_opts);
 
 /* Radio group */
 static const char *role_opts[][2] = {
     {"master", "Master"},
     {"slave",  "Slave"},
 };
+static const prsl_field_opts_t role_field_opts = { .help = "Cluster node role" };
 prsl_add_field_opts(PRSL_RADIO, "cluster", "role", "Role",
     role_opts, 2,
-    &(prsl_field_opts_t){ .help = "Cluster node role" });
+    &role_field_opts);
 ```
 
 ---

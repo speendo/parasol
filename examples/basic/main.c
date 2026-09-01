@@ -53,6 +53,18 @@ static esp_err_t save_to_nvs(void) {
     return ESP_OK;
 }
 
+static const prsl_field_opts_t ssid_opts = {
+    .on_get = load_ssid,
+    .on_set = on_ssid_change,
+    .help   = "Network name - 1-32 characters",
+    .attrs  = "{\"required\":true,\"maxlength\":32}",
+};
+static const prsl_field_opts_t pass_opts = {
+    .on_get = load_pass,
+    .help   = "At least 8 characters",
+};
+static const prsl_field_opts_t uptime_opts = { .is_status = true };
+
 void app_main(void) {
     nvs_flash_init();
     WiFi.mode(WIFI_AP);
@@ -62,22 +74,11 @@ void app_main(void) {
     prsl_add_group("wifi", "Wi-Fi Setup");
     prsl_add_group("system", "System Status");
 
-    prsl_add_field(PRSL_TEXT, "wifi", "ssid", "SSID",
-        &(prsl_field_opts_t){
-            .on_get = load_ssid,
-            .on_set = on_ssid_change,
-            .help   = "Network name - 1-32 characters",
-            .attrs  = "{\"required\":true,\"maxlength\":32}",
-        });
+    prsl_add_field(PRSL_TEXT, "wifi", "ssid", "SSID", &ssid_opts);
 
-    prsl_add_field(PRSL_PASSWORD, "wifi", "pass", "Password",
-        &(prsl_field_opts_t){
-            .on_get = load_pass,
-            .help   = "At least 8 characters",
-        });
+    prsl_add_field(PRSL_PASSWORD, "wifi", "pass", "Password", &pass_opts);
 
-    prsl_add_field(PRSL_TEXT, "system", "uptime", "Uptime",
-        &(prsl_field_opts_t){ .is_status = true });
+    prsl_add_field(PRSL_TEXT, "system", "uptime", "Uptime", &uptime_opts);
 
     prsl_init(&server, save_to_nvs, NULL, NULL);
     prsl_start();
