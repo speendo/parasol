@@ -5,6 +5,7 @@ test-deps/lib/
 test-deps/debs/
 test-deps/_extract/
 test-deps/*.bak/
+test-deps/native/
 test-results/
 
 pico CI log.txt

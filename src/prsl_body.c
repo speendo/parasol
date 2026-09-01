@@ -35,9 +35,8 @@ int prsl_apply_body(cJSON *body, prsl_store_t *store, prsl_rejection_t *rejectio
                     count++;
                 }
             } else if (f) {
-                char path[PRSL_MAX_PATH];
-                snprintf(path, sizeof(path), "%s.%s", group->string, field->string);
-                prsl_set_str(path, val_str);
+                prsl_store_set_json(store, group->string, field->string,
+                    val_str ? cJSON_CreateString(val_str) : cJSON_CreateNull());
                 count++;
             }
             field = field->next;
