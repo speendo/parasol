@@ -45,3 +45,22 @@ int prsl_apply_body(cJSON *body, prsl_store_t *store, prsl_rejection_t *rejectio
     }
     return count;
 }
+
+prsl_save_status_t prsl_apply_save_body(const char *json, size_t len,
+                                        prsl_store_t *store,
+                                        char *err, size_t err_sz) {
+    cJSON *body = cJSON_ParseWithLength(json, len);
+    if (!body) {
+        snprintf(err, err_sz, "Invalid JSON");
+        return PRSL_SAVE_INVALID_JSON;
+    }
+    prsl_rejection_t rej;
+    prsl_apply_body(body, store, &rej);
+    if (rej.group_id) {
+        snprintf(err, err_sz, "on_set rejected %s.%s", rej.group_id, rej.key);
+        cJSON_Delete(body);
+        return PRSL_SAVE_REJECTED;
+    }
+    cJSON_Delete(body);
+    return PRSL_SAVE_APPLIED;
+}

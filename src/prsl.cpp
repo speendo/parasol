@@ -100,41 +100,39 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
         [](AsyncWebServerRequest *req) {}, NULL,
         [](AsyncWebServerRequest *req, uint8_t *data, size_t len,
            size_t index, size_t total) {
-            cJSON *msg = cJSON_ParseWithLength((const char *)data, total);
-            if (!msg) {
-                req->send(400, "text/plain", "Invalid JSON");
-                return;
+            if (index == 0) {
+                req->_tempObject = malloc(total + 1);
+                if (!req->_tempObject) {
+                    req->send(500, "text/plain", "Out of memory");
+                    return;
+                }
+                ((char *)req->_tempObject)[0] = '\0';
             }
-            cJSON *body = cJSON_GetObjectItem(msg, "data");
-            if (!body) {
-                cJSON_Delete(msg);
-                req->send(400, "text/plain", "Missing data");
-                return;
+            char *buf = (char *)req->_tempObject;
+            if (buf) {
+                memcpy(buf + index, data, len);
+                buf[index + len] = '\0';
             }
+            if (index + len < total) return;
 
-            /* Lock AV store for the entire transaction */
             xSemaphoreTakeRecursive(g_store.mutex, portMAX_DELAY);
 
-            prsl_rejection_t rej;
-            prsl_apply_body(body, &g_store, &rej);
-
-            if (rej.group_id) {
-                char err[128];
-                snprintf(err, sizeof(err), "on_set rejected %s.%s", rej.group_id, rej.key);
+            char err[128];
+            prsl_save_status_t st = buf ? prsl_apply_save_body(buf, total, &g_store, err, sizeof(err))
+                                        : PRSL_SAVE_INVALID_JSON;
+            free(buf);
+            req->_tempObject = NULL;
+            if (st != PRSL_SAVE_APPLIED) {
                 xSemaphoreGiveRecursive(g_store.mutex);
-                cJSON_Delete(msg);
                 req->send(400, "text/plain", err);
                 return;
             }
-            cJSON_Delete(msg);
 
-            /* Call on_save */
             esp_err_t save_result = ESP_OK;
             if (g_on_save) {
                 save_result = g_on_save();
             }
 
-            /* Clear or keep dirty, push, respond */
             if (save_result == ESP_OK) {
                 prsl_store_clear_dirty(&g_store);
                 prsl_push();
