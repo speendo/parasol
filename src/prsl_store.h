@@ -34,7 +34,7 @@ typedef struct {
     const char *label;
 } prsl_group_meta_t;
 
-typedef struct {
+typedef struct prsl_store_s {
     prsl_field_t *fields;
     int count;
     int capacity;

@@ -280,7 +280,7 @@ bool prsl_has_reboot(void) {
 
 /* ── Shared settings payload builder ─────────────────────────── */
 
-cJSON *prsl_build_settings_payload(const prsl_store_t *store) {
+cJSON *prsl_build_settings_payload(prsl_store_t *store) {
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "type", "settings");
     cJSON_AddBoolToObject(root, "_dirty", prsl_store_is_dirty(store));

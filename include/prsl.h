@@ -3,6 +3,9 @@
 #include "esp_err.h"
 #include "cJSON.h"
 
+struct prsl_store_s;
+typedef struct prsl_store_s prsl_store_t;
+
 #ifdef __cplusplus
 class AsyncWebServer;
 #else
@@ -132,7 +135,7 @@ const char *prsl_get(const char *path);
 
 esp_err_t prsl_push(void);
 esp_err_t prsl_broadcast_status(void);
-cJSON *prsl_build_settings_payload(const prsl_store_t *store);
+cJSON *prsl_build_settings_payload(prsl_store_t *store);
 
 #ifdef __cplusplus
 }
