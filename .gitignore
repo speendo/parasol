@@ -9,3 +9,6 @@ test-results/
 
 pico CI log.txt
 docs/superpowers/plans/
+
+# isolated git worktrees
+.worktrees/
