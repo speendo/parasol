@@ -152,6 +152,7 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
             }
             esp_err_t result = g_on_reset();
             if (result == ESP_OK) {
+                prsl_store_clear_dirty(&g_store);
                 prsl_push();
                 req->send(200, "text/plain", "OK");
             } else {

@@ -182,11 +182,22 @@ describe('updateUI', () => {
     expect(document.getElementById('btn-reset').hidden).toBe(false)
   })
 
-  it('reset visible when showReset is true even if clean', () => {
+  it('reset hidden when clean even if showReset is true', () => {
     window.__test.dirty = false
     window.__test.showReset = true
     window.updateUI()
+    expect(document.getElementById('btn-reset').hidden).toBe(true)
+  })
+
+  it('reset visible when clean only if alwaysShowSave', () => {
+    window.__test.dirty = false
+    window.__test.showReset = true
+    document.querySelector('meta[name="parasol-always-show-save"]')
+      .setAttribute('content', '1')
+    window.updateUI()
     expect(document.getElementById('btn-reset').hidden).toBe(false)
+    document.querySelector('meta[name="parasol-always-show-save"]')
+      .setAttribute('content', '0')
   })
 })
 
@@ -870,7 +881,7 @@ describe('processSettings', () => {
     expect(window.__test.showReset).toBe(false);
   });
 
-  it('reset button visible when dirty or showReset', function () {
+  it('reset button visible when dirty', function () {
     var btn = document.getElementById('btn-reset');
     // clean + no showReset → hidden
     window.__test.dirty = false;
@@ -883,11 +894,11 @@ describe('processSettings', () => {
     window.updateUI();
     expect(btn.hidden).toBe(false);
 
-    // showReset makes it visible even when clean
+    // clean + showReset but no alwaysShowSave → still hidden
     window.__test.dirty = false;
     window.__test.showReset = true;
     window.updateUI();
-    expect(btn.hidden).toBe(false);
+    expect(btn.hidden).toBe(true);
   });
 })
 

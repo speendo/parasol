@@ -5,6 +5,9 @@ import { dirname, resolve } from 'path'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
+document.head.innerHTML = `
+  <meta name="parasol-always-show-save" content="0">
+`
 document.body.innerHTML = `
   <nav id="nav-list"></nav>
   <form id="config-form"></form>
