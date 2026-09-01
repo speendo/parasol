@@ -12,3 +12,6 @@ docs/superpowers/plans/
 
 # isolated git worktrees
 .worktrees/
+
+# SDD scratch
+.superpowers/
