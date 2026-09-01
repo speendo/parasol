@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.6.3
+- Fix reboot status-bar race with WS close handler
+
+## 0.6.2
+- Fix test-server _dirty recomputation and _show_reset broadcast
+
+## 0.6.1
+- Cache attrs JSON at registration (avoid re-parse on every push)
+- Extract prsl_apply_body; dedup JSON body iteration
+- prsl_add_field delegates to prsl_add_field_opts
+- Mark stale design specs as superseded
+- Document prsl_reset, prsl_has_reset, prsl_has_reboot
+- Fix prsl_get TOCTOU (hold mutex, copy into static buffer)
+- Hold store mutex during serialization
+- Add MIT license
+
 ## 0.6.0
 - Reboot button — nav dropdown + confirmation modal
 - Shared `prsl_build_settings_payload()` helper eliminates triplicated settings payload construction

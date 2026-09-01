@@ -274,6 +274,8 @@ prsl_add_group("system", "System Status");
 prsl_add_group("auto_label_group", NULL); /* renders as "Auto Label Group" */
 ```
 
+> **Do not prefix group IDs with `_`.** Underscore-prefixed groups are reserved for protocol meta-fields: the browser never renders them, `prsl_apply_body` skips them on apply, and a `_system` group silently becomes an invisible section. Choose a non-underscore ID for internal/read-only groups.
+
 ---
 
 ## Field Registration
@@ -471,6 +473,8 @@ bool prsl_is_dirty(void);
 - Once after loading NVS at startup (to always show Save)
 - From a hardware event or timer that detects external changes
 
+> **Sharp consequence:** `_dirty` is only ever *cleared* by parasol. If firmware never calls `prsl_set_dirty(true)`, the browser never shows the Save button (unless `always_show_save` is on), and a Save click is a silent no-op — no POST is sent and nothing persists. Call `prsl_set_dirty(true)` inside `on_set` (or wherever external state changes).
+
 Alternatively, set `"always_show_save": true` in `parasol_config.json` to force
 the Save button visible always.
 
@@ -497,6 +501,8 @@ esp_err_t prsl_set_null(const char *path);
  *         for the same path. Do NOT free. */
 const char *prsl_get(const char *path);
 ```
+
+> `prsl_get()` returns values **only** for fields stored as strings (via `prsl_get` callback or `prsl_set_str`). Values stored with `prsl_set_int` / `prsl_set_float` / `prsl_set_bool` are JSON numbers/booleans and `prsl_get()` returns `NULL` for them. Use `prsl_set_str` for any value you need to read back.
 
 ---
 
