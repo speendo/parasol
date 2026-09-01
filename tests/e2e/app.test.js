@@ -646,3 +646,14 @@ test.describe('Save non-string fields', () => {
   })
 })
 
+test.describe('Mobile layout', () => {
+  test('nav does not overflow on a phone viewport', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 667 })
+    await page.goto('/')
+    await expect(page.locator('#config-form')).not.toHaveAttribute('aria-busy', 'true')
+    const overflow = await page.evaluate(() =>
+      document.documentElement.scrollWidth > document.documentElement.clientWidth)
+    expect(overflow).toBe(false)
+  })
+})
+
