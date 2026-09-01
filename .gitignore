@@ -15,3 +15,6 @@ docs/superpowers/plans/
 
 # SDD scratch
 .superpowers/
+node_modules
+.venv
+test-deps/lib
