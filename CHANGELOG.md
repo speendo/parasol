@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.4
+- Fix prsl.h self-containment + const-correctness (compiles standalone in C/C++)
+- Restore native C test harness (store + json unit tests)
+- Fix /api/settings/save handler: chunked body accumulation, no data wrapper
+- Show Reset button only while dirty; reset clears _dirty
+- aria-busy on Save during POST round-trip
+- Replace C99 compound literals in docs + example
+- Mobile nav horizontal scroll fix
+- Documentation: prsl_get string-only, dead-Save warning, _-prefix reservation, PlatformIO setup, troubleshooting
+
 ## 0.6.3
 - Fix reboot status-bar race with WS close handler
 
