@@ -1210,6 +1210,17 @@ describe('handleSaveApply', () => {
     window.fetch = function () { throw new Error('should not be called') }
     expect(function () { window.handleSaveApply() }).not.toThrow()
   })
+
+  it('shows aria-busy on Save while the POST is in flight', async () => {
+    window.__test.dirty = true
+    let resolvePost
+    window.fetch = () => new Promise((r) => { resolvePost = r })
+    window.handleSaveApply()
+    expect(document.getElementById('btn-save-apply').getAttribute('aria-busy')).toBe('true')
+    resolvePost({ ok: true, json: () => Promise.resolve({}) })
+    await new Promise((r) => setTimeout(r, 0))
+    expect(document.getElementById('btn-save-apply').getAttribute('aria-busy')).toBe(null)
+  })
 })
 
 describe('onUserInput', () => {

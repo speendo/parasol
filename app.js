@@ -643,7 +643,9 @@ var parasol = (function () {
     for (var k in changes) count++;
     if (count === 0 && !dirty) return;
     var body = count > 0 ? buildPatch(changes) : buildPatch(serialize());
+    btnSaveApply.setAttribute('aria-busy', 'true');
     postJSON('/api/settings/save', body).then(function (ok) {
+      btnSaveApply.removeAttribute('aria-busy');
       if (ok) syncThen();
     });
   }
