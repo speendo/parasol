@@ -22,13 +22,18 @@ cat > "$ROOT/tests/native/check_store_api.cpp" <<'EOF'
 #include "prsl.h"
 #include "prsl_store.h"
 #include "cJSON.h"
-// Mirrors prsl.cpp: prsl_build_settings_payload(store) must accept a
-// non-const store and call prsl_store_is_dirty without const mismatch.
-cJSON *prsl_build_settings_payload(prsl_store_t *store);
+// Mirrors prsl.cpp: prsl_build_settings_payload(store) must be visible via
+// prsl_store.h (moved out of the public header per Decision 6) and accept a
+// non-const store.
 int main(void) {
     prsl_store_t store = {0};
+    prsl_field_t f = {0};
+    f.group_id = "g"; f.key = "k"; f.label = "L"; f.type = PRSL_TEXT;
     bool dirty = prsl_store_is_dirty(&store);
     (void)dirty;
+    (void)f;
+    cJSON *(*payload)(prsl_store_t *) = prsl_build_settings_payload;
+    (void)payload;
     return 0;
 }
 EOF
