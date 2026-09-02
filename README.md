@@ -66,7 +66,7 @@ lib_deps = https://github.com/speendo/parasol.git#v0.6.4
 - **C++ compound literals:** option structs must be `static const prsl_field_opts_t` objects. C99 compound literals passed inline at file scope are not safely initialised and are rejected by some toolchains.
 - **`prsl_get` returns `NULL`:** numeric/boolean values are stored as JSON numbers/booleans; `prsl_get()` only reads back fields stored as strings. Use `prsl_set_str` for anything you need to read back.
 - **Dirty flag:** if firmware never calls `prsl_set_dirty(true)`, the Save button never shows and a Save click is a silent no-op. Call `prsl_set_dirty(true)` inside `on_set` (or wherever external state changes).
-- **`_`-prefixed groups:** reserved for protocol meta-fields. The browser never renders them and `prsl_apply_body` skips them on apply — a `_system` group silently becomes an invisible section. Use a non-underscore ID.
+- **`_`-prefixed groups:** reserved for protocol meta-fields. `prsl_add_group` rejects IDs starting with `_` (`ESP_ERR_INVALID_ARG`) — a `_`-group has no valid interpretation. Use a non-underscore ID.
 - **Reset button:** appears only when an `on_reset` callback is registered and the form is dirty (or `always_show_save` is set). A successful reset clears the dirty flag.
 
 See [`API_REFERENCE.md`](API_REFERENCE.md) for the complete C API.

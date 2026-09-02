@@ -274,7 +274,11 @@ prsl_add_group("system", "System Status");
 prsl_add_group("auto_label_group", NULL); /* renders as "Auto Label Group" */
 ```
 
-> **Do not prefix group IDs with `_`.** Underscore-prefixed groups are reserved for protocol meta-fields: the browser never renders them, `prsl_apply_body` skips them on apply, and a `_system` group silently becomes an invisible section. Choose a non-underscore ID for internal/read-only groups.
+> **Group IDs must not start with `_`.** The `_` namespace is reserved for
+> protocol meta keys (`_dirty`, `_show_reset`, `_show_reboot`). `prsl_add_group`
+> rejects `_`-prefixed IDs with `ESP_ERR_INVALID_ARG`; subsequent
+> `prsl_add_field` calls for that group return `ESP_ERR_NOT_FOUND`. Use a
+> non-underscore ID for internal/read-only groups.
 
 ---
 

@@ -9,7 +9,6 @@ static prsl_store_t store;
 void setUp(void) {
     prsl_store_init(&store);
     prsl_store_add_group(&store, "wifi", "WiFi");
-    prsl_store_add_group(&store, "_meta", "Meta");
 }
 void tearDown(void) { prsl_store_deinit(&store); }
 
@@ -56,7 +55,6 @@ void test_save_body_truncated_parse_length(void) {
 }
 
 void test_save_body_underscore_group_skipped(void) {
-    add_field_no_cb("_meta", "hidden");
     const char *json = "{\"_meta\":{\"hidden\":[\"text\",\"Hidden\",{\"value\":\"x\"}]}}";
     char err[128];
     prsl_save_status_t st = prsl_apply_save_body(json, strlen(json), &store, err, sizeof(err));

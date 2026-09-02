@@ -33,7 +33,6 @@ void setUp(void) {
     set_calls = 0;
     prsl_store_init(&store);
     prsl_store_add_group(&store, "wifi", "WiFi");
-    prsl_store_add_group(&store, "_meta", "Meta");
     prsl_store_add_group(&store, "sys", "Sys");
 }
 
@@ -81,7 +80,6 @@ void test_apply_with_on_set_does_not_write_store(void) {
 }
 
 void test_apply_underscore_group_skipped(void) {
-    add_field_no_cb("_meta", "hidden");
     cJSON *body = cJSON_CreateObject();
     cJSON *meta = cJSON_CreateObject();
     cJSON *arr = cJSON_CreateArray();

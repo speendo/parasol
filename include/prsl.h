@@ -66,6 +66,9 @@ typedef struct {
 
 /** @brief Register a group before adding fields to it.
  *  @param group_id Must be unique. Controls JSON key and DOM prefix.
+ *                 Must NOT start with '_' — the '_' prefix is reserved for
+ *                 protocol meta keys (_dirty, _show_reset, _show_reboot);
+ *                 registration fails with ESP_ERR_INVALID_ARG.
  *  @param label    NULL = auto-derived from group_id (camelCase/snake_case
  *                  splitting, title-cased). Non-NULL overrides. */
 esp_err_t prsl_add_group(const char *group_id, const char *label);

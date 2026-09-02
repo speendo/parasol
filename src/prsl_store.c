@@ -150,6 +150,7 @@ void prsl_store_clear_dirty(prsl_store_t *store) {
 
 esp_err_t prsl_store_add_group(prsl_store_t *store, const char *group_id, const char *label) {
     if (!store || !group_id) return ESP_ERR_INVALID_ARG;
+    if (group_id[0] == '_') return ESP_ERR_INVALID_ARG;  /* reserved for meta keys */
     xSemaphoreTakeRecursive(store->mutex, portMAX_DELAY);
     for (int i = 0; i < store->group_count; i++) {
         if (strcmp(store->groups[i].group_id, group_id) == 0) {

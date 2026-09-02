@@ -74,6 +74,12 @@ void test_add_group_null_id(void) {
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, prsl_store_add_group(&store, NULL, "label"));
 }
 
+void test_add_group_underscore_rejected(void) {
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, prsl_store_add_group(&store, "_meta", "Meta"));
+    TEST_ASSERT_EQUAL(0, store.group_count);
+    TEST_ASSERT_FALSE(prsl_store_has_group(&store, "_meta"));
+}
+
 void test_has_group_true(void) {
     prsl_store_add_group(&store, "wifi", "WiFi Settings");
     TEST_ASSERT_TRUE(prsl_store_has_group(&store, "wifi"));
@@ -364,6 +370,7 @@ int main(void) {
     RUN_TEST(test_add_group_duplicate_same_label);
     RUN_TEST(test_add_group_duplicate_different_label);
     RUN_TEST(test_add_group_null_id);
+    RUN_TEST(test_add_group_underscore_rejected);
     RUN_TEST(test_has_group_true);
     RUN_TEST(test_has_group_false);
     RUN_TEST(test_has_group_null);
