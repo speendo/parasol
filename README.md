@@ -41,10 +41,10 @@ Add to `platformio.ini`:
 
 ```ini
 ; Tarball — clean, minimal (recommended):
-lib_deps = https://github.com/speendo/parasol/releases/download/v0.6.3/parasol-v0.6.3.tar.gz
+lib_deps = https://github.com/speendo/parasol/releases/download/v0.6.4/parasol-v0.6.4.tar.gz
 
 ; Git — full repo (for development):
-lib_deps = https://github.com/speendo/parasol.git#v0.6.3
+lib_deps = https://github.com/speendo/parasol.git#v0.6.4
 ```
 
 > **PlatformIO:** generated assets (`prsl_assets.h`/`prsl_assets.c`) are produced by CMake during the ESP-IDF build and are not in the tarball — run `cmake/generate_assets.cmake` (or an equivalent `extra_script`) before compiling.
@@ -53,7 +53,7 @@ lib_deps = https://github.com/speendo/parasol.git#v0.6.3
 >
 > ```ini
 > lib_deps =
->     https://github.com/speendo/parasol/releases/download/v0.6.3/parasol-v0.6.3.tar.gz
+>     https://github.com/speendo/parasol/releases/download/v0.6.4/parasol-v0.6.4.tar.gz
 >     esp32async/ESPAsyncWebServer@~3.12
 >     cJSON@^1.7.18
 > ```
@@ -67,6 +67,6 @@ lib_deps = https://github.com/speendo/parasol.git#v0.6.3
 - **`prsl_get` returns `NULL`:** numeric/boolean values are stored as JSON numbers/booleans; `prsl_get()` only reads back fields stored as strings. Use `prsl_set_str` for anything you need to read back.
 - **Dirty flag:** if firmware never calls `prsl_set_dirty(true)`, the Save button never shows and a Save click is a silent no-op. Call `prsl_set_dirty(true)` inside `on_set` (or wherever external state changes).
 - **`_`-prefixed groups:** reserved for protocol meta-fields. The browser never renders them and `prsl_apply_body` skips them on apply — a `_system` group silently becomes an invisible section. Use a non-underscore ID.
-- **Reset button:** shown only while the form is dirty (or with `always_show_save` on) and only when an `on_reset` callback is registered. A successful reset clears the dirty flag.
+- **Reset button:** appears only when an `on_reset` callback is registered and the form is dirty (or `always_show_save` is set). A successful reset clears the dirty flag.
 
 See [`API_REFERENCE.md`](API_REFERENCE.md) for the complete C API.

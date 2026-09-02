@@ -175,11 +175,18 @@ describe('updateUI', () => {
     expect(document.getElementById('btn-reset').hidden).toBe(true)
   })
 
-  it('reset visible when dirty', () => {
+  it('reset visible when dirty and callback registered', () => {
+    window.__test.dirty = true
+    window.__test.showReset = true
+    window.updateUI()
+    expect(document.getElementById('btn-reset').hidden).toBe(false)
+  })
+
+  it('reset hidden when dirty but no callback registered', () => {
     window.__test.dirty = true
     window.__test.showReset = false
     window.updateUI()
-    expect(document.getElementById('btn-reset').hidden).toBe(false)
+    expect(document.getElementById('btn-reset').hidden).toBe(true)
   })
 
   it('reset hidden when clean even if showReset is true', () => {
@@ -881,7 +888,7 @@ describe('processSettings', () => {
     expect(window.__test.showReset).toBe(false);
   });
 
-  it('reset button visible when dirty', function () {
+  it('reset button visible when dirty and callback registered', function () {
     var btn = document.getElementById('btn-reset');
     // clean + no showReset → hidden
     window.__test.dirty = false;
@@ -889,8 +896,13 @@ describe('processSettings', () => {
     window.updateUI();
     expect(btn.hidden).toBe(true);
 
-    // dirty makes it visible
+    // dirty without callback → still hidden (no reset endpoint)
     window.__test.dirty = true;
+    window.updateUI();
+    expect(btn.hidden).toBe(true);
+
+    // dirty + callback → visible
+    window.__test.showReset = true;
     window.updateUI();
     expect(btn.hidden).toBe(false);
 

@@ -4,7 +4,7 @@
 - Fix prsl.h self-containment + const-correctness (compiles standalone in C/C++)
 - Restore native C test harness (store + json unit tests)
 - Fix /api/settings/save handler: chunked body accumulation, no data wrapper
-- Show Reset button only while dirty; reset clears _dirty
+- Show Reset only while dirty and `on_reset` is registered; reset clears _dirty
 - aria-busy on Save during POST round-trip
 - Replace C99 compound literals in docs + example
 - Mobile nav horizontal scroll fix

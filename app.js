@@ -126,7 +126,7 @@ var parasol = (function () {
     var showBtn = (dirty || alwaysShow) && formOk;
     btnSaveApply.hidden = !showBtn;
     btnSaveApply.disabled = !showBtn;
-    btnReset.hidden = !(dirty || (showReset && alwaysShow));
+    btnReset.hidden = !(showReset && (dirty || alwaysShow));
   }
 
   /**
