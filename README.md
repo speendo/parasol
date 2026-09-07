@@ -49,16 +49,7 @@ lib_deps = https://github.com/speendo/parasol.git#v0.6.4
 
 > **PlatformIO:** generated assets (`prsl_assets.h`/`prsl_assets.c`) are produced by CMake during the ESP-IDF build and are not in the tarball — run `cmake/generate_assets.cmake` (or an equivalent `extra_script`) before compiling.
 >
-> Parasol also needs ESPAsyncWebServer and cJSON, but its own `library.json` dependency (`me-no-dev/ESP Async WebServer@~3.11`) does **not** resolve in the PlatformIO registry — it installs with a warning only — so list them explicitly. Use the actively maintained **`esp32async`** fork (me-no-dev's original was archived in Jan 2025):
->
-> ```ini
-> lib_deps =
->     https://github.com/speendo/parasol/releases/download/v0.6.4/parasol-v0.6.4.tar.gz
->     esp32async/ESPAsyncWebServer@~3.12
->     cJSON@^1.7.18
-> ```
->
-> Verified with PlatformIO 6.1.19: the maintained fork pulls a single ESP32 transport, `ESP32Async/AsyncTCP`; the RP2040/ESP8266 transports (`RPAsyncTCP`, `AsyncTCP_RP2040W`, `ESPAsyncTCP`) are platform-filtered and not compiled on an ESP32 target, so **no `lib_ignore` is needed** for ESP32. `lib_ignore = AsyncTCP_RP2040W` only matters if you pull the superseded `me-no-dev/ESPAsyncWebServer@^3.6` tree, which installs `khoih-prog/AsyncTCP_RP2040W`.
+> **Dependencies:** list ESPAsyncWebServer (the actively maintained `esp32async` fork — me-no-dev's original is archived) and cJSON in `lib_deps`. Do **not** list `AsyncTCP` explicitly — the fork resolves its transport transitively. If you pull the superseded `me-no-dev/ESPAsyncWebServer@^3.6` tree (which drags in RP2040 ports), add `lib_ignore = AsyncTCP_RP2040W` to keep the RP2040 transport out of an ESP32 build.
 
 ## Troubleshooting
 
