@@ -115,7 +115,10 @@ esp_err_t prsl_add_field_opts(prsl_type_t type, const char *group_id, const char
 /* ── Dirty ─────────────────────────────────────────────────── */
 
 /** @brief Developer-driven dirty flag. Set true when AV diverges
- *  from saved values. Parasol clears it after successful on_save. */
+ *  from saved values. Parasol clears it after successful on_save.
+ *  @warning If firmware never sets it, the Save button never appears
+ *  and nothing persists — silently. Call it inside on_set (or wherever
+ *  external state changes) after a value is applied. */
 void prsl_set_dirty(bool dirty);
 
 /** @brief Query whether any unsaved changes exist. */
@@ -158,8 +161,10 @@ esp_err_t prsl_set_null(const char *path);
  *  NOT set dirty (the callback decides dirty semantics). */
 esp_err_t prsl_set_val(const char *path, const prsl_val_t *value);
 
-/** @brief Get a field's current value. Result valid until next prsl_get()
- *         call. Copy immediately if you need to keep or compare across calls. */
+/** @brief Get a field's current value as a string. Returns NULL for
+ *  non-string fields (numbers/bools/null) — use prsl_get_int/float/bool.
+ *  Result valid until next prsl_get() call. Copy immediately if you need
+ *  to keep or compare across calls. */
 const char *prsl_get(const char *path);
 
 /** @brief Strict typed getters. Return ESP_OK and set *out only when the

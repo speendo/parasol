@@ -64,7 +64,7 @@ lib_deps = https://github.com/speendo/parasol.git#v0.6.4
 
 - **Asset generation:** `prsl_assets.h`/`prsl_assets.c` are built by `cmake/generate_assets.cmake` (gzip of the minified UI + config injection) and are not shipped in the tarball. On PlatformIO, run the script or an `extra_script` before compiling — stale or missing assets silently serve the wrong UI.
 - **C++ compound literals:** option structs must be `static const prsl_field_opts_t` objects. C99 compound literals passed inline at file scope are not safely initialised and are rejected by some toolchains.
-- **`prsl_get` returns `NULL`:** numeric/boolean values are stored as JSON numbers/booleans; `prsl_get()` only reads back fields stored as strings. Use `prsl_set_str` for anything you need to read back.
+- **`prsl_get` returns `NULL`:** it only reads fields stored as strings. Numeric/boolean fields need the typed getters `prsl_get_int` / `prsl_get_float` / `prsl_get_bool`.
 - **Dirty flag:** if firmware never calls `prsl_set_dirty(true)`, the Save button never shows and a Save click is a silent no-op. Call `prsl_set_dirty(true)` inside `on_set` (or wherever external state changes).
 - **`_`-prefixed groups:** reserved for protocol meta-fields. `prsl_add_group` rejects IDs starting with `_` (`ESP_ERR_INVALID_ARG`) — a `_`-group has no valid interpretation. Use a non-underscore ID.
 - **Reset button:** appears only when an `on_reset` callback is registered and the form is dirty (or `always_show_save` is set). A successful reset clears the dirty flag.

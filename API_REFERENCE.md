@@ -67,14 +67,20 @@ static const char *load_ssid(void) {
 
 /* ── Set callback ─────────────────────────────────────────────────
  * An on_set callback fires every time a field value changes (via
- * WebSocket apply or Save). Use it to react to live changes or
- * reject invalid values.
+ * WebSocket apply or Save). The callback OWNS persistence: accept a
+ * value by writing it back with prsl_set_val() (optionally after
+ * transforming it), or write nothing to discard it. Parasol does not
+ * auto-store when on_set is registered.
  */
 
 static esp_err_t on_ssid_change(const char *group_id, const char *key,
-                                 const char *value) {
-    printf("%s.%s changed to: %s\n", group_id, key, value);
-    if (value && strlen(value) > 32) return ESP_ERR_INVALID_ARG;
+                                 const prsl_val_t *value) {
+    (void)key;
+    printf("%s changed\n", group_id);
+    if (value->kind != PRSL_VAL_STRING || !value->u.str) return ESP_ERR_INVALID_ARG;
+    if (strlen(value->u.str) > 32) return ESP_ERR_INVALID_ARG;
+    prsl_set_val("wifi.ssid", value);   /* accept as-is */
+    prsl_set_dirty(true);               /* show Save, persist on Save */
     return ESP_OK;
 }
 
@@ -402,9 +408,16 @@ typedef struct {
 |---|---|---|
 | `is_status` | `bool` | `false` by default. `true` = read-only status field (renders disabled). |
 | `on_get` | `prsl_get_cb_t` | Called once per field at init. Return persisted value string, or NULL for default (checkbox→indeterminate, others→empty). |
-| `on_set` | `prsl_set_cb_t` | Called on every value change (blur/change via WS) and on Save. Return `ESP_OK` to accept, anything else to reject (Save aborts). |
+| `on_set` | `prsl_set_cb_t` | Called on every value change and on Save with a typed `prsl_val_t *`. The callback OWNS persistence — accept by writing the value back via `prsl_set_val()` (may transform first), or write nothing to discard. Return `ESP_OK` to accept, anything else to reject (Save aborts). |
 | `help` | `const char *` | Helper text shown below the field. NULL = no help text rendered. |
 | `attrs` | `const char *` | JSON string of HTML form attributes (see Attrs Format below). NULL = no validation attributes. |
+
+> **Sharp edge (transform / accept-but-don't-store):** the browser assumes
+> the server echoes back exactly the value it sent. If `on_set` stores a
+> *different* value (transform) or stores nothing (discard), the field
+> silently desyncs in the UI until re-touched or reconnected. That is a
+> documented cosmetic edge of callback-owned writes, not data loss. There is
+> no echo/correlation fix in 0.7.0.
 
 ---
 
@@ -506,7 +519,26 @@ esp_err_t prsl_set_null(const char *path);
 const char *prsl_get(const char *path);
 ```
 
-> `prsl_get()` returns values **only** for fields stored as strings (via `prsl_get` callback or `prsl_set_str`). Values stored with `prsl_set_int` / `prsl_set_float` / `prsl_set_bool` are JSON numbers/booleans and `prsl_get()` returns `NULL` for them. Use `prsl_set_str` for any value you need to read back.
+```c
+/**
+ * @brief Strict typed getters.
+ * @param path Dot-path string, e.g. "led.brightness".
+ * @param out  Receives the value on success.
+ * @return ESP_OK and sets *out when the field exists with a compatible
+ *         stored type (number for int/float, bool for bool);
+ *         ESP_ERR_NOT_FOUND for a missing field OR a wrong type.
+ *         They do NOT parse strings — a string field reads back only
+ *         via prsl_get. */
+esp_err_t prsl_set_val(const char *path, const prsl_val_t *value);
+esp_err_t prsl_get_int(const char *path, int *out);
+esp_err_t prsl_get_float(const char *path, float *out);
+esp_err_t prsl_get_bool(const char *path, bool *out);
+```
+
+> `prsl_get()` returns values **only** for fields stored as strings. Use the
+> typed getters `prsl_get_int`/`prsl_get_float`/`prsl_get_bool` for number/bool
+> fields; they are strict and return `ESP_ERR_NOT_FOUND` on a type mismatch.
+> Set typed values with `prsl_set_*` (or `prsl_set_val` inside `on_set`).
 
 ---
 

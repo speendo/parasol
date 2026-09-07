@@ -34,9 +34,17 @@ static const char *load_pass(void) {
 }
 
 static esp_err_t on_ssid_change(const char *group_id, const char *key,
-                                 const char *value) {
-    printf("%s.%s changed to: %s\n", group_id, key, value);
-    if (value && strlen(value) > 32) return ESP_ERR_INVALID_ARG;
+                                 const prsl_val_t *value) {
+    (void)key;
+    printf("%s changed\n", group_id);
+    /* Decision 1: on_set OWNS persistence. Accept by writing the value back
+     * (typed), then flag dirty so the browser shows Save and save_to_nvs()
+     * persists it. Reject (no write) if invalid. */
+    if (value->kind != PRSL_VAL_STRING || !value->u.str) return ESP_ERR_INVALID_ARG;
+    if (strlen(value->u.str) > 32) return ESP_ERR_INVALID_ARG;
+    printf("  wifi.ssid -> %s\n", value->u.str);
+    prsl_set_val("wifi.ssid", value);
+    prsl_set_dirty(true);
     return ESP_OK;
 }
 
