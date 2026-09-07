@@ -146,6 +146,16 @@ esp_err_t prsl_start(void);
  *  Resets applied values to stored values, discarding unsaved changes. */
 esp_err_t prsl_reset(void);
 
+/** @brief Tear down the library (symmetric with prsl_start/prsl_init).
+ *  Closes WebSocket clients, removes the WS handler, stops the server
+ *  (server->end()), frees the store and resets globals. Afterwards a fresh
+ *  prsl_add_group -> prsl_init -> prsl_start cycle can run again.
+ *  @note The AsyncWebServer object is owned by the caller and is not freed;
+ *  to re-init on the SAME server object, call server->reset() first to avoid
+ *  duplicate route handlers.
+ *  @return ESP_ERR_INVALID_STATE if not initialized. */
+esp_err_t prsl_stop(void);
+
 /* ── Runtime value access ──────────────────────────────────── */
 
 /** @brief Typed setters for compile-time safety. Each maps to cJSON type.

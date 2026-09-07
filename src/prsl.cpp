@@ -12,7 +12,7 @@
 
 static prsl_store_t g_store;
 static AsyncWebServer *g_server = NULL;
-static AsyncWebSocket g_ws("/api/events");
+static AsyncWebSocket *g_ws = NULL;
 static prsl_save_cb_t g_on_save = NULL;
 static prsl_reset_cb_t g_on_reset = NULL;
 static prsl_reboot_cb_t g_on_reboot = NULL;
@@ -179,10 +179,13 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
 
 esp_err_t prsl_start(void) {
     if (!g_server) return ESP_ERR_INVALID_STATE;
-
-    prsl_ws_init(&g_ws, &g_store);
-    g_server->addHandler(&g_ws);
-
+    if (g_ws) return ESP_ERR_INVALID_STATE;  /* already started */
+    g_ws = new AsyncWebSocket("/api/events");
+    if (!g_ws) return ESP_ERR_NO_MEM;
+    prsl_ws_init(g_ws, &g_store);
+    /* addHandler transfers ownership to the server — never delete g_ws after
+     * this; only removeHandler()/server teardown frees it. */
+    g_server->addHandler(g_ws);
     g_server->begin();
     return ESP_OK;
 }
@@ -191,6 +194,26 @@ esp_err_t prsl_reset(void) {
     if (!g_initialized) return ESP_ERR_INVALID_STATE;
     prsl_store_reset_values(&g_store);
     return prsl_push();
+}
+
+esp_err_t prsl_stop(void) {
+    if (!g_initialized) return ESP_ERR_INVALID_STATE;
+    if (g_server) {
+        if (g_ws) {
+            g_ws->closeAll();                 /* close WS clients */
+            g_ws->cleanupClients();
+            g_server->removeHandler(g_ws);    /* server deletes g_ws */
+            g_ws = NULL;                      /* dangling after removal — do not use */
+        }
+        g_server->end();                      /* stop the listener */
+    }
+    prsl_store_deinit(&g_store);
+    g_server = NULL;
+    g_on_save = NULL;
+    g_on_reset = NULL;
+    g_on_reboot = NULL;
+    g_initialized = false;
+    return ESP_OK;
 }
 
 /* ── Runtime value access ───────────────────────────────────── */
@@ -336,7 +359,7 @@ esp_err_t prsl_push(void) {
     char *str = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
     if (str) {
-        g_ws.textAll(str);
+        if (g_ws) g_ws->textAll(str);
         free(str);
     }
     xSemaphoreGiveRecursive(g_store.mutex);
@@ -352,7 +375,7 @@ esp_err_t prsl_broadcast_status(void) {
     char *str = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
     if (str) {
-        g_ws.textAll(str);
+        if (g_ws) g_ws->textAll(str);
         free(str);
     }
     xSemaphoreGiveRecursive(g_store.mutex);

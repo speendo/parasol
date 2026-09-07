@@ -169,8 +169,11 @@ void app_main(void) {
 
 ## Lifecycle
 
-Two functions start and stop the library. There is no explicit `deinit` —
-the web server lives for the ESP32's full uptime.
+Three functions manage the library lifecycle: `prsl_init` wires routes and
+snapshots the store, `prsl_start` begins serving, and `prsl_stop` tears it all
+down so a fresh cycle can run again. In the common one-shot case (settings UI
+for the ESP32's full uptime) call `prsl_init` + `prsl_start` once and never
+`prsl_stop`.
 
 ```c
 /**
@@ -216,6 +219,22 @@ esp_err_t prsl_start(void);
  * @return ESP_OK on success.
  */
 esp_err_t prsl_reset(void);
+```
+
+```c
+/**
+ * @brief Tear the library down (symmetric with prsl_init/prsl_start).
+ *
+ * Closes WebSocket clients, removes the WS handler, stops the server
+ * (server->end()), frees the store (groups, fields, mutex), and resets all
+ * library globals. After prsl_stop you may register groups/fields and call
+ * prsl_init + prsl_start again for a clean restart.
+ *
+ * @note The AsyncWebServer is owned by your app and is NOT freed. Re-initing
+ *       on the same server object: call server->reset() first so routes and
+ *       the old WS handler are not duplicated.
+ * @return ESP_OK on success; ESP_ERR_INVALID_STATE if never initialized. */
+esp_err_t prsl_stop(void);
 ```
 
 ```c
