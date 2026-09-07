@@ -119,6 +119,55 @@ esp_err_t prsl_store_set_json(prsl_store_t *store, const char *group_id,
     return ESP_OK;
 }
 
+esp_err_t prsl_store_set_val(prsl_store_t *store, const char *group_id,
+                             const char *key, const prsl_val_t *value) {
+    cJSON *node;
+    if (!value || value->kind == PRSL_VAL_NULL) {
+        node = cJSON_CreateNull();
+    } else if (value->kind == PRSL_VAL_STRING) {
+        node = (value->u.str) ? cJSON_CreateString(value->u.str) : cJSON_CreateNull();
+    } else if (value->kind == PRSL_VAL_NUMBER) {
+        node = cJSON_CreateNumber(value->u.num);
+    } else {
+        node = cJSON_CreateBool(value->u.b);
+    }
+    return prsl_store_set_json(store, group_id, key, node);
+}
+
+esp_err_t prsl_store_get_number(prsl_store_t *store, const char *group_id,
+                                const char *key, double *out) {
+    if (!store || !group_id || !key || !out) return ESP_ERR_INVALID_ARG;
+    xSemaphoreTakeRecursive(store->mutex, portMAX_DELAY);
+    esp_err_t e = ESP_ERR_NOT_FOUND;
+    for (int i = 0; i < store->count; i++) {
+        if (strcmp(store->fields[i].group_id, group_id) == 0 &&
+            strcmp(store->fields[i].key, key) == 0) {
+            cJSON *v = store->fields[i].value;
+            if (v && cJSON_IsNumber(v)) { *out = cJSON_GetNumberValue(v); e = ESP_OK; }
+            break;
+        }
+    }
+    xSemaphoreGiveRecursive(store->mutex);
+    return e;
+}
+
+esp_err_t prsl_store_get_bool(prsl_store_t *store, const char *group_id,
+                              const char *key, bool *out) {
+    if (!store || !group_id || !key || !out) return ESP_ERR_INVALID_ARG;
+    xSemaphoreTakeRecursive(store->mutex, portMAX_DELAY);
+    esp_err_t e = ESP_ERR_NOT_FOUND;
+    for (int i = 0; i < store->count; i++) {
+        if (strcmp(store->fields[i].group_id, group_id) == 0 &&
+            strcmp(store->fields[i].key, key) == 0) {
+            cJSON *v = store->fields[i].value;
+            if (v && cJSON_IsBool(v)) { *out = cJSON_IsTrue(v) ? true : false; e = ESP_OK; }
+            break;
+        }
+    }
+    xSemaphoreGiveRecursive(store->mutex);
+    return e;
+}
+
 cJSON *prsl_store_get_value(prsl_store_t *store, const char *group_id, const char *key) {
     if (!store || !group_id || !key) return NULL;
     xSemaphoreTakeRecursive(store->mutex, portMAX_DELAY);

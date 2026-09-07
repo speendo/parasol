@@ -19,7 +19,7 @@ static void add_field_no_cb(const char *g, const char *k) {
     prsl_store_add_field(&store, &f);
 }
 
-static esp_err_t reject_cb(const char *g, const char *k, const char *v) {
+static esp_err_t reject_cb(const char *g, const char *k, const prsl_val_t *v) {
     (void)g; (void)k; (void)v;
     return ESP_ERR_INVALID_ARG;
 }

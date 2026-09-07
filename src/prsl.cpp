@@ -242,6 +242,13 @@ esp_err_t prsl_set_null(const char *path) {
     return prsl_store_set_json(&g_store, group_id, key, cJSON_CreateNull());
 }
 
+esp_err_t prsl_set_val(const char *path, const prsl_val_t *value) {
+    char group_id[PRSL_MAX_PATH] = {0};
+    char key[PRSL_MAX_PATH] = {0};
+    if (parse_dot_path(path, group_id, key) != ESP_OK) return ESP_ERR_INVALID_ARG;
+    return prsl_store_set_val(&g_store, group_id, key, value);
+}
+
 const char *prsl_get(const char *path) {
     char group_id[PRSL_MAX_PATH] = {0};
     char key[PRSL_MAX_PATH] = {0};
@@ -265,6 +272,38 @@ const char *prsl_get(const char *path) {
 
     xSemaphoreGiveRecursive(g_store.mutex);
     return result ? g_get_buf : NULL;
+}
+
+static esp_err_t parse_and_get_number(const char *path, double *out) {
+    char group_id[PRSL_MAX_PATH] = {0};
+    char key[PRSL_MAX_PATH] = {0};
+    if (!out) return ESP_ERR_INVALID_ARG;
+    if (parse_dot_path(path, group_id, key) != ESP_OK) return ESP_ERR_INVALID_ARG;
+    return prsl_store_get_number(&g_store, group_id, key, out);
+}
+
+esp_err_t prsl_get_int(const char *path, int *out) {
+    double n;
+    if (!out) return ESP_ERR_INVALID_ARG;
+    esp_err_t e = parse_and_get_number(path, &n);
+    if (e == ESP_OK) *out = (int)n;
+    return e;
+}
+
+esp_err_t prsl_get_float(const char *path, float *out) {
+    double n;
+    if (!out) return ESP_ERR_INVALID_ARG;
+    esp_err_t e = parse_and_get_number(path, &n);
+    if (e == ESP_OK) *out = (float)n;
+    return e;
+}
+
+esp_err_t prsl_get_bool(const char *path, bool *out) {
+    if (!out) return ESP_ERR_INVALID_ARG;
+    char group_id[PRSL_MAX_PATH] = {0};
+    char key[PRSL_MAX_PATH] = {0};
+    if (parse_dot_path(path, group_id, key) != ESP_OK) return ESP_ERR_INVALID_ARG;
+    return prsl_store_get_bool(&g_store, group_id, key, out);
 }
 
 /* ── Has reset ────────────────────────────────────────────────── */

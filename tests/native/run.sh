@@ -8,7 +8,8 @@ DEPS="$ROOT/test-deps/native"
 COMMON=( "$ROOT/src/prsl_store.c" "$ROOT/src/prsl_json.c" "$DEPS/cJSON.c" "$DEPS/unity.c" )
 # -Wno-unused-function: recovered test_prsl_store.c defines an unused static
 # helper (get_persisted_val2) — kept verbatim per plan; suppress the class.
-FLAGS=( -DHOST_TEST -Wall -Wno-unused-function -I"$ROOT/tests/native/stub" -I"$ROOT/include" -I"$ROOT/src" -I"$DEPS" )
+# -DUNITY_INCLUDE_DOUBLE: type-preservation tests compare doubles exactly.
+FLAGS=( -DHOST_TEST -DUNITY_INCLUDE_DOUBLE -Wall -Wno-unused-function -I"$ROOT/tests/native/stub" -I"$ROOT/include" -I"$ROOT/src" -I"$DEPS" )
 for t in store json body save_body; do
   TF="$ROOT/tests/native/test_prsl_$t.c"
   [ "$t" = save_body ] && TF="$ROOT/tests/native/test_save_body.c"

@@ -20,12 +20,21 @@ int prsl_apply_body(cJSON *body, prsl_store_t *store, prsl_rejection_t *rejectio
             }
             cJSON *opts = cJSON_GetArrayItem(field, 2);
             cJSON *val = cJSON_GetObjectItem(opts, "value");
-            char val_buf[64];
-            const char *val_str = prsl_json_value_str(val, val_buf, sizeof(val_buf));
+
+            prsl_val_t v;
+            if (val && cJSON_IsString(val)) {
+                v.kind = PRSL_VAL_STRING; v.u.str = val->valuestring;
+            } else if (val && cJSON_IsNumber(val)) {
+                v.kind = PRSL_VAL_NUMBER; v.u.num = cJSON_GetNumberValue(val);
+            } else if (val && cJSON_IsBool(val)) {
+                v.kind = PRSL_VAL_BOOL; v.u.b = cJSON_IsTrue(val) ? true : false;
+            } else {
+                v.kind = PRSL_VAL_NULL;
+            }
 
             prsl_field_t *f = prsl_store_find(store, group->string, field->string);
             if (f && f->on_set) {
-                esp_err_t ae = f->on_set(group->string, field->string, val_str);
+                esp_err_t ae = f->on_set(group->string, field->string, &v);
                 if (ae != ESP_OK) {
                     if (rejection) {
                         rejection->group_id = group->string;
@@ -35,8 +44,11 @@ int prsl_apply_body(cJSON *body, prsl_store_t *store, prsl_rejection_t *rejectio
                     count++;
                 }
             } else if (f) {
+                /* Callback absent: store the native typed value. Duplicate is
+                 * owned by prsl_store_set_json (which frees on error) — the
+                 * caller's body node must NOT be freed here. */
                 prsl_store_set_json(store, group->string, field->string,
-                    val_str ? cJSON_CreateString(val_str) : cJSON_CreateNull());
+                    val ? cJSON_Duplicate(val, 1) : NULL);
                 count++;
             }
             field = field->next;

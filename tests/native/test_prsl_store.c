@@ -362,6 +362,94 @@ void test_prsl_set_json_typed(void) {
     prsl_store_deinit(&store);
 }
 
+void test_store_set_val_get_number_roundtrip(void) {
+    prsl_store_t s;
+    prsl_store_init(&s);
+    prsl_store_add_group(&s, "g", NULL);
+    prsl_field_t f = { .group_id = "g", .key = "k", .label = "L", .type = PRSL_NUMBER,
+                       .is_status = false, .help = "", .attrs = "" };
+    prsl_store_add_field(&s, &f);
+
+    prsl_val_t v = { .kind = PRSL_VAL_NUMBER, .u.num = 42.5 };
+    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_set_val(&s, "g", "k", &v));
+    double out = 0;
+    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_get_number(&s, "g", "k", &out));
+    TEST_ASSERT_EQUAL_DOUBLE(42.5, out);
+    prsl_store_deinit(&s);
+}
+
+void test_store_set_val_bool_roundtrip(void) {
+    prsl_store_t s;
+    prsl_store_init(&s);
+    prsl_store_add_group(&s, "g", NULL);
+    prsl_field_t f = { .group_id = "g", .key = "k", .label = "L", .type = PRSL_SWITCH,
+                       .is_status = false, .help = "", .attrs = "" };
+    prsl_store_add_field(&s, &f);
+    prsl_val_t v = { .kind = PRSL_VAL_BOOL, .u.b = true };
+    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_set_val(&s, "g", "k", &v));
+    bool b = false;
+    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_get_bool(&s, "g", "k", &b));
+    TEST_ASSERT_TRUE(b);
+    prsl_store_deinit(&s);
+}
+
+void test_store_set_val_string_roundtrip(void) {
+    prsl_store_t s;
+    prsl_store_init(&s);
+    prsl_store_add_group(&s, "g", NULL);
+    prsl_field_t f = { .group_id = "g", .key = "k", .label = "L", .type = PRSL_TEXT,
+                       .is_status = false, .help = "", .attrs = "" };
+    prsl_store_add_field(&s, &f);
+    prsl_val_t v = { .kind = PRSL_VAL_STRING, .u.str = "hello" };
+    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_set_val(&s, "g", "k", &v));
+    cJSON *node = prsl_store_get_value(&s, "g", "k");
+    TEST_ASSERT_TRUE(cJSON_IsString(node));
+    TEST_ASSERT_EQUAL_STRING("hello", cJSON_GetStringValue(node));
+    prsl_store_deinit(&s);
+}
+
+void test_store_set_val_null_roundtrip(void) {
+    prsl_store_t s;
+    prsl_store_init(&s);
+    prsl_store_add_group(&s, "g", NULL);
+    prsl_field_t f = { .group_id = "g", .key = "k", .label = "L", .type = PRSL_TEXT,
+                       .is_status = false, .help = "", .attrs = "" };
+    prsl_store_add_field(&s, &f);
+    prsl_val_t v = { .kind = PRSL_VAL_NULL };
+    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_set_val(&s, "g", "k", &v));
+    cJSON *node = prsl_store_get_value(&s, "g", "k");
+    TEST_ASSERT_TRUE(cJSON_IsNull(node));
+    prsl_store_deinit(&s);
+}
+
+void test_store_get_number_missing_and_wrong_type(void) {
+    prsl_store_t s;
+    prsl_store_init(&s);
+    prsl_store_add_group(&s, "g", NULL);
+    prsl_field_t f = { .group_id = "g", .key = "k", .label = "L", .type = PRSL_TEXT,
+                       .is_status = false, .help = "", .attrs = "" };
+    prsl_store_add_field(&s, &f);
+    double out = 0;
+    TEST_ASSERT_EQUAL(ESP_ERR_NOT_FOUND, prsl_store_get_number(&s, "g", "missing", &out));
+    prsl_store_set_json(&s, "g", "k", cJSON_CreateString("notanumber"));
+    TEST_ASSERT_EQUAL(ESP_ERR_NOT_FOUND, prsl_store_get_number(&s, "g", "k", &out));
+    prsl_store_deinit(&s);
+}
+
+void test_store_get_bool_missing_and_wrong_type(void) {
+    prsl_store_t s;
+    prsl_store_init(&s);
+    prsl_store_add_group(&s, "g", NULL);
+    prsl_field_t f = { .group_id = "g", .key = "k", .label = "L", .type = PRSL_TEXT,
+                       .is_status = false, .help = "", .attrs = "" };
+    prsl_store_add_field(&s, &f);
+    bool b = false;
+    TEST_ASSERT_EQUAL(ESP_ERR_NOT_FOUND, prsl_store_get_bool(&s, "g", "missing", &b));
+    prsl_store_set_json(&s, "g", "k", cJSON_CreateNumber(1));
+    TEST_ASSERT_EQUAL(ESP_ERR_NOT_FOUND, prsl_store_get_bool(&s, "g", "k", &b));
+    prsl_store_deinit(&s);
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_init_deinit);
@@ -401,5 +489,11 @@ int main(void) {
     RUN_TEST(test_recursive_mutex_allows_reentry);
     RUN_TEST(test_prsl_set_str_roundtrip);
     RUN_TEST(test_prsl_set_json_typed);
+    RUN_TEST(test_store_set_val_get_number_roundtrip);
+    RUN_TEST(test_store_set_val_bool_roundtrip);
+    RUN_TEST(test_store_set_val_string_roundtrip);
+    RUN_TEST(test_store_set_val_null_roundtrip);
+    RUN_TEST(test_store_get_number_missing_and_wrong_type);
+    RUN_TEST(test_store_get_bool_missing_and_wrong_type);
     return UNITY_END();
 }

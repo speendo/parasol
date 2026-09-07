@@ -20,19 +20,46 @@ typedef enum {
     PRSL_RANGE, PRSL_TEXTAREA, PRSL_RADIO, PRSL_SELECT
 } prsl_type_t;
 
+typedef enum {
+    PRSL_VAL_STRING,
+    PRSL_VAL_NUMBER,
+    PRSL_VAL_BOOL,
+    PRSL_VAL_NULL
+} prsl_val_kind_t;
+
+/** @brief Discriminated value passed to on_set callbacks and prsl_set_val.
+ *  kind == PRSL_VAL_NULL means "no value". u.str points into the parsed
+ *  message body and is only valid for the duration of the callback call —
+ *  copy it (e.g. via prsl_set_val) if you need it beyond that. */
+typedef struct {
+    prsl_val_kind_t kind;
+    union {
+        const char *str;   /* PRSL_VAL_STRING */
+        double      num;   /* PRSL_VAL_NUMBER */
+        bool        b;     /* PRSL_VAL_BOOL */
+    } u;
+} prsl_val_t;
+
 /** @brief Called once per field at prsl_init time.
  *  @return Persisted value string, or NULL.
  *          For PRSL_CHECKBOX: NULL = indeterminate (third state).
  *          For all other types: NULL = start empty. */
 typedef const char *(*prsl_get_cb_t)(void);
 
-/** @brief Called on every value change (blur/change) and on Save.
+/** @brief Called on every value change (blur/change via WS) and on Save.
+ *  The callback OWNS persistence: it must accept the value by writing it
+ *  back via prsl_set_val (or a prsl_set_* typed setter), may transform it
+ *  before writing a different value, or may write nothing to discard it.
+ *  Parasol does NOT auto-store when on_set is registered.
  *  @param group_id Group ID, e.g. "wifi".
  *  @param key      Field key, e.g. "ssid".
- *  @param value    New value string, or NULL if cleared/indeterminate.
+ *  @param value    Typed value; never NULL. kind == PRSL_VAL_NULL when the
+ *                  incoming value is null/absent (cleared/indeterminate).
+ *                  The callback pointer is valid only for the duration of
+ *                  the call.
  *  @return ESP_OK to accept, anything else to reject (Save aborts). */
 typedef esp_err_t (*prsl_set_cb_t)(const char *group_id, const char *key,
-                                    const char *value);
+                                   const prsl_val_t *value);
 
 /** @brief Save callback. Reads AV via prsl_get(), persists to storage.
  *  @return ESP_OK on success (parasol clears dirty, pushes to clients),
@@ -126,9 +153,23 @@ esp_err_t prsl_set_float(const char *path, float value);
 esp_err_t prsl_set_bool(const char *path, bool value);
 esp_err_t prsl_set_null(const char *path);
 
+/** @brief Store a typed value as-is (the "accept" one-liner for on_set).
+ *  Maps kind to cJSON: STRING/NUMBER/BOOL/NULL. Does NOT broadcast; does
+ *  NOT set dirty (the callback decides dirty semantics). */
+esp_err_t prsl_set_val(const char *path, const prsl_val_t *value);
+
 /** @brief Get a field's current value. Result valid until next prsl_get()
  *         call. Copy immediately if you need to keep or compare across calls. */
 const char *prsl_get(const char *path);
+
+/** @brief Strict typed getters. Return ESP_OK and set *out only when the
+ *  field exists with a compatible stored type (number for int/float, bool
+ *  for bool); ESP_ERR_NOT_FOUND for a missing field OR wrong type. They do
+ *  NOT parse strings — a field stored as a string reads back only via
+ *  prsl_get. */
+esp_err_t prsl_get_int(const char *path, int *out);
+esp_err_t prsl_get_float(const char *path, float *out);
+esp_err_t prsl_get_bool(const char *path, bool *out);
 
 /* ── Push / broadcast ──────────────────────────────────────── */
 

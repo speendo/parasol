@@ -3,15 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-const char *prsl_json_value_str(cJSON *val, char *buf, size_t buf_size) {
-    if (!val) return NULL;
-    if (cJSON_IsString(val)) return val->valuestring;
-    if (cJSON_IsNumber(val)) { snprintf(buf, buf_size, "%g", cJSON_GetNumberValue(val)); return buf; }
-    if (cJSON_IsTrue(val)) return "true";
-    if (cJSON_IsFalse(val)) return "false";
-    return NULL;
-}
-
 char *prsl_json_fix_attrs_quotes(const char *attrs_str) {
     if (!attrs_str || attrs_str[0] == '\0') return strdup("{}");
     size_t len = strlen(attrs_str);

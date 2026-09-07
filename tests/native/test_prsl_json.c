@@ -220,39 +220,6 @@ void test_build_interleaved_fields(void) {
     cJSON_Delete(out);
 }
 
-void test_value_str_string(void) {
-    cJSON *s = cJSON_CreateString("hello");
-    char buf[64];
-    TEST_ASSERT_EQUAL_STRING("hello", prsl_json_value_str(s, buf, sizeof(buf)));
-    cJSON_Delete(s);
-}
-
-void test_value_str_number(void) {
-    cJSON *n = cJSON_CreateNumber(42.5);
-    char buf[64];
-    TEST_ASSERT_EQUAL_STRING("42.5", prsl_json_value_str(n, buf, sizeof(buf)));
-    cJSON_Delete(n);
-}
-
-void test_value_str_true(void) {
-    cJSON *t = cJSON_CreateTrue();
-    char buf[64];
-    TEST_ASSERT_EQUAL_STRING("true", prsl_json_value_str(t, buf, sizeof(buf)));
-    cJSON_Delete(t);
-}
-
-void test_value_str_false(void) {
-    cJSON *f = cJSON_CreateFalse();
-    char buf[64];
-    TEST_ASSERT_EQUAL_STRING("false", prsl_json_value_str(f, buf, sizeof(buf)));
-    cJSON_Delete(f);
-}
-
-void test_value_str_null(void) {
-    char buf[64];
-    TEST_ASSERT_NULL(prsl_json_value_str(NULL, buf, sizeof(buf)));
-}
-
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_build_settings_output);
@@ -267,10 +234,5 @@ int main(void) {
     RUN_TEST(test_build_group_no_label);
     RUN_TEST(test_attrs_fixer_null_input);
     RUN_TEST(test_build_interleaved_fields);
-    RUN_TEST(test_value_str_string);
-    RUN_TEST(test_value_str_number);
-    RUN_TEST(test_value_str_true);
-    RUN_TEST(test_value_str_false);
-    RUN_TEST(test_value_str_null);
     return UNITY_END();
 }

@@ -16,7 +16,7 @@ typedef struct {
  * @brief Apply a JSON settings body to the store.
  *
  * Iterates body's groups and fields in order. For each field:
- *   - Calls on_set if registered (passing val_str).
+ *   - Calls on_set if registered (passing a typed prsl_val_t*).
  *   - Falls back to a direct store write if no on_set.
  * Aborts on first on_set rejection — remaining fields skipped.
  *
