@@ -47,13 +47,19 @@ lib_deps = https://github.com/speendo/parasol/releases/download/v0.6.4/parasol-v
 lib_deps = https://github.com/speendo/parasol.git#v0.6.4
 ```
 
-> **PlatformIO:** generated assets (`prsl_assets.h`/`prsl_assets.c`) are produced by CMake during the ESP-IDF build and are not in the tarball — run `cmake/generate_assets.cmake` (or an equivalent `extra_script`) before compiling.
+> **Assets:** default `prsl_assets.h`/`prsl_assets.c` (gzip of the minified UI,
+> config-injected) are committed under `src/` and auto-compiled by PlatformIO
+> and Arduino — default users need zero generation. To customize
+> (`title`/`logo`/`favicon`/`always_show_save`), edit `parasol_config.json`
+> and `index.html`, then run `python3 scripts/generate_assets.py` (or wire it
+> as `extra_scripts = pre:scripts/generate_assets.py`) so the committed copy
+> stays in sync. ESP-IDF continues to generate into the build dir via CMake.
 >
 > **Dependencies:** list ESPAsyncWebServer (the actively maintained `esp32async` fork — me-no-dev's original is archived) and cJSON in `lib_deps`. Do **not** list `AsyncTCP` explicitly — the fork resolves its transport transitively. If you pull the superseded `me-no-dev/ESPAsyncWebServer@^3.6` tree (which drags in RP2040 ports), add `lib_ignore = AsyncTCP_RP2040W` to keep the RP2040 transport out of an ESP32 build.
 
 ## Troubleshooting
 
-- **Asset generation:** `prsl_assets.h`/`prsl_assets.c` are built by `cmake/generate_assets.cmake` (gzip of the minified UI + config injection) and are not shipped in the tarball. On PlatformIO, run the script or an `extra_script` before compiling — stale or missing assets silently serve the wrong UI.
+- **Asset generation:** default `prsl_assets.h`/`prsl_assets.c` (gzip of the minified UI, config-injected) are committed under `src/` and auto-compiled by PlatformIO and Arduino — default users need zero generation. To customize (`title`/`logo`/`favicon`/`always_show_save`), edit `parasol_config.json` and `index.html`, then run `python3 scripts/generate_assets.py` (or wire it as `extra_scripts = pre:scripts/generate_assets.py`) so the committed copy stays in sync. Stale assets silently serve the wrong UI.
 - **C++ compound literals:** option structs must be `static const prsl_field_opts_t` objects. C99 compound literals passed inline at file scope are not safely initialised and are rejected by some toolchains.
 - **`prsl_get` returns `NULL`:** it only reads fields stored as strings. Numeric/boolean fields need the typed getters `prsl_get_int` / `prsl_get_float` / `prsl_get_bool`.
 - **Dirty flag:** if firmware never calls `prsl_set_dirty(true)`, the Save button never shows and a Save click is a silent no-op. Call `prsl_set_dirty(true)` inside `on_set` (or wherever external state changes).

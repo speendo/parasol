@@ -701,6 +701,12 @@ static esp_err_t on_reboot(void) {
 | `favicon` | string | `"/favicon.ico"` | Favicon URL |
 | `always_show_save` | bool | `false` | Always show Save button, ignore dirty flag |
 
+These values are baked into `index.html` at asset-generation time. Default
+assets are committed under `src/prsl_assets.{h,c}`; after editing
+`parasol_config.json`, regenerate them with
+`python3 scripts/generate_assets.py` (or via `npm run build`) so the committed
+copy stays in sync. ESP-IDF builds read the config fresh via CMake.
+
 ---
 
 ## Full Example
