@@ -531,6 +531,19 @@ esp_err_t prsl_set_null(const char *path);
 
 ```c
 /**
+ * @brief Store a typed value as-is (the "accept" one-liner for on_set).
+ * @param path  Dot-path string, e.g. "wifi.ssid".
+ * @param value Typed value; never NULL. kind == PRSL_VAL_NULL stores null.
+ * @return ESP_OK on success.
+ *
+ * Maps kind to cJSON the same way the setters above do individually
+ * (STRING/NUMBER/BOOL/NULL). Does NOT broadcast and does NOT set dirty —
+ * the callback decides dirty semantics. */
+esp_err_t prsl_set_val(const char *path, const prsl_val_t *value);
+```
+
+```c
+/**
  * @brief Get a field's current value from AV store.
  * @param path Dot-path string, e.g. "system.uptime".
  * @return Pointer to value string, or NULL. Valid until next prsl_set_*
@@ -548,7 +561,6 @@ const char *prsl_get(const char *path);
  *         ESP_ERR_NOT_FOUND for a missing field OR a wrong type.
  *         They do NOT parse strings — a string field reads back only
  *         via prsl_get. */
-esp_err_t prsl_set_val(const char *path, const prsl_val_t *value);
 esp_err_t prsl_get_int(const char *path, int *out);
 esp_err_t prsl_get_float(const char *path, float *out);
 esp_err_t prsl_get_bool(const char *path, bool *out);
