@@ -38,9 +38,38 @@ jobs:
       - name: Check committed assets are in sync
         run: git diff --exit-code -- src/prsl_assets.c src/prsl_assets.h
 
+  pio-smoke:
+    # Compile+link smoke of the device sources (src/prsl.cpp, src/prsl_ws.cpp,
+    # *.c) against the REAL pinned esp32async fork headers + Arduino-ESP32
+    # core on an actual ESP32 toolchain (tests/pio_smoke). Guards against the
+    # .cpp files drifting from the pinned fork API.
+    runs-on: ubuntu-latest
+    container:
+      image: debian:trixie-slim
+    steps:
+      - name: Install system dependencies
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq git python3 python3-venv python3-pip curl ca-certificates
+      - uses: actions/checkout@v7
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ runner.os }}-espressif32-7.1.2
+      - name: Install PlatformIO Core
+        run: |
+          python3 -m venv .venv-pio
+          . .venv-pio/bin/activate
+          pip install -q platformio
+      - name: Compile+link smoke (prsl.cpp / prsl_ws.cpp vs esp32async fork)
+        run: |
+          . .venv-pio/bin/activate
+          pio run -d tests/pio_smoke
+
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build-and-test
+    needs: [build-and-test, pio-smoke]
     runs-on: ubuntu-latest
     permissions:
       contents: write
