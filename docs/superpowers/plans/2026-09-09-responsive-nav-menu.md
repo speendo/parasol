@@ -525,9 +525,9 @@ git commit -m "feat: collapse section links into device menu on narrow screens"
 
 ---
 
-### Task 3: Docs, changelog, version bump
+### Task 3: Docs and changelog
 
-Update the docs that would otherwise mislead readers, add the changelog entry, run the full suite, and bump the version.
+Update the docs that would otherwise mislead readers and add the changelog entry. **No version bump**: 0.7.0 has not shipped on master, so the responsive-nav fix rides inside the existing unreleased 0.7.0 release train (see spec). `library.json` stays `0.7.0`; the `v0.7.0` tag is created once at release time, not here.
 
 **Files:**
 - Modify: `WS_PROTOCOL.md` (lines 100-102)
@@ -535,9 +535,8 @@ Update the docs that would otherwise mislead readers, add the changelog entry, r
 - Modify: `docs/superpowers/specs/2026-07-19-reboot-button-and-v060-release-design.md`
 - Modify: `docs/superpowers/specs/2026-09-02-architectural-decisions-design.md`
 - Modify: `CHANGELOG.md`
-- Modify: `library.json` (version — confirm with user first)
 
-**Interfaces:** None — documentation + release only.
+**Interfaces:** None — documentation only.
 
 - [ ] **Step 1: Update `WS_PROTOCOL.md`**
 
@@ -578,7 +577,7 @@ In `docs/superpowers/specs/2026-09-02-architectural-decisions-design.md`, find t
 
 - [ ] **Step 3: Add a CHANGELOG entry**
 
-At the top of the current (unreleased/0.7.0) section of `CHANGELOG.md`, add:
+In the EXISTING `## 0.7.0` section of `CHANGELOG.md` (do NOT add a new version heading — 0.7.0 is unreleased and this change belongs to it), add at the top of the bullet list:
 
 ```markdown
 - Responsive nav: always-present ☰ device menu; section links collapse into it on narrow screens (replaces the flex-wrap layout and the "System" dropdown).
@@ -594,21 +593,11 @@ npm test
 ```
 Expected: build, native tests, unit tests, and e2e all PASS.
 
-> **PLAN REVIEW (pro required):** Version bump. This adds a new UI control/behavior — proposed **minor, 0.7.0 → 0.8.0** (per AGENTS.md: "new UI elements"). Confirm with the user before editing `library.json`; the tag must match.
-
-- [ ] **Step 5: Commit docs (and version bump once confirmed)**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add WS_PROTOCOL.md docs/audits/2026-09-01-audit-fix-triage.md docs/superpowers/specs/2026-07-19-reboot-button-and-v060-release-design.md docs/superpowers/specs/2026-09-02-architectural-decisions-design.md CHANGELOG.md
 git commit -m "docs: responsive nav — update protocol doc, add superseded notes, changelog"
-```
-
-If the version bump is approved:
-
-```bash
-git add library.json
-git commit -m "chore: bump version to 0.8.0"
-git tag v0.8.0
 ```
 
 ---

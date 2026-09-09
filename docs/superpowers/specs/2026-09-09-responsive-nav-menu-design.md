@@ -199,9 +199,10 @@ viewport width to force each mode deterministically.
 - `WS_PROTOCOL.md:101` describes the "System" dropdown — update to the ☰ device
   menu. Historical specs (`2026-07-19-reboot-button-and-v060-release-design.md`,
   backlog triage) are left as history but should not be cited as current UI.
-- `CHANGELOG.md`: entry for the responsive nav change.
-- Version bump: UI behaviour change adding a new menu control — proposed as
-  **minor (0.7.0 → 0.8.0)**. Confirm at plan time with the user.
+- `CHANGELOG.md`: entry added under the existing unreleased **0.7.0** section
+  (0.7.0 has not shipped on master; the responsive-nav fix rides in the 0.7.0
+  release train rather than as a separate 0.8.0/0.7.1). `library.json` stays
+  `0.7.0`; the `v0.7.0` tag is created once at release.
 - `app.min.js` must be regenerated (`npm run build`) and committed; `npm test`
   (unit + e2e) must pass.
 
