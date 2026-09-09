@@ -49,6 +49,23 @@
         header nav { flex-wrap: wrap; }
         header nav ul { flex-wrap: wrap; }
       }
+      #nav-actions { margin-left: auto; }
+      #nav-actions[hidden], #nav-sep[hidden] { display: none; }
+      #nav-actions summary {
+        width: 2.5rem;
+        height: 2.5rem;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+        line-height: 1;
+      }
+      #nav-actions summary::after { content: none; }
+      #nav-actions .nav-action a {
+        color: var(--pico-color-red);
+        font-weight: 600;
+      }
     </style>
 </head>
 <body>
@@ -58,8 +75,14 @@
                 <li style="display:flex;align-items:center"><img id="nav-logo" src="{{LOGO}}" alt="Logo" style="height:2rem;margin-right:0.5rem" onerror="this.style.display='none'"><h1 style="margin:0">{{TITLE}}</h1></li>
             </ul>
             <ul id="nav-list">
-                <!-- JS populates nav links here -->
+                <!-- JS populates section links here -->
             </ul>
+            <details class="dropdown" id="nav-actions" hidden>
+              <summary aria-label="Menu" title="Menu">☰</summary>
+              <ul dir="rtl">
+                <li id="nav-sep" hidden></li>
+              </ul>
+            </details>
         </nav>
     </header>
 

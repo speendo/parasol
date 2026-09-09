@@ -239,17 +239,19 @@ test.describe('Reset button', () => {
 })
 
 test.describe('Reboot button', () => {
-  test('System dropdown appears in nav', async ({ page }) => {
+  test('device menu appears in nav', async ({ page }) => {
     await page.goto('/')
     await page.waitForSelector('#config-form:not([aria-busy])')
-    await expect(page.locator('#nav-system')).toBeVisible()
+    await expect(page.locator('#nav-system')).toHaveCount(0)
+    await expect(page.locator('#nav-actions')).toBeVisible()
+    await page.locator('#nav-actions summary').click()
     await expect(page.locator('#nav-reboot')).toHaveText('Reboot')
   })
 
   test('Reboot opens confirmation dialog', async ({ page }) => {
     await page.goto('/')
     await page.waitForSelector('#config-form:not([aria-busy])')
-    await page.locator('#nav-system summary').click()
+    await page.locator('#nav-actions summary').click()
     await page.locator('#nav-reboot').click()
     await expect(page.locator('#reboot-dialog')).toBeVisible()
   })
@@ -257,7 +259,7 @@ test.describe('Reboot button', () => {
   test('Cancel closes dialog without POST', async ({ page }) => {
     await page.goto('/')
     await page.waitForSelector('#config-form:not([aria-busy])')
-    await page.locator('#nav-system summary').click()
+    await page.locator('#nav-actions summary').click()
     await page.locator('#nav-reboot').click()
     await expect(page.locator('#reboot-dialog')).toBeVisible()
     await page.locator('#reboot-cancel').click()
@@ -267,7 +269,7 @@ test.describe('Reboot button', () => {
   test('Confirm sends POST and shows Rebooting…', async ({ page }) => {
     await page.goto('/')
     await page.waitForSelector('#config-form:not([aria-busy])')
-    await page.locator('#nav-system summary').click()
+    await page.locator('#nav-actions summary').click()
     await page.locator('#nav-reboot').click()
     await page.locator('#reboot-confirm').click()
     await expect(page.locator('#reboot-dialog')).not.toBeVisible()
@@ -278,7 +280,7 @@ test.describe('Reboot button', () => {
     await page.goto('/')
     await page.waitForSelector('#config-form:not([aria-busy])')
     // Verify WS is connected (form not aria-busy)
-    await page.locator('#nav-system summary').click()
+    await page.locator('#nav-actions summary').click()
     await page.locator('#nav-reboot').click()
     await page.locator('#reboot-confirm').click()
     // The test server closes all WS connections in the reboot handler.

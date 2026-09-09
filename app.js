@@ -8,6 +8,12 @@ var parasol = (function () {
   var btnSaveApply = document.getElementById('btn-save-apply');
   var btnReset = document.getElementById('btn-reset');
 
+  var navActions = document.getElementById('nav-actions');
+  var navActionsList = navActions ? navActions.querySelector('ul') : null;
+  var navSep = navActions ? document.getElementById('nav-sep') : null;
+  var navCollapsed = false;
+  var navClickWired = false;
+
   var baseline = null;
   var groups = [];
   /** @type {Array} Read-only status group definitions, parallel to groups. */
@@ -675,42 +681,8 @@ var parasol = (function () {
       seen[groups[gi].id] = true;
       renderLink(groups[gi]);
     }
-    if (showReboot) {
-      var li = document.createElement('li');
-      var details = document.createElement('details');
-      details.className = 'dropdown';
-      details.id = 'nav-system';
-      var summary = document.createElement('summary');
-      summary.textContent = 'System';
-      details.appendChild(summary);
-      var ul = document.createElement('ul');
-      ul.setAttribute('dir', 'rtl');
-      var ali = document.createElement('li');
-      var a = document.createElement('a');
-      a.href = '#';
-      a.id = 'nav-reboot';
-      a.textContent = 'Reboot';
-      a.addEventListener('click', function (e) {
-        e.preventDefault();
-        if (details) details.open = false;
-        var dd = document.getElementById('reboot-dialog');
-        if (dd) dd.showModal();
-      });
-      ali.appendChild(a);
-      ul.appendChild(ali);
-      details.appendChild(ul);
-      li.appendChild(details);
-      navList.appendChild(li);
-    }
-    if (navList._clickWired) return;
-    navList._clickWired = true;
-    navList.addEventListener('click', function (e) {
-      var link = e.target.closest('a');
-      if (link && link.hash) {
-        var el = document.getElementById(link.hash.slice(1));
-        if (el && el.tagName === 'DETAILS') el.open = true;
-      }
-    });
+    syncDeviceMenu();
+    wireNavClick();
   }
 
   /** Append a single nav link for a group. */
@@ -721,6 +693,49 @@ var parasol = (function () {
     a.textContent = grp.label;
     li.appendChild(a);
     navList.appendChild(li);
+  }
+
+  function buildRebootItem() {
+    var li = document.createElement('li');
+    li.className = 'nav-action';
+    var a = document.createElement('a');
+    a.href = '#';
+    a.id = 'nav-reboot';
+    a.textContent = 'Reboot';
+    a.addEventListener('click', function (e) {
+      e.preventDefault();
+      if (navActions) navActions.open = false;
+      var dd = document.getElementById('reboot-dialog');
+      if (dd) dd.showModal();
+    });
+    li.appendChild(a);
+    return li;
+  }
+
+  function syncDeviceMenu() {
+    if (!navActions || !navActionsList) return;
+    var existing = document.getElementById('nav-reboot');
+    if (showReboot && !existing) {
+      navActionsList.appendChild(buildRebootItem());
+    } else if (!showReboot && existing) {
+      existing.parentNode.parentNode.removeChild(existing.parentNode);
+    }
+    var hasReboot = !!document.getElementById('nav-reboot');
+    navActions.hidden = !(navCollapsed || hasReboot);
+    if (navSep) navSep.hidden = !(navCollapsed && hasReboot);
+  }
+
+  function wireNavClick() {
+    if (navClickWired) return;
+    navClickWired = true;
+    document.addEventListener('click', function (e) {
+      var link = e.target.closest('a');
+      if (link && link.hash) {
+        var el = document.getElementById(link.hash.slice(1));
+        if (el && el.tagName === 'DETAILS') el.open = true;
+        if (navActions) navActions.open = false;
+      }
+    });
   }
 
   function revalidateAll() {

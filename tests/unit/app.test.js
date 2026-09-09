@@ -999,24 +999,27 @@ describe('showReboot state', function () {
   });
 });
 
-describe('renderNav reboot dropdown', function () {
-  it('adds System dropdown when showReboot is true', function () {
+describe('renderNav device menu', function () {
+  it('builds Reboot into #nav-actions when showReboot is true', function () {
     window.__test.showReboot = true;
     window.__test.groups = [];
+    window.__test.statusGroups = [];
     window.renderNav();
-    var dd = document.getElementById('nav-system');
-    expect(dd).not.toBeNull();
+    expect(document.getElementById('nav-system')).toBeNull();
+    expect(document.getElementById('nav-actions').hasAttribute('hidden')).toBe(false);
     var rebootLink = document.getElementById('nav-reboot');
     expect(rebootLink).not.toBeNull();
     expect(rebootLink.textContent).toBe('Reboot');
+    expect(document.getElementById('nav-actions').contains(rebootLink)).toBe(true);
   });
 
-  it('omits System dropdown when showReboot is false', function () {
+  it('hides #nav-actions and omits Reboot when showReboot is false', function () {
     window.__test.showReboot = false;
     window.__test.groups = [];
+    window.__test.statusGroups = [];
     window.renderNav();
-    expect(document.getElementById('nav-system')).toBeNull();
     expect(document.getElementById('nav-reboot')).toBeNull();
+    expect(document.getElementById('nav-actions').hasAttribute('hidden')).toBe(true);
   });
 });
 
