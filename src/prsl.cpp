@@ -7,6 +7,7 @@
 #include "ESPAsyncWebServer.h"
 #include <string.h>
 #include <stdio.h>
+#include <limits.h>
 
 /* ── Global state ───────────────────────────────────────────── */
 
@@ -309,7 +310,10 @@ esp_err_t prsl_get_int(const char *path, int *out) {
     double n;
     if (!out) return ESP_ERR_INVALID_ARG;
     esp_err_t e = parse_and_get_number(path, &n);
-    if (e == ESP_OK) *out = (int)n;
+    if (e == ESP_OK) {
+        if (n < INT_MIN || n > INT_MAX) return ESP_ERR_NOT_FOUND;  /* unrepresentable */
+        *out = (int)n;
+    }
     return e;
 }
 

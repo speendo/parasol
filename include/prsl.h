@@ -179,9 +179,9 @@ const char *prsl_get(const char *path);
 
 /** @brief Strict typed getters. Return ESP_OK and set *out only when the
  *  field exists with a compatible stored type (number for int/float, bool
- *  for bool); ESP_ERR_NOT_FOUND for a missing field OR wrong type. They do
- *  NOT parse strings — a field stored as a string reads back only via
- *  prsl_get. */
+ *  for bool); ESP_ERR_NOT_FOUND for a missing field, wrong type, or (for
+ *  prsl_get_int) a number out of int range. They do NOT parse strings — a
+ *  field stored as a string reads back only via prsl_get. */
 esp_err_t prsl_get_int(const char *path, int *out);
 esp_err_t prsl_get_float(const char *path, float *out);
 esp_err_t prsl_get_bool(const char *path, bool *out);
