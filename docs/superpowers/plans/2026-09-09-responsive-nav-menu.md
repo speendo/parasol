@@ -17,6 +17,8 @@
 - `index.html` static markup and the jsdom fixture in `tests/setup.js` must be kept in sync (unit tests run against the fixture, not `index.html`).
 - After any `app.js` change, regenerate `app.min.js` via `npm run build` (executor: source nvm first, `. ~/.nvm/nvm.sh`, node at `/config/.nvm/versions/node/v24.17.0/bin/`).
 - Test commands: `npm run test:unit`, `npm run test:e2e` (Playwright reuses the running test server on port 8000), `npm test`.
+- **Unit tests read `app.js` directly and need no build. e2e loads `app.min.js` (via `index.html`), so run `npm run build` BEFORE any e2e run.**
+- Line numbers in this plan are from `HEAD`. If you have already edited the file, locate code by the quoted function/markup text instead of trusting numbers.
 - **Do NOT stage or commit** the uncommitted port-8000 edits in `AGENTS.md`, `README.md`, `playwright.config.js` — they are separate work. Stage only files named in each task.
 - Commit messages follow repo style (`feat:`, `fix:`, `docs:`, `test:`).
 
@@ -149,7 +151,22 @@ var navClickWired = false;
 
 - [ ] **Step 7: Replace `renderNav()` and add the new functions**
 
-Replace the body of `renderNav()` (lines 666-714) so it no longer builds `#nav-system`, and add `buildRebootItem`, `syncDeviceMenu`, and `wireNavClick` after `renderLink()` (~line 724):
+Delete the ENTIRE existing `renderNav()` function — from the line `function renderNav() {` through its closing `}`. The function ends immediately after this block, which you must delete along with it:
+
+```js
+    if (navList._clickWired) return;
+    navList._clickWired = true;
+    navList.addEventListener('click', function (e) {
+      var link = e.target.closest('a');
+      if (link && link.hash) {
+        var el = document.getElementById(link.hash.slice(1));
+        if (el && el.tagName === 'DETAILS') el.open = true;
+      }
+    });
+  }
+```
+
+Keep `renderLink()` (it starts right after with `/** Append a single nav link for a group. */`). Insert this new `renderNav()` in place of the deleted function, and append `buildRebootItem`, `syncDeviceMenu`, and `wireNavClick` immediately AFTER `renderLink()`'s closing brace:
 
 ```js
 function renderNav() {
@@ -252,12 +269,21 @@ npm run test:e2e -- tests/e2e/app.test.js -g "Reboot button"
 ```
 Expected: PASS (test server already running on 8000; Playwright reuses it).
 
+Then run the WHOLE e2e file to catch regressions in "Form rendering" and "Navigation and hash" (their selectors are unchanged but they exercise the nav):
+
+```bash
+npm run test:e2e
+```
+Expected: PASS.
+
 - [ ] **Step 11: Commit**
 
 ```bash
 git add index.html tests/setup.js app.js tests/unit/app.test.js tests/e2e/app.test.js app.min.js
 git commit -m "feat: add always-present device menu for Reboot"
 ```
+
+If anything in the unit or e2e suite fails here, fix it before committing — do not proceed to Task 2 with red tests.
 
 ---
 
