@@ -124,12 +124,22 @@ esp_err_t prsl_store_set_val(prsl_store_t *store, const char *group_id,
     cJSON *node;
     if (!value || value->kind == PRSL_VAL_NULL) {
         node = cJSON_CreateNull();
-    } else if (value->kind == PRSL_VAL_STRING) {
-        node = (value->u.str) ? cJSON_CreateString(value->u.str) : cJSON_CreateNull();
-    } else if (value->kind == PRSL_VAL_NUMBER) {
-        node = cJSON_CreateNumber(value->u.num);
     } else {
-        node = cJSON_CreateBool(value->u.b);
+        /* Explicit kind map — unknown/out-of-range kinds store null. */
+        switch (value->kind) {
+        case PRSL_VAL_STRING:
+            node = (value->u.str) ? cJSON_CreateString(value->u.str) : cJSON_CreateNull();
+            break;
+        case PRSL_VAL_NUMBER:
+            node = cJSON_CreateNumber(value->u.num);
+            break;
+        case PRSL_VAL_BOOL:
+            node = cJSON_CreateBool(value->u.b);
+            break;
+        default:
+            node = cJSON_CreateNull();
+            break;
+        }
     }
     return prsl_store_set_json(store, group_id, key, node);
 }

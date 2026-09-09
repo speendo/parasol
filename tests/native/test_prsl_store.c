@@ -422,6 +422,20 @@ void test_store_set_val_null_roundtrip(void) {
     prsl_store_deinit(&s);
 }
 
+void test_store_set_val_unknown_kind_stores_null(void) {
+    prsl_store_t s;
+    prsl_store_init(&s);
+    prsl_store_add_group(&s, "g", NULL);
+    prsl_field_t f = { .group_id = "g", .key = "k", .label = "L", .type = PRSL_TEXT,
+                       .is_status = false, .help = "", .attrs = "" };
+    prsl_store_add_field(&s, &f);
+    prsl_val_t v = { .kind = (prsl_val_kind_t)99, .u.b = true };
+    TEST_ASSERT_EQUAL(ESP_OK, prsl_store_set_val(&s, "g", "k", &v));
+    cJSON *node = prsl_store_get_value(&s, "g", "k");
+    TEST_ASSERT_TRUE(cJSON_IsNull(node));
+    prsl_store_deinit(&s);
+}
+
 void test_store_get_number_missing_and_wrong_type(void) {
     prsl_store_t s;
     prsl_store_init(&s);
@@ -493,6 +507,7 @@ int main(void) {
     RUN_TEST(test_store_set_val_bool_roundtrip);
     RUN_TEST(test_store_set_val_string_roundtrip);
     RUN_TEST(test_store_set_val_null_roundtrip);
+    RUN_TEST(test_store_set_val_unknown_kind_stores_null);
     RUN_TEST(test_store_get_number_missing_and_wrong_type);
     RUN_TEST(test_store_get_bool_missing_and_wrong_type);
     return UNITY_END();
