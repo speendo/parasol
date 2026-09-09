@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.0
+- BREAKING: typed value pipeline — `on_set` now receives a `prsl_val_t *`; add `prsl_set_val`, `prsl_get_int`, `prsl_get_float`, `prsl_get_bool`. No JS/wire change.
+- Reject `_`-prefixed group IDs at registration (`ESP_ERR_INVALID_ARG`).
+- Add `prsl_stop()` lifecycle teardown (symmetric with `prsl_start`).
+- Make `prsl.h` self-contained (payload builder moved to `src/prsl_store.h`).
+- Switch dependency to the maintained `esp32async/ESPAsyncWebServer` fork; ship pre-baked assets + `scripts/generate_assets.py` regen with a CI drift guard.
+- Docs: `on_set` ownership contract, dirty sharp edge, typed getters, registration-order note.
+- Verified merged quick-fix batch (issues 8/9/14/15, native harness) against this spec.
+- Spec: docs/superpowers/specs/2026-09-02-architectural-decisions-design.md
+
 ## 0.6.4
 - Fix prsl.h self-containment + const-correctness (compiles standalone in C/C++)
 - Restore native C test harness (store + json unit tests)

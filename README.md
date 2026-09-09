@@ -41,10 +41,10 @@ Add to `platformio.ini`:
 
 ```ini
 ; Tarball — clean, minimal (recommended):
-lib_deps = https://github.com/speendo/parasol/releases/download/v0.6.4/parasol-v0.6.4.tar.gz
+lib_deps = https://github.com/speendo/parasol/releases/download/v0.7.0/parasol-v0.7.0.tar.gz
 
 ; Git — full repo (for development):
-lib_deps = https://github.com/speendo/parasol.git#v0.6.4
+lib_deps = https://github.com/speendo/parasol.git#v0.7.0
 ```
 
 > **Assets:** default `prsl_assets.h`/`prsl_assets.c` (gzip of the minified UI,
@@ -64,6 +64,7 @@ lib_deps = https://github.com/speendo/parasol.git#v0.6.4
 - **`prsl_get` returns `NULL`:** it only reads fields stored as strings. Numeric/boolean fields need the typed getters `prsl_get_int` / `prsl_get_float` / `prsl_get_bool`.
 - **Dirty flag:** if firmware never calls `prsl_set_dirty(true)`, the Save button never shows and a Save click is a silent no-op. Call `prsl_set_dirty(true)` inside `on_set` (or wherever external state changes).
 - **`_`-prefixed groups:** reserved for protocol meta-fields. `prsl_add_group` rejects IDs starting with `_` (`ESP_ERR_INVALID_ARG`) — a `_`-group has no valid interpretation. Use a non-underscore ID.
+- **Registration order matters:** all groups must be added before their fields (`prsl_add_field` on an unknown group returns `ESP_ERR_NOT_FOUND`), and ALL registration must finish before `prsl_init`.
 - **Reset button:** appears only when an `on_reset` callback is registered and the form is dirty (or `always_show_save` is set). A successful reset clears the dirty flag.
 
 See [`API_REFERENCE.md`](API_REFERENCE.md) for the complete C API.
