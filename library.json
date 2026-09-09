@@ -9,7 +9,6 @@
     "platforms": "espressif32",
     "headers": ["prsl.h"],
     "dependencies": {
-        "esp32async/ESPAsyncWebServer": "^3.12.0",
-        "DaveGamble/cJSON": "~1.7"
+        "esp32async/ESPAsyncWebServer": "^3.12.0"
     }
 }

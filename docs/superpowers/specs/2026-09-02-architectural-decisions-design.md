@@ -288,6 +288,14 @@ problems disappear. `prsl.h` becomes self-contained (stdbool, esp_err, and the
   - Verify the exact PlatformIO registry owner casing (`ESP32Async` vs
     `esp32async`) during implementation.
 - `DaveGamble/cJSON ~1.7` unchanged.
+  - **Deviated in the final fix wave:** the `DaveGamble/cJSON` slug is NOT
+    resolvable on the PlatformIO registry, git-URLs are not a valid
+    `library.json` dependency form, and the republished registry copy
+    (`baracodadailyhealthtech/cJSON`) bundles `test.c`/`fuzzing` `main()`s
+    that break the final link. cJSON was therefore dropped from
+    `library.json` entirely — it ships inside the Arduino-ESP32 core / ESP-IDF
+    `json` component on every supported target, so no external cJSON
+    dependency is needed. See the 0.7.0 final-fix report.
 - Issue 5 guidance (document in README/API_REFERENCE): do **not** list
   `AsyncTCP` explicitly — let ESPAsyncWebServer resolve it transitively; add
   `lib_ignore = AsyncTCP_RP2040W` to prevent the RP2040 port from being pulled.

@@ -55,7 +55,7 @@ lib_deps = https://github.com/speendo/parasol.git#v0.7.0
 > as `extra_scripts = pre:scripts/generate_assets.py`) so the committed copy
 > stays in sync. ESP-IDF continues to generate into the build dir via CMake.
 >
-> **Dependencies:** list ESPAsyncWebServer (the actively maintained `esp32async` fork — me-no-dev's original is archived) and cJSON in `lib_deps`. Do **not** list `AsyncTCP` explicitly — the fork resolves its transport transitively. If you pull the superseded `me-no-dev/ESPAsyncWebServer@^3.6` tree (which drags in RP2040 ports), add `lib_ignore = AsyncTCP_RP2040W` to keep the RP2040 transport out of an ESP32 build.
+> **Dependencies:** list only ESPAsyncWebServer (the actively maintained `esp32async` fork — me-no-dev's original is archived) in `lib_deps`. Do **not** list cJSON — it ships inside the Arduino-ESP32 core (ESP-IDF's `json` component; ESP-IDF CMake users get it via `REQUIRES cJSON`). A separately-installed cJSON package is both unnecessary and harmful: `DaveGamble/cJSON` is not on the PlatformIO registry (unresolvable), and republished copies bundle their own `test.c`/`fuzzing` `main()`s that break the final link. Do **not** list `AsyncTCP` explicitly — the fork resolves its transport transitively. If you pull the superseded `me-no-dev/ESPAsyncWebServer@^3.6` tree (which drags in RP2040 ports), add `lib_ignore = AsyncTCP_RP2040W` to keep the RP2040 transport out of an ESP32 build.
 
 ## Troubleshooting
 
