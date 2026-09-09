@@ -98,8 +98,9 @@ in the footer. Independent of `_dirty` — the button is always visible when
 a reset callback exists.
 
 **`_show_reboot`:** Boolean owned by the server. `true` when an `on_reboot`
-callback was registered at `prsl_init()`. Drives a "System" dropdown in the
-nav bar containing a "Reboot" option with a confirmation dialog.
+callback was registered at `prsl_init()`. Adds a "Reboot" action to the header
+device menu (the ☰ button) with a confirmation dialog. When no actions exist
+and the nav is not collapsed, the ☰ is hidden.
 
 **`label`:** Optional key within each group object. If present, used as the
 accordion section title. If absent, the group ID is title-cased (e.g.,

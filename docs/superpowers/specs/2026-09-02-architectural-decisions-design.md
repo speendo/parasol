@@ -373,7 +373,9 @@ baked into `index.html` at generation time from `parasol_config.json`.
 
 **Unchanged, still implement:** Issue 14 (chunk accumulation + no `data`
 wrapper), Issue 15 (Reset while dirty + clear dirty after reset), Issue 9 (Save
-busy feedback), Issue 8 (mobile nav, Approach A), restore native host C test
+busy feedback), Issue 8 (mobile nav, Approach A) (Approach A later failed
+manual testing — superseded by
+`2026-09-09-responsive-nav-menu-design.md`), restore native host C test
 harness (compiled as C++), README/CHANGELOG version + spec-reference note.
 
 **Doc addition (from audit Integration Notes, not an original triage line):**
