@@ -2596,3 +2596,32 @@ describe('notif-keep-local sends only conflicting fields', () => {
     expect(sentKeys).toEqual(['wifi.ssid'])
   })
 })
+
+describe('nav collapse/expand', function () {
+  beforeEach(function () {
+    window.__test.groups = [{ id: 'wifi', label: 'Wifi' }, { id: 'gpio', label: 'Gpio' }];
+    window.__test.statusGroups = [];
+    window.__test.showReboot = true;
+    window.renderNav();
+  });
+
+  it('collapses section links into the device menu', function () {
+    window.__test.setNavMode(true);
+    expect(document.getElementById('nav-list').hasAttribute('hidden')).toBe(true);
+    var labels = Array.prototype.map.call(
+      document.querySelectorAll('#nav-actions a'),
+      function (a) { return a.textContent; });
+    expect(labels).toEqual(['Wifi', 'Gpio', 'Reboot']);
+    expect(document.getElementById('nav-sep').hasAttribute('hidden')).toBe(false);
+    expect(document.querySelectorAll('#nav-list a').length).toBe(0);
+  });
+
+  it('expands links back to inline', function () {
+    window.__test.setNavMode(true);
+    window.__test.setNavMode(false);
+    expect(document.getElementById('nav-list').hasAttribute('hidden')).toBe(false);
+    expect(document.querySelectorAll('#nav-list a').length).toBe(2);
+    expect(document.getElementById('nav-reboot')).not.toBeNull();
+    expect(document.getElementById('nav-sep').hasAttribute('hidden')).toBe(true);
+  });
+})

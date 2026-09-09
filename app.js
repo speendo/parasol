@@ -670,6 +670,11 @@ var parasol = (function () {
   }
 
   function renderNav() {
+    if (navCollapsed) {
+      moveSectionsToNavList();
+      navList.hidden = false;
+      navCollapsed = false;
+    }
     navList.innerHTML = '';
     var seen = {};
     for (var si = 0; si < statusGroups.length; si++) {
@@ -681,8 +686,11 @@ var parasol = (function () {
       seen[groups[gi].id] = true;
       renderLink(groups[gi]);
     }
+    sectionCount = navList.children.length;
     syncDeviceMenu();
     wireNavClick();
+    wireNavResize();
+    updateFit();
   }
 
   /** Append a single nav link for a group. */
@@ -736,6 +744,68 @@ var parasol = (function () {
         if (navActions) navActions.open = false;
       }
     });
+  }
+
+  var GAP = 10;
+  var sectionCount = 0;
+
+  function moveSectionsToNavList() {
+    var node = navActionsList.firstChild;
+    while (node && node !== navSep) {
+      var nx = node.nextSibling;
+      navList.appendChild(node);
+      node = nx;
+    }
+  }
+
+  function moveSectionsToMenu() {
+    var node = navList.firstChild;
+    while (node) {
+      var nx = node.nextSibling;
+      navActionsList.insertBefore(node, navSep);
+      node = nx;
+    }
+  }
+
+  function applyNavMode(collapsed) {
+    navCollapsed = collapsed;
+    if (collapsed) moveSectionsToMenu();
+    else moveSectionsToNavList();
+    var hasReboot = !!document.getElementById('nav-reboot');
+    navList.hidden = collapsed;
+    if (navActions) navActions.hidden = !(collapsed || hasReboot);
+    if (navSep) navSep.hidden = !(collapsed && hasReboot && sectionCount > 0);
+  }
+
+  function updateFit() {
+    if (!navActionsList || !navActions || !navSep) return;
+    if (!document.documentElement.clientWidth) return; // no layout (jsdom)
+    if (navCollapsed) {
+      moveSectionsToNavList();
+      navList.hidden = false;
+    }
+    var boundary;
+    if (navActions.hidden) {
+      var navEl = document.querySelector('header nav');
+      if (!navEl) { navList.hidden = false; return; }
+      boundary = navEl.getBoundingClientRect().right - GAP;
+    } else {
+      boundary = navActions.getBoundingClientRect().left - GAP;
+    }
+    var right = navList.getBoundingClientRect().right;
+    var fits = sectionCount === 0 || right <= boundary + 0.5;
+    applyNavMode(!fits);
+  }
+
+  function wireNavResize() {
+    if (wireNavResize._done) return;
+    wireNavResize._done = true;
+    var timer = null;
+    window.addEventListener('resize', function () {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(updateFit, 150);
+    });
+    window.addEventListener('load', updateFit);
   }
 
   function revalidateAll() {
@@ -1079,6 +1149,7 @@ var parasol = (function () {
     Object.defineProperty(window.__test, 'statusGroups', { get: function () { return statusGroups; }, set: function (v) { statusGroups = v; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'receiveWSMessage', { get: function () { return onWSMessage; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'wsReady', { get: function () { return function () { if (ws) ws.readyState = 1; }; }, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'setNavMode', { value: function (v) { applyNavMode(!!v); }, enumerable: true, configurable: true });
   }
 
   return {

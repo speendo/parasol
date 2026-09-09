@@ -659,3 +659,41 @@ test.describe('Mobile layout', () => {
   })
 })
 
+test.describe('Responsive nav', () => {
+  test('sections inline and ☰ holds only Reboot on wide screens', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await page.goto('/')
+    await page.waitForSelector('#config-form:not([aria-busy])')
+    await expect(page.locator('#nav-list')).toBeVisible()
+    await expect(page.locator('#nav-list a[href="#wifi"]')).toBeVisible()
+    await page.locator('#nav-actions summary').click()
+    await expect(page.locator('#nav-reboot')).toBeVisible()
+    await expect(page.locator('#nav-actions a[href="#wifi"]')).toHaveCount(0)
+    await page.keyboard.press('Escape')
+  })
+
+  test('sections move into the ☰ menu on narrow screens', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 700 })
+    await page.goto('/')
+    await page.waitForSelector('#config-form:not([aria-busy])')
+    await expect(page.locator('#nav-list')).toBeHidden()
+    await page.locator('#nav-actions summary').click()
+    await expect(page.locator('#nav-actions a[href="#wifi"]')).toBeVisible()
+    await expect(page.locator('#nav-actions a[href="#gpio"]')).toBeVisible()
+    await page.locator('#nav-actions a[href="#gpio"]').click()
+    await expect(page.locator('details#gpio')).toHaveAttribute('open', '')
+    await expect(page.locator('#nav-actions')).not.toHaveAttribute('open', '')
+  })
+
+  test('re-expands to inline sections when widened', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 700 })
+    await page.goto('/')
+    await page.waitForSelector('#config-form:not([aria-busy])')
+    await expect(page.locator('#nav-list')).toBeHidden()
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await page.waitForTimeout(500)
+    await expect(page.locator('#nav-list')).toBeVisible()
+    await expect(page.locator('#nav-list a[href="#wifi"]')).toBeVisible()
+  })
+})
+

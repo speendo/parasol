@@ -45,10 +45,8 @@
         color: var(--pico-muted-color);
         margin-bottom: var(--pico-spacing);
       }
-      @media (max-width: 600px) {
-        header nav { flex-wrap: wrap; }
-        header nav ul { flex-wrap: wrap; }
-      }
+      header nav { justify-content: flex-start; }
+      #nav-list[hidden] { display: none; }
       #nav-actions { margin-left: auto; }
       #nav-actions[hidden], #nav-sep[hidden] { display: none; }
       #nav-actions summary {
