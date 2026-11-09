@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Regenerate src/prsl_assets.{h,c} from the minified UI + parasol_config.json.
 
-Deterministic (fixed gzip mtime) so committed assets only change when the
-inputs change. Layout mirrors cmake/generate_assets.cmake output; this script
-is the canonical generator for the committed copy.
+Deterministic (fixed gzip mtime and OS byte) so committed assets only change
+when the inputs change. Layout mirrors cmake/generate_assets.cmake output; this
+script is the canonical generator for the committed copy.
 """
 import gzip
 import json
@@ -30,6 +30,13 @@ def load(name):
     with open(os.path.join(ROOT, name), "rb") as fh:
         return fh.read()
 
+def gzip_bytes(data):
+    # gzip header byte 9 is the OS field: CPython <=3.12 emits zlib's Unix
+    # byte (3), 3.13+ emits 255. Normalize it so the committed assets are
+    # byte-identical on every Python version.
+    out = gzip.compress(data, compresslevel=9, mtime=0)
+    return out[:9] + b"\xff" + out[10:]
+
 def main():
     out_h = os.path.join(ROOT, "src", "prsl_assets.h")
     out_c = os.path.join(ROOT, "src", "prsl_assets.c")
@@ -41,9 +48,9 @@ def main():
                        ("{{ALWAYS_SHOW_SAVE}}", vals["always_show_save"])):
         html = html.replace(key, value)
     pieces = [
-        ("index_html_gz", "text/html", gzip.compress(html.encode("utf-8"), compresslevel=9, mtime=0)),
-        ("app_min_js_gz", "application/javascript", gzip.compress(load("app.min.js"), compresslevel=9, mtime=0)),
-        ("pico_jade_min_css_gz", "text/css", gzip.compress(load("pico.jade.min.css"), compresslevel=9, mtime=0)),
+        ("index_html_gz", "text/html", gzip_bytes(html.encode("utf-8"))),
+        ("app_min_js_gz", "application/javascript", gzip_bytes(load("app.min.js"))),
+        ("pico_jade_min_css_gz", "text/css", gzip_bytes(load("pico.jade.min.css"))),
     ]
 
     header = (
