@@ -16,7 +16,7 @@ npm install
 
 # Start the Python test server
 pip install fastapi uvicorn
-uvicorn test_server.main:app
+uvicorn test_server.main:app --host 127.0.0.1 --port 8000
 
 # Run tests
 npm test              # all tests

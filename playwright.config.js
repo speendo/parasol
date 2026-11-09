@@ -15,11 +15,11 @@ export default defineConfig({
   fullyParallel: false,
   retries: 1,
   use: {
-    baseURL: 'http://127.0.0.1:8765',
+    baseURL: 'http://127.0.0.1:8000',
   },
   webServer: {
-    command: 'uvicorn test_server.main:app --host 127.0.0.1 --port 8765',
-    port: 8765,
+    command: 'uvicorn test_server.main:app --host 127.0.0.1 --port 8000',
+    port: 8000,
     reuseExistingServer: !process.env.CI,
   },
 })
