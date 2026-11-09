@@ -304,8 +304,8 @@ problems disappear. `prsl.h` becomes self-contained (stdbool, esp_err, and the
 
 ## Decision 8 — Distribution of generated assets (Issue 1)
 
-**Decision:** Ship pre-baked default assets **and** a portable regeneration
-script; keep the CMake path unchanged for ESP-IDF.
+**Decision:** Ship pre-baked default assets **and** one portable regeneration
+script, used by every build path, including ESP-IDF.
 
 Problem: `prsl_assets.h/c` are generated only by CMake (`cmake/generate_assets.cmake`)
 into the build dir; they are never committed or shipped, so the documented
@@ -317,24 +317,29 @@ baked into `index.html` at generation time from `parasol_config.json`.
   baked from the default `parasol_config.json`, at stable paths that PlatformIO
   and Arduino auto-compile (e.g. `include/prsl_assets.h` and
   `src/prsl_assets.c`). Default users need zero generation.
-- **Portable regen script:** add `scripts/generate_assets.py` — pure Python
-  using `zlib` (no external `gzip` binary), reproducing `generate_assets.cmake`
-  output from `index.html`, `app.min.js`, `pico.jade.min.css`, and
-  `parasol_config.json`. Customizers run it manually, or wire it as
-  `extra_scripts = pre:scripts/generate_assets.py` in `platformio.ini`.
-- **CMake/ESP-IDF:** unchanged — continues to generate from source into the
-  build dir.
+- **Portable regen script:** `scripts/generate_assets.py` is the canonical
+  generator — pure Python using `zlib` (no external `gzip` binary). It accepts
+  `--assets-src`, `--config`, and `--out-dir`, so the same code writes the
+  committed assets, the ESP-IDF build dir, and customized copies.
+- **CMake/ESP-IDF:** `cmake/generate_assets.cmake` is a thin wrapper that
+  invokes `scripts/generate_assets.py` into the build dir. `CMakeLists.txt`
+  is unchanged.
 - **Sync guard:** wire regeneration of the committed assets into `npm run build`
-  and add a CI check that the committed assets match freshly generated ones, so
-  the pre-baked copy cannot drift.
+  and add CI checks that both the Python and CMake paths match the committed
+  assets, so the pre-baked copy cannot drift.
 
-> **PLAN REVIEW (pro required):** the concrete wiring has multiple valid answers
-> and platform pitfalls — the exact committed path that PlatformIO/Arduino
-> auto-compile WITHOUT the CMake build double-including it in `COMPONENT_SRCS`;
-> whether CMake writes in-place to the committed path or to the build dir; how
-> `scripts/generate_assets.py`, `generate_assets.cmake`, and `npm run build` share
-> one output; and the CI drift-check mechanism. The plan must nail down the
-> committed path and the CMake/non-CMake split before writing implementation steps.
+> **Revision (2026-11-09):** the original decision kept the CMake generator
+> separate and had Python reproduce its output. That generator in fact never
+> worked: it passed file contents through CMake lists, so semicolons in
+> `app.min.js` corrupted the arrays, and `gzip -9` was nondeterministic.
+> Unifying on the Python generator removes the duplicate implementation and
+> guarantees byte-identical output across the committed, PlatformIO, and
+> ESP-IDF paths.
+
+> **PLAN REVIEW (resolved by the 2026-11-09 revision):** the committed path is
+> `src/prsl_assets.{h,c}`; CMake writes only into the build dir; and both the
+> committed copy and the build-dir copy come from the same Python generator.
+> CI checks both paths.
 
 ---
 

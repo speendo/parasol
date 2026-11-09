@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
-"""Regenerate src/prsl_assets.{h,c} from the minified UI + parasol_config.json.
+"""Regenerate prsl_assets.{h,c} from the minified UI + parasol_config.json.
 
 Deterministic (fixed gzip mtime and OS byte) so committed assets only change
-when the inputs change. Layout mirrors cmake/generate_assets.cmake output; this
-script is the canonical generator for the committed copy.
+when the inputs change. This script is the canonical generator for the
+committed copy, `npm run build`, PlatformIO `extra_scripts`, and the
+ESP-IDF build directory (via cmake/generate_assets.cmake).
 """
+import argparse
 import gzip
 import json
 import os
-import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-def config_values():
+def config_values(path):
     cfg = {}
     try:
-        with open(os.path.join(ROOT, "parasol_config.json")) as fh:
+        with open(path) as fh:
             cfg = json.load(fh)
     except OSError:
         pass
@@ -26,8 +27,8 @@ def config_values():
         "always_show_save": "1" if cfg.get("always_show_save") else "0",
     }
 
-def load(name):
-    with open(os.path.join(ROOT, name), "rb") as fh:
+def load(assets_src, name):
+    with open(os.path.join(assets_src, name), "rb") as fh:
         return fh.read()
 
 def gzip_bytes(data):
@@ -37,11 +38,12 @@ def gzip_bytes(data):
     out = gzip.compress(data, compresslevel=9, mtime=0)
     return out[:9] + b"\xff" + out[10:]
 
-def main():
-    out_h = os.path.join(ROOT, "src", "prsl_assets.h")
-    out_c = os.path.join(ROOT, "src", "prsl_assets.c")
-    vals = config_values()
-    html = load("index.html").decode("utf-8")
+def main(assets_src, config, out_dir):
+    os.makedirs(out_dir, exist_ok=True)
+    out_h = os.path.join(out_dir, "prsl_assets.h")
+    out_c = os.path.join(out_dir, "prsl_assets.c")
+    vals = config_values(config)
+    html = load(assets_src, "index.html").decode("utf-8")
     for key, value in (("{{TITLE}}", vals["title"]),
                        ("{{LOGO}}", vals["logo"]),
                        ("{{FAVICON}}", vals["favicon"]),
@@ -49,8 +51,8 @@ def main():
         html = html.replace(key, value)
     pieces = [
         ("index_html_gz", "text/html", gzip_bytes(html.encode("utf-8"))),
-        ("app_min_js_gz", "application/javascript", gzip_bytes(load("app.min.js"))),
-        ("pico_jade_min_css_gz", "text/css", gzip_bytes(load("pico.jade.min.css"))),
+        ("app_min_js_gz", "application/javascript", gzip_bytes(load(assets_src, "app.min.js"))),
+        ("pico_jade_min_css_gz", "text/css", gzip_bytes(load(assets_src, "pico.jade.min.css"))),
     ]
 
     header = (
@@ -97,4 +99,11 @@ def main():
         fh.write("};\nconst size_t prsl_assets_count = 3;\n")
 
 if __name__ == "__main__":
-    main()
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--assets-src", default=ROOT)
+    p.add_argument("--config", default=None)
+    p.add_argument("--out-dir", default=os.path.join(ROOT, "src"))
+    a = p.parse_args()
+    main(a.assets_src,
+         a.config or os.path.join(a.assets_src, "parasol_config.json"),
+         a.out_dir)

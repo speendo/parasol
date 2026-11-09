@@ -31,6 +31,7 @@ add_custom_command(
         "${ASSETS_SRC}/app.min.js"
         "${ASSETS_SRC}/pico.jade.min.css"
         "${CMAKE_SOURCE_DIR}/parasol_config.json"
+        "${CMAKE_CURRENT_LIST_DIR}/scripts/generate_assets.py"
         "${CMAKE_CURRENT_LIST_DIR}/cmake/generate_assets.cmake"
     COMMENT "Generating parasol assets"
 )

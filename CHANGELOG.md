@@ -7,6 +7,7 @@
 - Add `prsl_stop()` lifecycle teardown (symmetric with `prsl_start`).
 - Make `prsl.h` self-contained (payload builder moved to `src/prsl_store.h`).
 - Switch dependency to the maintained `esp32async/ESPAsyncWebServer` fork; ship pre-baked assets + `scripts/generate_assets.py` regen with a CI drift guard.
+- Fix ESP-IDF asset generation: CMake now delegates to `scripts/generate_assets.py` (the old CMake generator corrupted assets through CMake list handling; output is now byte-identical to the committed assets).
 - Docs: `on_set` ownership contract, dirty sharp edge, typed getters, registration-order note.
 - Verified merged quick-fix batch (issues 8/9/14/15, native harness) against this spec.
 - Spec: docs/superpowers/specs/2026-09-02-architectural-decisions-design.md
