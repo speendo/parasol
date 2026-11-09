@@ -6,6 +6,15 @@ Status: approved (pending implementation plan)
 Source: `docs/audits/2026-09-01-audit-fix-triage.md` (the eight "Architectural
 Questions — DEFERRED" items), decided in collaboration 2026-09-02.
 
+## How to use this spec
+
+This document is the complete source of truth for the 0.7.0 work and should be
+turned directly into an implementation plan by a junior model. A
+`> **PLAN REVIEW (pro required):**` marker flags a point where the plan author
+must escalate to a human/senior review rather than guess. The full in-scope list
+is Decisions 1–8 plus the "Non-architectural fixes" section; anything under a
+"Deferred" heading is out of scope for 0.7.0.
+
 ## Guiding Constraints
 
 Unchanged from `2026-06-18-unified-settings-design.md`:
@@ -27,6 +36,31 @@ elsewhere (write nothing). The library only auto-writes when `on_set` is
 absent (src/prsl_body.c:37-42 already does this). Forcing the library to write
 after `on_set` returns OK would be unable to express transform/discard.
 
+### Decision process (alternatives considered)
+
+Two options were weighed:
+
+- **A — library writes after `on_set` returns OK** (callback = validate/notify
+  only). Simpler and removes the "forgot to write" footgun, but cannot express
+  transform or "accept but don't store" — the library would always store the
+  *incoming* value.
+- **B — callback owns the write** (chosen). The callback may accept, reject,
+  transform, or write nothing; the firmware stays in control of the value.
+
+A middle idea was considered and rejected: have `on_set` *return* the decided
+value (`const prsl_val_t *`, `NULL` = reject) and let the library write it. Clean
+for accept/reject/transform and removes the footgun, but it cannot express
+"accept but don't store" (returning a value always causes a store) without a
+sentinel — which erodes the simplicity.
+
+**Why B won:** transform and "accept but don't store" are first-class firmware
+needs, not rare edges; B preserves both. B's cost — the client echo desync (see
+"Deferred — client echo-correlation gap") — is a documented, deferrable cosmetic
+edge, not data loss, and A would not fully eliminate that class of problem anyway
+(firmware can still change values via `prsl_set_*`, Case 3). Note the gap's
+Option C ("narrow `on_set` to validate-only") is exactly A — i.e. undoing this
+decision — which is why it is not chosen.
+
 **Changes (docs + example only):**
 
 - `include/prsl.h` — rewrite the `prsl_set_cb_t` doc comment to state that the
@@ -39,6 +73,13 @@ after `on_set` returns OK would be unable to express transform/discard.
   `prsl_set_val("wifi.ssid", value)` (accept as-is) or `prsl_set_str("wifi.ssid",
   value->u.str)` after checking `value->kind == PRSL_VAL_STRING`, plus
   `prsl_set_dirty(true)`, so the shipped example persists end-to-end.
+
+**Known sharp edge (document, no fix in 0.7.0):** transform and "accept but
+don't store" are supported server-side, but the browser's optimistic echo model
+assumes the server echoes back exactly the sent value, so a transformed or
+stored-elsewhere value never reaches the UI (the field silently desyncs until
+re-touched or reconnected). Document this consequence in the `on_set` docs. See
+"Deferred — client echo-correlation gap".
 
 ---
 
@@ -176,6 +217,13 @@ a browser round-trip (a number stays a number), so strict typed getters are no
 longer "false type safety". They only mismatch if the author deliberately
 writes a value with the wrong setter — which is now an explicit, documented act.
 
+> **PLAN REVIEW (pro required):** verify the cJSON→`prsl_val_t` dispatch against
+> the real cJSON API (`cJSON_IsString`/`cJSON_IsNumber`/`cJSON_IsTrue`/
+> `cJSON_IsFalse`/`cJSON_IsNull`, `cJSON_GetNumberValue`), the ownership of the
+> `cJSON_Duplicate(val, 1)` in the no-`on_set` branch (store takes ownership,
+> caller must not free), and that removing `prsl_json_value_str` has no other
+> call sites. Pin these down before writing implementation steps.
+
 ---
 
 ## Decision 5 — Lifecycle teardown (Issue 6)
@@ -199,6 +247,11 @@ Semantics:
 currently a `static AsyncWebSocket`. AsyncWebServer's `end()`/handler lifecycle
 and reuse of a static `AsyncWebSocket` across stop→re-init must be verified;
 if reuse is unsafe, `g_ws` should be heap-allocated and recreated per init.
+
+> **PLAN REVIEW (pro required):** the `AsyncWebSocket`/`end()` lifecycle is not
+> resolved here. The plan must include an explicit verification step (and a
+> fallback to heap-allocating `g_ws` per init) before writing the `prsl_stop`
+> implementation steps. A plan that assumes static reuse is safe is not acceptable.
 
 ---
 
@@ -267,6 +320,14 @@ baked into `index.html` at generation time from `parasol_config.json`.
   and add a CI check that the committed assets match freshly generated ones, so
   the pre-baked copy cannot drift.
 
+> **PLAN REVIEW (pro required):** the concrete wiring has multiple valid answers
+> and platform pitfalls — the exact committed path that PlatformIO/Arduino
+> auto-compile WITHOUT the CMake build double-including it in `COMPONENT_SRCS`;
+> whether CMake writes in-place to the committed path or to the build dir; how
+> `scripts/generate_assets.py`, `generate_assets.cmake`, and `npm run build` share
+> one output; and the CI drift-check mechanism. The plan must nail down the
+> committed path and the CMake/non-CMake split before writing implementation steps.
+
 ---
 
 ## Cross-cutting implications
@@ -293,6 +354,12 @@ baked into `index.html` at generation time from `parasol_config.json`.
 - Issue 15's "clear dirty after reset" remains consistent with Decision 2: the
   library *clears* dirty on save-success and reset-success; the developer only
   ever *sets* it.
+
+> **PLAN REVIEW (pro required):** Decision 4 and Issue 14 both rewrite
+> `prsl_apply_body` and the `/api/settings/save` handler (chunk accumulation +
+> no-`data`-wrapper vs. typed-value dispatch). The plan must sequence these as
+> one coherent change to the same functions rather than two independent edits
+> that conflict.
 
 ## Non-architectural fixes — status after these decisions
 
@@ -341,6 +408,55 @@ and make the README sentence fully accurate. This requires `npm run build`
 logic. Deferred here to keep 0.7.0 scoped to the eight architectural decisions;
 it is a one-line client fix plus test/doc alignment, not a wire or API change.
 
+## Deferred — client echo-correlation gap (transform / accept-don't-store)
+
+**Status: deferred. Option A for 0.7.0 — document as a sharp edge, no code or
+wire change. Revisit in a later release.**
+
+The client correlates a server echo to its own `apply` by value equality
+(`app.js:363`: `String(serverVal) === String(lastSent[key])`). It assumes a
+successful `apply` makes the applied value equal exactly what was sent. When the
+firmware decides a *different* value — transform (send `5`, store `10`) or
+"accept but don't store" (send `5`, store nothing, echo old value) — that
+assumption breaks:
+
+- the divergent echo never matches `lastSent`, so `inFlight` is never cleared;
+- the in-flight guard (`app.js:395`) drops the divergent packet before the
+  conflict/external-update detection runs;
+- the browser keeps showing the sent value while the server holds the decided
+  value — silently desynced until the field is re-touched or the WS reconnects.
+
+Root cause: the wire has no echo/correlation ID, and the 10-case state machine
+has no case for "server applied a different value than I sent."
+
+Options for a later release:
+
+- **A (chosen for 0.7.0):** document the desync as a sharp edge; keep wire and
+  behavior unchanged.
+- **B:** add an apply/correlation ID to the wire so the client can distinguish
+  "my value, transformed" from "stale/external" (wire/WS change — major).
+- **C:** narrow `on_set` to validate-only (accept/reject), moving normalization
+  out of the apply path (reopens Decision 1).
+- **D:** new client case "server adjusted your value" (auto-accept + notice).
+
+Rejected hack: the server sends back the sent value first, then the transformed
+value as a second broadcast. It fakes correlation, doubles bandwidth, mislabels
+the transform as an "external update", and still does not fix accept-don't-store.
+
+**Acceptance criterion (eventual consistency):** the decided value need not
+appear instantly, but it *should* reach the browser in time. So this is deferred
+for 0.7.0, not abandoned. The leading candidate for a later release is a wire
+change that separates "what I received" (ack) from "what I applied" (value push)
+— i.e. Option B with value-echo correlation instead of an ID — so the client
+clears `inFlight` on the ack and treats the transformed value as an ordinary
+Case-3 external update. The client must be order-robust (the value push can
+arrive before the ack if it comes from an async path).
+
+> **PLAN REVIEW (pro required):** this section is documentation-only for 0.7.0.
+> The plan MUST NOT implement any code/wire fix here — only record the sharp-edge
+> consequence in the `on_set`/API docs. Any proposed change to `app.js`, the
+> wire format, or `prsl_apply_body` echo behavior is out of scope for this release.
+
 ## Version
 
 **0.7.0** — breaking public-API change (Decision 4) + new API (Decision 5).
@@ -360,6 +476,11 @@ Documented in CHANGELOG. (Not 1.0.0; parasol remains pre-1.0.)
   existing tests updated/extended.
 - **Decision 5** (`prsl_stop`) lives in `prsl.cpp` and is not host-testable
   without the web server; verify on hardware (or a future e2e path).
+
+> **PLAN REVIEW (pro required):** recovering the native host C test harness
+> (`test_prsl_store.c`, `test_prsl_json.c`, `freertos_stub.h`) from git history
+> requires knowing the prior commit/paths. The plan must include the exact
+> recovery step, or the human must supply the files — do not assume they exist.
 
 ## Risks / open items
 
