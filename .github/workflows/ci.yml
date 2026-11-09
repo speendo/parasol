@@ -36,7 +36,14 @@ jobs:
           . .venv/bin/activate
           npm test
       - name: Check committed assets are in sync
-        run: git diff --exit-code -- src/prsl_assets.c src/prsl_assets.h
+        # The job runs inside a container, so the checkout is owned by a
+        # different uid than the step. Without safe.directory Git refuses the
+        # repo, and `git diff -- <two paths>` silently degrades to --no-index,
+        # comparing prsl_assets.c to prsl_assets.h and always failing.
+        run: |
+          git -c safe.directory="$GITHUB_WORKSPACE" \
+            diff --exit-code -- src/prsl_assets.c src/prsl_assets.h \
+            || { echo "::error::Committed assets are stale — run python3 scripts/generate_assets.py"; exit 1; }
 
   pio-smoke:
     # Compile+link smoke of the device sources (src/prsl.cpp, src/prsl_ws.cpp,
