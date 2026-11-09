@@ -288,6 +288,14 @@ problems disappear. `prsl.h` becomes self-contained (stdbool, esp_err, and the
   - Verify the exact PlatformIO registry owner casing (`ESP32Async` vs
     `esp32async`) during implementation.
 - `DaveGamble/cJSON ~1.7` unchanged.
+  - **Deviated in the final fix wave:** the `DaveGamble/cJSON` slug is NOT
+    resolvable on the PlatformIO registry, git-URLs are not a valid
+    `library.json` dependency form, and the republished registry copy
+    (`baracodadailyhealthtech/cJSON`) bundles `test.c`/`fuzzing` `main()`s
+    that break the final link. cJSON was therefore dropped from
+    `library.json` entirely — it ships inside the Arduino-ESP32 core / ESP-IDF
+    `json` component on every supported target, so no external cJSON
+    dependency is needed. See the 0.7.0 final-fix report.
 - Issue 5 guidance (document in README/API_REFERENCE): do **not** list
   `AsyncTCP` explicitly — let ESPAsyncWebServer resolve it transitively; add
   `lib_ignore = AsyncTCP_RP2040W` to prevent the RP2040 port from being pulled.
@@ -365,7 +373,9 @@ baked into `index.html` at generation time from `parasol_config.json`.
 
 **Unchanged, still implement:** Issue 14 (chunk accumulation + no `data`
 wrapper), Issue 15 (Reset while dirty + clear dirty after reset), Issue 9 (Save
-busy feedback), Issue 8 (mobile nav, Approach A), restore native host C test
+busy feedback), Issue 8 (mobile nav, Approach A) (Approach A later failed
+manual testing — superseded by
+`2026-09-09-responsive-nav-menu-design.md`), restore native host C test
 harness (compiled as C++), README/CHANGELOG version + spec-reference note.
 
 **Doc addition (from audit Integration Notes, not an original triage line):**

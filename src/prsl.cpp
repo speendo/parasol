@@ -7,12 +7,13 @@
 #include "ESPAsyncWebServer.h"
 #include <string.h>
 #include <stdio.h>
+#include <limits.h>
 
 /* ── Global state ───────────────────────────────────────────── */
 
 static prsl_store_t g_store;
 static AsyncWebServer *g_server = NULL;
-static AsyncWebSocket g_ws("/api/events");
+static AsyncWebSocket *g_ws = NULL;
 static prsl_save_cb_t g_on_save = NULL;
 static prsl_reset_cb_t g_on_reset = NULL;
 static prsl_reboot_cb_t g_on_reboot = NULL;
@@ -100,41 +101,39 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
         [](AsyncWebServerRequest *req) {}, NULL,
         [](AsyncWebServerRequest *req, uint8_t *data, size_t len,
            size_t index, size_t total) {
-            cJSON *msg = cJSON_ParseWithLength((const char *)data, total);
-            if (!msg) {
-                req->send(400, "text/plain", "Invalid JSON");
-                return;
+            if (index == 0) {
+                req->_tempObject = malloc(total + 1);
+                if (!req->_tempObject) {
+                    req->send(500, "text/plain", "Out of memory");
+                    return;
+                }
+                ((char *)req->_tempObject)[0] = '\0';
             }
-            cJSON *body = cJSON_GetObjectItem(msg, "data");
-            if (!body) {
-                cJSON_Delete(msg);
-                req->send(400, "text/plain", "Missing data");
-                return;
+            char *buf = (char *)req->_tempObject;
+            if (buf) {
+                memcpy(buf + index, data, len);
+                buf[index + len] = '\0';
             }
+            if (index + len < total) return;
 
-            /* Lock AV store for the entire transaction */
             xSemaphoreTakeRecursive(g_store.mutex, portMAX_DELAY);
 
-            prsl_rejection_t rej;
-            prsl_apply_body(body, &g_store, &rej);
-
-            if (rej.group_id) {
-                char err[128];
-                snprintf(err, sizeof(err), "on_set rejected %s.%s", rej.group_id, rej.key);
+            char err[128];
+            prsl_save_status_t st = buf ? prsl_apply_save_body(buf, total, &g_store, err, sizeof(err))
+                                        : PRSL_SAVE_INVALID_JSON;
+            free(buf);
+            req->_tempObject = NULL;
+            if (st != PRSL_SAVE_APPLIED) {
                 xSemaphoreGiveRecursive(g_store.mutex);
-                cJSON_Delete(msg);
                 req->send(400, "text/plain", err);
                 return;
             }
-            cJSON_Delete(msg);
 
-            /* Call on_save */
             esp_err_t save_result = ESP_OK;
             if (g_on_save) {
                 save_result = g_on_save();
             }
 
-            /* Clear or keep dirty, push, respond */
             if (save_result == ESP_OK) {
                 prsl_store_clear_dirty(&g_store);
                 prsl_push();
@@ -154,6 +153,7 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
             }
             esp_err_t result = g_on_reset();
             if (result == ESP_OK) {
+                prsl_store_clear_dirty(&g_store);
                 prsl_push();
                 req->send(200, "text/plain", "OK");
             } else {
@@ -180,10 +180,13 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
 
 esp_err_t prsl_start(void) {
     if (!g_server) return ESP_ERR_INVALID_STATE;
-
-    prsl_ws_init(&g_ws, &g_store);
-    g_server->addHandler(&g_ws);
-
+    if (g_ws) return ESP_ERR_INVALID_STATE;  /* already started */
+    g_ws = new AsyncWebSocket("/api/events");
+    if (!g_ws) return ESP_ERR_NO_MEM;
+    prsl_ws_init(g_ws, &g_store);
+    /* addHandler transfers ownership to the server — never delete g_ws after
+     * this; only removeHandler()/server teardown frees it. */
+    g_server->addHandler(g_ws);
     g_server->begin();
     return ESP_OK;
 }
@@ -192,6 +195,26 @@ esp_err_t prsl_reset(void) {
     if (!g_initialized) return ESP_ERR_INVALID_STATE;
     prsl_store_reset_values(&g_store);
     return prsl_push();
+}
+
+esp_err_t prsl_stop(void) {
+    if (!g_initialized) return ESP_ERR_INVALID_STATE;
+    if (g_server) {
+        if (g_ws) {
+            g_ws->closeAll();                 /* close WS clients */
+            g_ws->cleanupClients();
+            g_server->removeHandler(g_ws);    /* server deletes g_ws */
+            g_ws = NULL;                      /* dangling after removal — do not use */
+        }
+        g_server->end();                      /* stop the listener */
+    }
+    prsl_store_deinit(&g_store);
+    g_server = NULL;
+    g_on_save = NULL;
+    g_on_reset = NULL;
+    g_on_reboot = NULL;
+    g_initialized = false;
+    return ESP_OK;
 }
 
 /* ── Runtime value access ───────────────────────────────────── */
@@ -243,6 +266,13 @@ esp_err_t prsl_set_null(const char *path) {
     return prsl_store_set_json(&g_store, group_id, key, cJSON_CreateNull());
 }
 
+esp_err_t prsl_set_val(const char *path, const prsl_val_t *value) {
+    char group_id[PRSL_MAX_PATH] = {0};
+    char key[PRSL_MAX_PATH] = {0};
+    if (parse_dot_path(path, group_id, key) != ESP_OK) return ESP_ERR_INVALID_ARG;
+    return prsl_store_set_val(&g_store, group_id, key, value);
+}
+
 const char *prsl_get(const char *path) {
     char group_id[PRSL_MAX_PATH] = {0};
     char key[PRSL_MAX_PATH] = {0};
@@ -268,6 +298,41 @@ const char *prsl_get(const char *path) {
     return result ? g_get_buf : NULL;
 }
 
+static esp_err_t parse_and_get_number(const char *path, double *out) {
+    char group_id[PRSL_MAX_PATH] = {0};
+    char key[PRSL_MAX_PATH] = {0};
+    if (!out) return ESP_ERR_INVALID_ARG;
+    if (parse_dot_path(path, group_id, key) != ESP_OK) return ESP_ERR_INVALID_ARG;
+    return prsl_store_get_number(&g_store, group_id, key, out);
+}
+
+esp_err_t prsl_get_int(const char *path, int *out) {
+    double n;
+    if (!out) return ESP_ERR_INVALID_ARG;
+    esp_err_t e = parse_and_get_number(path, &n);
+    if (e == ESP_OK) {
+        if (n < INT_MIN || n > INT_MAX) return ESP_ERR_NOT_FOUND;  /* unrepresentable */
+        *out = (int)n;
+    }
+    return e;
+}
+
+esp_err_t prsl_get_float(const char *path, float *out) {
+    double n;
+    if (!out) return ESP_ERR_INVALID_ARG;
+    esp_err_t e = parse_and_get_number(path, &n);
+    if (e == ESP_OK) *out = (float)n;
+    return e;
+}
+
+esp_err_t prsl_get_bool(const char *path, bool *out) {
+    if (!out) return ESP_ERR_INVALID_ARG;
+    char group_id[PRSL_MAX_PATH] = {0};
+    char key[PRSL_MAX_PATH] = {0};
+    if (parse_dot_path(path, group_id, key) != ESP_OK) return ESP_ERR_INVALID_ARG;
+    return prsl_store_get_bool(&g_store, group_id, key, out);
+}
+
 /* ── Has reset ────────────────────────────────────────────────── */
 
 bool prsl_has_reset(void) {
@@ -280,7 +345,7 @@ bool prsl_has_reboot(void) {
 
 /* ── Shared settings payload builder ─────────────────────────── */
 
-cJSON *prsl_build_settings_payload(const prsl_store_t *store) {
+cJSON *prsl_build_settings_payload(prsl_store_t *store) {
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "type", "settings");
     cJSON_AddBoolToObject(root, "_dirty", prsl_store_is_dirty(store));
@@ -298,7 +363,7 @@ esp_err_t prsl_push(void) {
     char *str = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
     if (str) {
-        g_ws.textAll(str);
+        if (g_ws) g_ws->textAll(str);
         free(str);
     }
     xSemaphoreGiveRecursive(g_store.mutex);
@@ -314,7 +379,7 @@ esp_err_t prsl_broadcast_status(void) {
     char *str = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
     if (str) {
-        g_ws.textAll(str);
+        if (g_ws) g_ws->textAll(str);
         free(str);
     }
     xSemaphoreGiveRecursive(g_store.mutex);

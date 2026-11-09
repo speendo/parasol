@@ -77,6 +77,10 @@ output for the ordered implementation plan.
 
 ## Issue 8 (mobile nav) — alternatives to Approach A
 
+> **Status (2026-09-09):** Approach A failed manual testing (ragged 3-line
+> stack, 601–845px overflow band, flaky dropdown when wrapped). Superseded by
+> `docs/superpowers/specs/2026-09-09-responsive-nav-menu-design.md`.
+
 Recorded 2026-09-01. Approach A (flex-wrap stacking) is implemented in the
 plan and will be user-tested. If unsuitable, these are the fallbacks:
 

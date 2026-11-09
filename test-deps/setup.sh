@@ -90,3 +90,6 @@ find "$EXTRACT_DIR" -name '*.so*' -exec cp -a {} "$LIB_DIR/" \;
 rm -rf "$EXTRACT_DIR"
 
 echo "Done — $(find "$LIB_DIR" -name '*.so*' | wc -l) shared libraries in $LIB_DIR"
+
+# Native C test dependencies (cJSON + Unity)
+bash "$SCRIPT_DIR/native_setup.sh"

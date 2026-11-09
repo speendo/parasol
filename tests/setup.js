@@ -5,8 +5,21 @@ import { dirname, resolve } from 'path'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
+document.head.innerHTML = `
+  <meta name="parasol-always-show-save" content="0">
+`
 document.body.innerHTML = `
-  <nav id="nav-list"></nav>
+  <header>
+    <nav>
+      <ul id="nav-list"></ul>
+      <details class="dropdown" id="nav-actions" hidden>
+        <summary>☰</summary>
+        <ul>
+          <li id="nav-sep" hidden></li>
+        </ul>
+      </details>
+    </nav>
+  </header>
   <form id="config-form"></form>
   <div id="status-bar"></div>
   <footer></footer>

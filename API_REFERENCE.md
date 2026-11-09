@@ -67,14 +67,20 @@ static const char *load_ssid(void) {
 
 /* ── Set callback ─────────────────────────────────────────────────
  * An on_set callback fires every time a field value changes (via
- * WebSocket apply or Save). Use it to react to live changes or
- * reject invalid values.
+ * WebSocket apply or Save). The callback OWNS persistence: accept a
+ * value by writing it back with prsl_set_val() (optionally after
+ * transforming it), or write nothing to discard it. Parasol does not
+ * auto-store when on_set is registered.
  */
 
 static esp_err_t on_ssid_change(const char *group_id, const char *key,
-                                 const char *value) {
-    printf("%s.%s changed to: %s\n", group_id, key, value);
-    if (value && strlen(value) > 32) return ESP_ERR_INVALID_ARG;
+                                 const prsl_val_t *value) {
+    (void)key;
+    printf("%s changed\n", group_id);
+    if (value->kind != PRSL_VAL_STRING || !value->u.str) return ESP_ERR_INVALID_ARG;
+    if (strlen(value->u.str) > 32) return ESP_ERR_INVALID_ARG;
+    prsl_set_val("wifi.ssid", value);   /* accept as-is */
+    prsl_set_dirty(true);               /* show Save, persist on Save */
     return ESP_OK;
 }
 
@@ -124,22 +130,23 @@ void app_main(void) {
     prsl_add_group("wifi", "Wi-Fi Setup");
     prsl_add_group("system", "System Status");
 
-    prsl_add_field(PRSL_TEXT, "wifi", "ssid", "SSID",
-        &(prsl_field_opts_t){
-            .on_get = load_ssid,
-            .on_set = on_ssid_change,
-            .help   = "Network name - 1-32 characters",
-            .attrs  = "{\"required\":true,\"maxlength\":32}",
-        });
+    static const prsl_field_opts_t ssid_opts = {
+        .on_get = load_ssid,
+        .on_set = on_ssid_change,
+        .help   = "Network name - 1-32 characters",
+        .attrs  = "{\"required\":true,\"maxlength\":32}",
+    };
+    static const prsl_field_opts_t pass_opts = {
+        .on_get = load_pass,
+        .help   = "At least 8 characters",
+    };
+    static const prsl_field_opts_t uptime_opts = { .is_status = true };
 
-    prsl_add_field(PRSL_PASSWORD, "wifi", "pass", "Password",
-        &(prsl_field_opts_t){
-            .on_get = load_pass,
-            .help   = "At least 8 characters",
-        });
+    prsl_add_field(PRSL_TEXT, "wifi", "ssid", "SSID", &ssid_opts);
 
-    prsl_add_field(PRSL_TEXT, "system", "uptime", "Uptime",
-        &(prsl_field_opts_t){ .is_status = true });
+    prsl_add_field(PRSL_PASSWORD, "wifi", "pass", "Password", &pass_opts);
+
+    prsl_add_field(PRSL_TEXT, "system", "uptime", "Uptime", &uptime_opts);
 
     /* 3. Configure and start */
     prsl_init(&server, save_to_nvs, on_reset, NULL);
@@ -162,8 +169,11 @@ void app_main(void) {
 
 ## Lifecycle
 
-Two functions start and stop the library. There is no explicit `deinit` —
-the web server lives for the ESP32's full uptime.
+Three functions manage the library lifecycle: `prsl_init` wires routes and
+snapshots the store, `prsl_start` begins serving, and `prsl_stop` tears it all
+down so a fresh cycle can run again. In the common one-shot case (settings UI
+for the ESP32's full uptime) call `prsl_init` + `prsl_start` once and never
+`prsl_stop`.
 
 ```c
 /**
@@ -209,6 +219,22 @@ esp_err_t prsl_start(void);
  * @return ESP_OK on success.
  */
 esp_err_t prsl_reset(void);
+```
+
+```c
+/**
+ * @brief Tear the library down (symmetric with prsl_init/prsl_start).
+ *
+ * Closes WebSocket clients, removes the WS handler, stops the server
+ * (server->end()), frees the store (groups, fields, mutex), and resets all
+ * library globals. After prsl_stop you may register groups/fields and call
+ * prsl_init + prsl_start again for a clean restart.
+ *
+ * @note The AsyncWebServer is owned by your app and is NOT freed. Re-initing
+ *       on the same server object: call server->reset() first so routes and
+ *       the old WS handler are not duplicated.
+ * @return ESP_OK on success; ESP_ERR_INVALID_STATE if never initialized. */
+esp_err_t prsl_stop(void);
 ```
 
 ```c
@@ -273,6 +299,12 @@ prsl_add_group("system", "System Status");
 prsl_add_group("auto_label_group", NULL); /* renders as "Auto Label Group" */
 ```
 
+> **Group IDs must not start with `_`.** The `_` namespace is reserved for
+> protocol meta keys (`_dirty`, `_show_reset`, `_show_reboot`). `prsl_add_group`
+> rejects `_`-prefixed IDs with `ESP_ERR_INVALID_ARG`; subsequent
+> `prsl_add_field` calls for that group return `ESP_ERR_NOT_FOUND`. Use a
+> non-underscore ID for internal/read-only groups.
+
 ---
 
 ## Field Registration
@@ -326,29 +358,29 @@ esp_err_t prsl_add_field_opts(prsl_type_t type, const char *group_id, const char
 
 ```c
 /* Text field with on_get, on_set, help, attrs */
-prsl_add_field(PRSL_TEXT, "wifi", "ssid", "SSID",
-    &(prsl_field_opts_t){
-        .on_get = load_ssid,
-        .on_set = on_ssid_change,
-        .help   = "Network name",
-        .attrs  = "{\"required\":true,\"maxlength\":32}",
-    });
+static const prsl_field_opts_t ssid_opts = {
+    .on_get = load_ssid,
+    .on_set = on_ssid_change,
+    .help   = "Network name",
+    .attrs  = "{\"required\":true,\"maxlength\":32}",
+};
+prsl_add_field(PRSL_TEXT, "wifi", "ssid", "SSID", &ssid_opts);
 
 /* Minimal field (NULL opts) */
 prsl_add_field(PRSL_NUMBER, "gpio", "pin", "Pin Number", NULL);
 
 /* Range slider with min/max */
-prsl_add_field(PRSL_RANGE, "led", "brightness", "Brightness",
-    &(prsl_field_opts_t){
-        .help  = "0-255",
-        .attrs = "{\"min\":0,\"max\":255}",
-    });
+static const prsl_field_opts_t brightness_opts = {
+    .help  = "0-255",
+    .attrs = "{\"min\":0,\"max\":255}",
+};
+prsl_add_field(PRSL_RANGE, "led", "brightness", "Brightness", &brightness_opts);
 
 /* Checkbox with indeterminate state (NULL on_get = indeterminate) */
-prsl_add_field(PRSL_CHECKBOX, "features", "enable_ai", "Enable AI",
-    &(prsl_field_opts_t){
-        .help = "Enable experimental AI features",
-    });
+static const prsl_field_opts_t enable_ai_opts = {
+    .help = "Enable experimental AI features",
+};
+prsl_add_field(PRSL_CHECKBOX, "features", "enable_ai", "Enable AI", &enable_ai_opts);
 
 /* Select field with options */
 static const char *mode_opts[][2] = {
@@ -356,21 +388,23 @@ static const char *mode_opts[][2] = {
     {"ap",      "Access Point"},
     {"ap_sta",  "AP + Station"},
 };
+static const prsl_field_opts_t mode_field_opts = {
+    .on_set = on_mode_change,
+    .help   = "Operating mode",
+};
 prsl_add_field_opts(PRSL_SELECT, "wifi", "mode", "WiFi Mode",
     mode_opts, 3,
-    &(prsl_field_opts_t){
-        .on_set = on_mode_change,
-        .help   = "Operating mode",
-    });
+    &mode_field_opts);
 
 /* Radio group */
 static const char *role_opts[][2] = {
     {"master", "Master"},
     {"slave",  "Slave"},
 };
+static const prsl_field_opts_t role_field_opts = { .help = "Cluster node role" };
 prsl_add_field_opts(PRSL_RADIO, "cluster", "role", "Role",
     role_opts, 2,
-    &(prsl_field_opts_t){ .help = "Cluster node role" });
+    &role_field_opts);
 ```
 
 ---
@@ -393,9 +427,16 @@ typedef struct {
 |---|---|---|
 | `is_status` | `bool` | `false` by default. `true` = read-only status field (renders disabled). |
 | `on_get` | `prsl_get_cb_t` | Called once per field at init. Return persisted value string, or NULL for default (checkbox→indeterminate, others→empty). |
-| `on_set` | `prsl_set_cb_t` | Called on every value change (blur/change via WS) and on Save. Return `ESP_OK` to accept, anything else to reject (Save aborts). |
+| `on_set` | `prsl_set_cb_t` | Called on every value change and on Save with a typed `prsl_val_t *`. The callback OWNS persistence — accept by writing the value back via `prsl_set_val()` (may transform first), or write nothing to discard. Return `ESP_OK` to accept, anything else to reject (Save aborts). |
 | `help` | `const char *` | Helper text shown below the field. NULL = no help text rendered. |
 | `attrs` | `const char *` | JSON string of HTML form attributes (see Attrs Format below). NULL = no validation attributes. |
+
+> **Sharp edge (transform / accept-but-don't-store):** the browser assumes
+> the server echoes back exactly the value it sent. If `on_set` stores a
+> *different* value (transform) or stores nothing (discard), the field
+> silently desyncs in the UI until re-touched or reconnected. That is a
+> documented cosmetic edge of callback-owned writes, not data loss. There is
+> no echo/correlation fix in 0.7.0.
 
 ---
 
@@ -468,6 +509,8 @@ bool prsl_is_dirty(void);
 - Once after loading NVS at startup (to always show Save)
 - From a hardware event or timer that detects external changes
 
+> **Sharp consequence:** `_dirty` is only ever *cleared* by parasol. If firmware never calls `prsl_set_dirty(true)`, the browser never shows the Save button (unless `always_show_save` is on), and a Save click is a silent no-op — no POST is sent and nothing persists. Call `prsl_set_dirty(true)` inside `on_set` (or wherever external state changes).
+
 Alternatively, set `"always_show_save": true` in `parasol_config.json` to force
 the Save button visible always.
 
@@ -488,12 +531,45 @@ esp_err_t prsl_set_null(const char *path);
 
 ```c
 /**
+ * @brief Store a typed value as-is (the "accept" one-liner for on_set).
+ * @param path  Dot-path string, e.g. "wifi.ssid".
+ * @param value Typed value; never NULL. kind == PRSL_VAL_NULL stores null.
+ * @return ESP_OK on success.
+ *
+ * Maps kind to cJSON the same way the setters above do individually
+ * (STRING/NUMBER/BOOL/NULL). Does NOT broadcast and does NOT set dirty —
+ * the callback decides dirty semantics. */
+esp_err_t prsl_set_val(const char *path, const prsl_val_t *value);
+```
+
+```c
+/**
  * @brief Get a field's current value from AV store.
  * @param path Dot-path string, e.g. "system.uptime".
  * @return Pointer to value string, or NULL. Valid until next prsl_set_*
  *         for the same path. Do NOT free. */
 const char *prsl_get(const char *path);
 ```
+
+```c
+/**
+ * @brief Strict typed getters.
+ * @param path Dot-path string, e.g. "led.brightness".
+ * @param out  Receives the value on success.
+ * @return ESP_OK and sets *out when the field exists with a compatible
+ *         stored type (number for int/float, bool for bool);
+ *         ESP_ERR_NOT_FOUND for a missing field OR a wrong type.
+ *         They do NOT parse strings — a string field reads back only
+ *         via prsl_get. */
+esp_err_t prsl_get_int(const char *path, int *out);
+esp_err_t prsl_get_float(const char *path, float *out);
+esp_err_t prsl_get_bool(const char *path, bool *out);
+```
+
+> `prsl_get()` returns values **only** for fields stored as strings. Use the
+> typed getters `prsl_get_int`/`prsl_get_float`/`prsl_get_bool` for number/bool
+> fields; they are strict and return `ESP_ERR_NOT_FOUND` on a type mismatch.
+> Set typed values with `prsl_set_*` (or `prsl_set_val` inside `on_set`).
 
 ---
 
@@ -636,6 +712,12 @@ static esp_err_t on_reboot(void) {
 | `logo` | string | `"/logo.png"` | Navbar logo URL |
 | `favicon` | string | `"/favicon.ico"` | Favicon URL |
 | `always_show_save` | bool | `false` | Always show Save button, ignore dirty flag |
+
+These values are baked into `index.html` at asset-generation time. Default
+assets are committed under `src/prsl_assets.{h,c}`; after editing
+`parasol_config.json`, regenerate them with
+`python3 scripts/generate_assets.py` (or via `npm run build`) so the committed
+copy stays in sync. ESP-IDF builds read the config fresh via CMake.
 
 ---
 

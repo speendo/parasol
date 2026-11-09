@@ -5,6 +5,11 @@
 Add a Reboot button (nav dropdown + confirmation modal) and ship v0.6.0 with
 housekeeping fixes.
 
+> **UI status (2026-09-09):** the "System" dropdown described here was replaced
+> by the always-present ☰ device menu — see
+> `2026-09-09-responsive-nav-menu-design.md`. The reboot feature, API, and
+> `_show_reboot` semantics are unchanged.
+
 ---
 
 ## Part A: Reboot Button

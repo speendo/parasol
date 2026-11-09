@@ -8,6 +8,12 @@ var parasol = (function () {
   var btnSaveApply = document.getElementById('btn-save-apply');
   var btnReset = document.getElementById('btn-reset');
 
+  var navActions = document.getElementById('nav-actions');
+  var navActionsList = navActions ? navActions.querySelector('ul') : null;
+  var navSep = navActions ? document.getElementById('nav-sep') : null;
+  var navCollapsed = false;
+  var navClickWired = false;
+
   var baseline = null;
   var groups = [];
   /** @type {Array} Read-only status group definitions, parallel to groups. */
@@ -126,7 +132,7 @@ var parasol = (function () {
     var showBtn = (dirty || alwaysShow) && formOk;
     btnSaveApply.hidden = !showBtn;
     btnSaveApply.disabled = !showBtn;
-    btnReset.hidden = !(dirty || showReset);
+    btnReset.hidden = !(showReset && (dirty || alwaysShow));
   }
 
   /**
@@ -643,7 +649,9 @@ var parasol = (function () {
     for (var k in changes) count++;
     if (count === 0 && !dirty) return;
     var body = count > 0 ? buildPatch(changes) : buildPatch(serialize());
+    btnSaveApply.setAttribute('aria-busy', 'true');
     postJSON('/api/settings/save', body).then(function (ok) {
+      btnSaveApply.removeAttribute('aria-busy');
       if (ok) syncThen();
     });
   }
@@ -662,6 +670,11 @@ var parasol = (function () {
   }
 
   function renderNav() {
+    if (navCollapsed) {
+      moveSectionsToNavList();
+      navList.hidden = false;
+      navCollapsed = false;
+    }
     navList.innerHTML = '';
     var seen = {};
     for (var si = 0; si < statusGroups.length; si++) {
@@ -673,42 +686,11 @@ var parasol = (function () {
       seen[groups[gi].id] = true;
       renderLink(groups[gi]);
     }
-    if (showReboot) {
-      var li = document.createElement('li');
-      var details = document.createElement('details');
-      details.className = 'dropdown';
-      details.id = 'nav-system';
-      var summary = document.createElement('summary');
-      summary.textContent = 'System';
-      details.appendChild(summary);
-      var ul = document.createElement('ul');
-      ul.setAttribute('dir', 'rtl');
-      var ali = document.createElement('li');
-      var a = document.createElement('a');
-      a.href = '#';
-      a.id = 'nav-reboot';
-      a.textContent = 'Reboot';
-      a.addEventListener('click', function (e) {
-        e.preventDefault();
-        if (details) details.open = false;
-        var dd = document.getElementById('reboot-dialog');
-        if (dd) dd.showModal();
-      });
-      ali.appendChild(a);
-      ul.appendChild(ali);
-      details.appendChild(ul);
-      li.appendChild(details);
-      navList.appendChild(li);
-    }
-    if (navList._clickWired) return;
-    navList._clickWired = true;
-    navList.addEventListener('click', function (e) {
-      var link = e.target.closest('a');
-      if (link && link.hash) {
-        var el = document.getElementById(link.hash.slice(1));
-        if (el && el.tagName === 'DETAILS') el.open = true;
-      }
-    });
+    sectionCount = navList.children.length;
+    syncDeviceMenu();
+    wireNavClick();
+    wireNavResize();
+    updateFit();
   }
 
   /** Append a single nav link for a group. */
@@ -719,6 +701,111 @@ var parasol = (function () {
     a.textContent = grp.label;
     li.appendChild(a);
     navList.appendChild(li);
+  }
+
+  function buildRebootItem() {
+    var li = document.createElement('li');
+    li.className = 'nav-action';
+    var a = document.createElement('a');
+    a.href = '#';
+    a.id = 'nav-reboot';
+    a.textContent = 'Reboot';
+    a.addEventListener('click', function (e) {
+      e.preventDefault();
+      if (navActions) navActions.open = false;
+      var dd = document.getElementById('reboot-dialog');
+      if (dd) dd.showModal();
+    });
+    li.appendChild(a);
+    return li;
+  }
+
+  function syncDeviceMenu() {
+    if (!navActions || !navActionsList) return;
+    var existing = document.getElementById('nav-reboot');
+    if (showReboot && !existing) {
+      navActionsList.appendChild(buildRebootItem());
+    } else if (!showReboot && existing) {
+      existing.parentNode.parentNode.removeChild(existing.parentNode);
+    }
+    var hasReboot = !!document.getElementById('nav-reboot');
+    navActions.hidden = !(navCollapsed || hasReboot);
+    if (navSep) navSep.hidden = !(navCollapsed && hasReboot);
+  }
+
+  function wireNavClick() {
+    if (navClickWired) return;
+    navClickWired = true;
+    document.addEventListener('click', function (e) {
+      var link = e.target.closest('a');
+      if (link && link.hash) {
+        var el = document.getElementById(link.hash.slice(1));
+        if (el && el.tagName === 'DETAILS') el.open = true;
+        if (navActions) navActions.open = false;
+      }
+    });
+  }
+
+  var GAP = 10;
+  var sectionCount = 0;
+
+  function moveSectionsToNavList() {
+    var node = navActionsList.firstChild;
+    while (node && node !== navSep) {
+      var nx = node.nextSibling;
+      navList.appendChild(node);
+      node = nx;
+    }
+  }
+
+  function moveSectionsToMenu() {
+    var node = navList.firstChild;
+    while (node) {
+      var nx = node.nextSibling;
+      navActionsList.insertBefore(node, navSep);
+      node = nx;
+    }
+  }
+
+  function applyNavMode(collapsed) {
+    navCollapsed = collapsed;
+    if (collapsed) moveSectionsToMenu();
+    else moveSectionsToNavList();
+    var hasReboot = !!document.getElementById('nav-reboot');
+    navList.hidden = collapsed;
+    if (navActions) navActions.hidden = !(collapsed || hasReboot);
+    if (navSep) navSep.hidden = !(collapsed && hasReboot && sectionCount > 0);
+  }
+
+  function updateFit() {
+    if (!navActionsList || !navActions || !navSep) return;
+    if (!document.documentElement.clientWidth) return; // no layout (jsdom)
+    if (navCollapsed) {
+      moveSectionsToNavList();
+      navList.hidden = false;
+    }
+    var boundary;
+    if (navActions.hidden) {
+      var navEl = document.querySelector('header nav');
+      if (!navEl) { navList.hidden = false; return; }
+      boundary = navEl.getBoundingClientRect().right - GAP;
+    } else {
+      boundary = navActions.getBoundingClientRect().left - GAP;
+    }
+    var right = navList.getBoundingClientRect().right;
+    var fits = sectionCount === 0 || right <= boundary + 0.5;
+    applyNavMode(!fits);
+  }
+
+  function wireNavResize() {
+    if (wireNavResize._done) return;
+    wireNavResize._done = true;
+    var timer = null;
+    window.addEventListener('resize', function () {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(updateFit, 150);
+    });
+    window.addEventListener('load', updateFit);
   }
 
   function revalidateAll() {
@@ -1062,6 +1149,7 @@ var parasol = (function () {
     Object.defineProperty(window.__test, 'statusGroups', { get: function () { return statusGroups; }, set: function (v) { statusGroups = v; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'receiveWSMessage', { get: function () { return onWSMessage; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'wsReady', { get: function () { return function () { if (ws) ws.readyState = 1; }; }, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'setNavMode', { value: function (v) { applyNavMode(!!v); }, enumerable: true, configurable: true });
   }
 
   return {

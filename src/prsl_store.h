@@ -34,7 +34,7 @@ typedef struct {
     const char *label;
 } prsl_group_meta_t;
 
-typedef struct {
+typedef struct prsl_store_s {
     prsl_field_t *fields;
     int count;
     int capacity;
@@ -58,6 +58,18 @@ const char *prsl_store_get_label(prsl_store_t *store, const char *group_id);
 prsl_field_t *prsl_store_find(prsl_store_t *store, const char *group_id, const char *key);
 /** @brief Store a cJSON value. Takes ownership of @p value (caller must NOT free). */
 esp_err_t prsl_store_set_json(prsl_store_t *store, const char *group_id, const char *key, cJSON *value);
+/** @brief Store a prsl_val_t with its native cJSON type. Takes ownership
+ *  of the created node (via prsl_store_set_json); caller keeps @p value. */
+esp_err_t prsl_store_set_val(prsl_store_t *store, const char *group_id,
+                             const char *key, const prsl_val_t *value);
+/** @brief Read a JSON number into *out. ESP_OK only if the field exists and
+ *  is a number; ESP_ERR_NOT_FOUND for missing or wrong type. */
+esp_err_t prsl_store_get_number(prsl_store_t *store, const char *group_id,
+                                const char *key, double *out);
+/** @brief Read a JSON bool into *out. ESP_OK only if the field exists and is
+ *  a bool; ESP_ERR_NOT_FOUND for missing or wrong type. */
+esp_err_t prsl_store_get_bool(prsl_store_t *store, const char *group_id,
+                              const char *key, bool *out);
 cJSON *prsl_store_get_value(prsl_store_t *store, const char *group_id, const char *key);
 bool prsl_store_is_dirty(prsl_store_t *store);
 void prsl_store_set_dirty(prsl_store_t *store, bool d);
@@ -68,6 +80,11 @@ esp_err_t prsl_store_load_values(prsl_store_t *store);
 
 /** @brief Re-call on_get on every field (for reset). */
 esp_err_t prsl_store_reset_values(prsl_store_t *store);
+
+/** @brief Build the full settings WS payload ({type, _dirty, _show_reset,
+ *  _show_reboot, data}). Returns a caller-owned cJSON * (internal helper;
+ *  not part of the public API). */
+cJSON *prsl_build_settings_payload(prsl_store_t *store);
 
 #ifdef __cplusplus
 }

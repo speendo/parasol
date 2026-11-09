@@ -175,18 +175,36 @@ describe('updateUI', () => {
     expect(document.getElementById('btn-reset').hidden).toBe(true)
   })
 
-  it('reset visible when dirty', () => {
+  it('reset visible when dirty and callback registered', () => {
     window.__test.dirty = true
-    window.__test.showReset = false
+    window.__test.showReset = true
     window.updateUI()
     expect(document.getElementById('btn-reset').hidden).toBe(false)
   })
 
-  it('reset visible when showReset is true even if clean', () => {
+  it('reset hidden when dirty but no callback registered', () => {
+    window.__test.dirty = true
+    window.__test.showReset = false
+    window.updateUI()
+    expect(document.getElementById('btn-reset').hidden).toBe(true)
+  })
+
+  it('reset hidden when clean even if showReset is true', () => {
     window.__test.dirty = false
     window.__test.showReset = true
     window.updateUI()
+    expect(document.getElementById('btn-reset').hidden).toBe(true)
+  })
+
+  it('reset visible when clean only if alwaysShowSave', () => {
+    window.__test.dirty = false
+    window.__test.showReset = true
+    document.querySelector('meta[name="parasol-always-show-save"]')
+      .setAttribute('content', '1')
+    window.updateUI()
     expect(document.getElementById('btn-reset').hidden).toBe(false)
+    document.querySelector('meta[name="parasol-always-show-save"]')
+      .setAttribute('content', '0')
   })
 })
 
@@ -870,7 +888,7 @@ describe('processSettings', () => {
     expect(window.__test.showReset).toBe(false);
   });
 
-  it('reset button visible when dirty or showReset', function () {
+  it('reset button visible when dirty and callback registered', function () {
     var btn = document.getElementById('btn-reset');
     // clean + no showReset → hidden
     window.__test.dirty = false;
@@ -878,16 +896,21 @@ describe('processSettings', () => {
     window.updateUI();
     expect(btn.hidden).toBe(true);
 
-    // dirty makes it visible
+    // dirty without callback → still hidden (no reset endpoint)
     window.__test.dirty = true;
     window.updateUI();
-    expect(btn.hidden).toBe(false);
+    expect(btn.hidden).toBe(true);
 
-    // showReset makes it visible even when clean
-    window.__test.dirty = false;
+    // dirty + callback → visible
     window.__test.showReset = true;
     window.updateUI();
     expect(btn.hidden).toBe(false);
+
+    // clean + showReset but no alwaysShowSave → still hidden
+    window.__test.dirty = false;
+    window.__test.showReset = true;
+    window.updateUI();
+    expect(btn.hidden).toBe(true);
   });
 })
 
@@ -976,24 +999,30 @@ describe('showReboot state', function () {
   });
 });
 
-describe('renderNav reboot dropdown', function () {
-  it('adds System dropdown when showReboot is true', function () {
+describe('renderNav device menu', function () {
+  it('builds Reboot into #nav-actions when showReboot is true', function () {
     window.__test.showReboot = true;
     window.__test.groups = [];
+    window.__test.statusGroups = [];
     window.renderNav();
-    var dd = document.getElementById('nav-system');
-    expect(dd).not.toBeNull();
+    expect(document.getElementById('nav-system')).toBeNull();
+    expect(document.getElementById('nav-actions').hasAttribute('hidden')).toBe(false);
     var rebootLink = document.getElementById('nav-reboot');
     expect(rebootLink).not.toBeNull();
     expect(rebootLink.textContent).toBe('Reboot');
+    expect(document.getElementById('nav-actions').contains(rebootLink)).toBe(true);
   });
 
-  it('omits System dropdown when showReboot is false', function () {
-    window.__test.showReboot = false;
+  it('hides #nav-actions and removes Reboot when showReboot is false', function () {
     window.__test.groups = [];
+    window.__test.statusGroups = [];
+    window.__test.showReboot = true;
     window.renderNav();
-    expect(document.getElementById('nav-system')).toBeNull();
+    expect(document.getElementById('nav-reboot')).not.toBeNull();
+    window.__test.showReboot = false;
+    window.renderNav();
     expect(document.getElementById('nav-reboot')).toBeNull();
+    expect(document.getElementById('nav-actions').hasAttribute('hidden')).toBe(true);
   });
 });
 
@@ -1198,6 +1227,17 @@ describe('handleSaveApply', () => {
   it('does nothing when no pending and dirty is false', () => {
     window.fetch = function () { throw new Error('should not be called') }
     expect(function () { window.handleSaveApply() }).not.toThrow()
+  })
+
+  it('shows aria-busy on Save while the POST is in flight', async () => {
+    window.__test.dirty = true
+    let resolvePost
+    window.fetch = () => new Promise((r) => { resolvePost = r })
+    window.handleSaveApply()
+    expect(document.getElementById('btn-save-apply').getAttribute('aria-busy')).toBe('true')
+    resolvePost({ ok: true, json: () => Promise.resolve({}) })
+    await new Promise((r) => setTimeout(r, 0))
+    expect(document.getElementById('btn-save-apply').getAttribute('aria-busy')).toBe(null)
   })
 })
 
@@ -2558,4 +2598,47 @@ describe('notif-keep-local sends only conflicting fields', () => {
 
     expect(sentKeys).toEqual(['wifi.ssid'])
   })
+})
+
+describe('nav collapse/expand', function () {
+  beforeEach(function () {
+    window.__test.groups = [{ id: 'wifi', label: 'Wifi' }, { id: 'gpio', label: 'Gpio' }];
+    window.__test.statusGroups = [];
+    window.__test.showReboot = true;
+    window.renderNav();
+  });
+
+  it('collapses section links into the device menu', function () {
+    window.__test.setNavMode(true);
+    expect(document.getElementById('nav-list').hasAttribute('hidden')).toBe(true);
+    var labels = Array.prototype.map.call(
+      document.querySelectorAll('#nav-actions a'),
+      function (a) { return a.textContent; });
+    expect(labels).toEqual(['Wifi', 'Gpio', 'Reboot']);
+    expect(document.getElementById('nav-sep').hasAttribute('hidden')).toBe(false);
+    expect(document.querySelectorAll('#nav-list a').length).toBe(0);
+  });
+
+  it('expands links back to inline', function () {
+    window.__test.setNavMode(true);
+    window.__test.setNavMode(false);
+    expect(document.getElementById('nav-list').hasAttribute('hidden')).toBe(false);
+    expect(document.querySelectorAll('#nav-list a').length).toBe(2);
+    expect(document.getElementById('nav-reboot')).not.toBeNull();
+    expect(document.getElementById('nav-sep').hasAttribute('hidden')).toBe(true);
+  });
+
+  it('shows a sections-only menu when collapsed with no device actions', function () {
+    window.__test.showReboot = false;
+    window.renderNav();
+    window.__test.setNavMode(true);
+    expect(document.getElementById('nav-list').hasAttribute('hidden')).toBe(true);
+    expect(document.getElementById('nav-actions').hasAttribute('hidden')).toBe(false);
+    expect(document.getElementById('nav-reboot')).toBeNull();
+    expect(document.getElementById('nav-sep').hasAttribute('hidden')).toBe(true);
+    var labels = Array.prototype.map.call(
+      document.querySelectorAll('#nav-actions a'),
+      function (a) { return a.textContent; });
+    expect(labels).toEqual(['Wifi', 'Gpio']);
+  });
 })

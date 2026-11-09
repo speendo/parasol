@@ -30,13 +30,14 @@ add_custom_command(
         "${ASSETS_SRC}/index.html"
         "${ASSETS_SRC}/app.min.js"
         "${ASSETS_SRC}/pico.jade.min.css"
+        "${CMAKE_SOURCE_DIR}/parasol_config.json"
         "${CMAKE_CURRENT_LIST_DIR}/cmake/generate_assets.cmake"
     COMMENT "Generating parasol assets"
 )
 
 idf_component_register(
     SRCS ${COMPONENT_SRCS} ${ASSETS_C}
-    INCLUDE_DIRS "include" "src" "${GENERATED_DIR}"
+    INCLUDE_DIRS "${GENERATED_DIR}" "include" "src"
     REQUIRES cJSON
     PRIV_REQUIRES AsyncTCP ESPAsyncWebServer
     COMPILE_DEFINITIONS PRSL_ALWAYS_SHOW_SAVE=${PRSL_ALWAYS_SHOW_SAVE}

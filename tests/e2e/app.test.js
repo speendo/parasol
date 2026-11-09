@@ -239,17 +239,19 @@ test.describe('Reset button', () => {
 })
 
 test.describe('Reboot button', () => {
-  test('System dropdown appears in nav', async ({ page }) => {
+  test('device menu appears in nav', async ({ page }) => {
     await page.goto('/')
     await page.waitForSelector('#config-form:not([aria-busy])')
-    await expect(page.locator('#nav-system')).toBeVisible()
+    await expect(page.locator('#nav-system')).toHaveCount(0)
+    await expect(page.locator('#nav-actions')).toBeVisible()
+    await page.locator('#nav-actions summary').click()
     await expect(page.locator('#nav-reboot')).toHaveText('Reboot')
   })
 
   test('Reboot opens confirmation dialog', async ({ page }) => {
     await page.goto('/')
     await page.waitForSelector('#config-form:not([aria-busy])')
-    await page.locator('#nav-system summary').click()
+    await page.locator('#nav-actions summary').click()
     await page.locator('#nav-reboot').click()
     await expect(page.locator('#reboot-dialog')).toBeVisible()
   })
@@ -257,7 +259,7 @@ test.describe('Reboot button', () => {
   test('Cancel closes dialog without POST', async ({ page }) => {
     await page.goto('/')
     await page.waitForSelector('#config-form:not([aria-busy])')
-    await page.locator('#nav-system summary').click()
+    await page.locator('#nav-actions summary').click()
     await page.locator('#nav-reboot').click()
     await expect(page.locator('#reboot-dialog')).toBeVisible()
     await page.locator('#reboot-cancel').click()
@@ -267,7 +269,7 @@ test.describe('Reboot button', () => {
   test('Confirm sends POST and shows Rebooting…', async ({ page }) => {
     await page.goto('/')
     await page.waitForSelector('#config-form:not([aria-busy])')
-    await page.locator('#nav-system summary').click()
+    await page.locator('#nav-actions summary').click()
     await page.locator('#nav-reboot').click()
     await page.locator('#reboot-confirm').click()
     await expect(page.locator('#reboot-dialog')).not.toBeVisible()
@@ -278,7 +280,7 @@ test.describe('Reboot button', () => {
     await page.goto('/')
     await page.waitForSelector('#config-form:not([aria-busy])')
     // Verify WS is connected (form not aria-busy)
-    await page.locator('#nav-system summary').click()
+    await page.locator('#nav-actions summary').click()
     await page.locator('#nav-reboot').click()
     await page.locator('#reboot-confirm').click()
     // The test server closes all WS connections in the reboot handler.
@@ -643,6 +645,97 @@ test.describe('Save non-string fields', () => {
     expect(savePayload.gpio.enabled).toBeDefined()
     var enabledValue = savePayload.gpio.enabled[2].value
     expect(typeof enabledValue).toBe('boolean')
+  })
+})
+
+test.describe('Mobile layout', () => {
+  test('nav does not overflow on a phone viewport', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 667 })
+    await page.goto('/')
+    await expect(page.locator('#config-form')).not.toHaveAttribute('aria-busy', 'true')
+    const overflow = await page.evaluate(() =>
+      document.documentElement.scrollWidth > document.documentElement.clientWidth)
+    expect(overflow).toBe(false)
+  })
+})
+
+test.describe('Responsive nav', () => {
+  test('sections inline and ☰ holds only Reboot on wide screens', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await page.goto('/')
+    await page.waitForSelector('#config-form:not([aria-busy])')
+    await expect(page.locator('#nav-list')).toBeVisible()
+    await expect(page.locator('#nav-list a[href="#wifi"]')).toBeVisible()
+    await page.locator('#nav-actions summary').click()
+    await expect(page.locator('#nav-reboot')).toBeVisible()
+    await expect(page.locator('#nav-actions a[href="#wifi"]')).toHaveCount(0)
+    await page.keyboard.press('Escape')
+  })
+
+  test('sections move into the ☰ menu on narrow screens', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 700 })
+    await page.goto('/')
+    await page.waitForSelector('#config-form:not([aria-busy])')
+    await expect(page.locator('#nav-list')).toBeHidden()
+    await page.locator('#nav-actions summary').click()
+    await expect(page.locator('#nav-actions a[href="#wifi"]')).toBeVisible()
+    await expect(page.locator('#nav-actions a[href="#gpio"]')).toBeVisible()
+    await page.locator('#nav-actions a[href="#gpio"]').click()
+    await expect(page.locator('details#gpio')).toHaveAttribute('open', '')
+    await expect(page.locator('#nav-actions')).not.toHaveAttribute('open', '')
+  })
+
+  test('re-expands to inline sections when widened', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 700 })
+    await page.goto('/')
+    await page.waitForSelector('#config-form:not([aria-busy])')
+    await expect(page.locator('#nav-list')).toBeHidden()
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await page.waitForTimeout(500)
+    await expect(page.locator('#nav-list')).toBeVisible()
+    await expect(page.locator('#nav-list a[href="#wifi"]')).toBeVisible()
+  })
+
+  test('collapses (does not wrap) in the 601–845px band', async ({ page }) => {
+    await page.setViewportSize({ width: 720, height: 800 })
+    await page.goto('/')
+    await page.waitForSelector('#config-form:not([aria-busy])')
+    await expect(page.locator('#nav-list')).toBeHidden()
+    await page.locator('#nav-actions summary').click()
+    await expect(page.locator('#nav-actions a[href="#wifi"]')).toBeVisible()
+    const overflow = await page.evaluate(() =>
+      document.documentElement.scrollWidth > document.documentElement.clientWidth)
+    expect(overflow).toBe(false)
+  })
+
+  test('☰ trigger is vertically centered with the nav text', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await page.goto('/')
+    await page.waitForSelector('#config-form:not([aria-busy])')
+    const centers = await page.evaluate(() => {
+      function cy(sel) {
+        const r = document.querySelector(sel).getBoundingClientRect()
+        return r.top + r.height / 2
+      }
+      return { summary: cy('#nav-actions summary'), title: cy('header nav h1'), link: cy('#nav-list a') }
+    })
+    expect(Math.abs(centers.summary - centers.title)).toBeLessThan(2)
+    expect(Math.abs(centers.summary - centers.link)).toBeLessThan(2)
+  })
+
+  test('collapsed menu draws a hairline divider above Reboot', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 700 })
+    await page.goto('/')
+    await page.waitForSelector('#config-form:not([aria-busy])')
+    await page.locator('#nav-actions summary').click()
+    const sep = await page.evaluate(() => {
+      const el = document.getElementById('nav-sep')
+      const cs = getComputedStyle(el)
+      return { hidden: el.hasAttribute('hidden'), width: cs.borderTopWidth, style: cs.borderTopStyle }
+    })
+    expect(sep.hidden).toBe(false)
+    expect(parseFloat(sep.width)).toBeGreaterThanOrEqual(1)
+    expect(sep.style).toBe('solid')
   })
 })
 

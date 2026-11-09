@@ -5,6 +5,7 @@ test-deps/lib/
 test-deps/debs/
 test-deps/_extract/
 test-deps/*.bak/
+test-deps/native/
 test-results/
 
 pico CI log.txt
@@ -12,3 +13,9 @@ docs/superpowers/plans/
 
 # isolated git worktrees
 .worktrees/
+
+# SDD scratch
+.superpowers/
+node_modules
+.venv
+test-deps/lib

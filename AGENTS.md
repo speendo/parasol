@@ -68,12 +68,12 @@ Then run the tests:
 npm run test:e2e
 ```
 
-Playwright config auto-starts uvicorn on port 8765 and stops it when done.
+Playwright config auto-starts uvicorn on port 8000 and stops it when done.
 
 ## Troubleshooting
 
 - **Tests time out:** missing system libs — `LD_LIBRARY_PATH=test-deps/lib ldd ~/.cache/ms-playwright/chromium-*/chrome-linux/chrome | grep "not found"`. Add missing packages to `test-deps/setup.sh` and re-run.
-- **Port 8765 in use:** `kill $(ps aux | grep 'uvicorn test_server' | grep -v grep | awk '{print $2}')`
+- **Port 8000 in use:** `kill $(ps aux | grep 'uvicorn test_server' | grep -v grep | awk '{print $2}')`
 - **uvicorn not found:** venv not activated — re-run `. .venv/bin/activate`
 - **Playwright "Executable doesn't exist":** re-run `npx playwright install chromium`
 
