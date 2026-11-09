@@ -70,7 +70,7 @@ jobs:
           apt-get install -y -qq git python3 python3-venv python3-pip curl ca-certificates
       - uses: actions/checkout@v7
       - name: Cache PlatformIO packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.platformio
           key: pio-${{ runner.os }}-espressif32-7.1.2
