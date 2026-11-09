@@ -695,5 +695,47 @@ test.describe('Responsive nav', () => {
     await expect(page.locator('#nav-list')).toBeVisible()
     await expect(page.locator('#nav-list a[href="#wifi"]')).toBeVisible()
   })
+
+  test('collapses (does not wrap) in the 601–845px band', async ({ page }) => {
+    await page.setViewportSize({ width: 720, height: 800 })
+    await page.goto('/')
+    await page.waitForSelector('#config-form:not([aria-busy])')
+    await expect(page.locator('#nav-list')).toBeHidden()
+    await page.locator('#nav-actions summary').click()
+    await expect(page.locator('#nav-actions a[href="#wifi"]')).toBeVisible()
+    const overflow = await page.evaluate(() =>
+      document.documentElement.scrollWidth > document.documentElement.clientWidth)
+    expect(overflow).toBe(false)
+  })
+
+  test('☰ trigger is vertically centered with the nav text', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await page.goto('/')
+    await page.waitForSelector('#config-form:not([aria-busy])')
+    const centers = await page.evaluate(() => {
+      function cy(sel) {
+        const r = document.querySelector(sel).getBoundingClientRect()
+        return r.top + r.height / 2
+      }
+      return { summary: cy('#nav-actions summary'), title: cy('header nav h1'), link: cy('#nav-list a') }
+    })
+    expect(Math.abs(centers.summary - centers.title)).toBeLessThan(2)
+    expect(Math.abs(centers.summary - centers.link)).toBeLessThan(2)
+  })
+
+  test('collapsed menu draws a hairline divider above Reboot', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 700 })
+    await page.goto('/')
+    await page.waitForSelector('#config-form:not([aria-busy])')
+    await page.locator('#nav-actions summary').click()
+    const sep = await page.evaluate(() => {
+      const el = document.getElementById('nav-sep')
+      const cs = getComputedStyle(el)
+      return { hidden: el.hasAttribute('hidden'), width: cs.borderTopWidth, style: cs.borderTopStyle }
+    })
+    expect(sep.hidden).toBe(false)
+    expect(parseFloat(sep.width)).toBeGreaterThanOrEqual(1)
+    expect(sep.style).toBe('solid')
+  })
 })
 

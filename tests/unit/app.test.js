@@ -1013,10 +1013,13 @@ describe('renderNav device menu', function () {
     expect(document.getElementById('nav-actions').contains(rebootLink)).toBe(true);
   });
 
-  it('hides #nav-actions and omits Reboot when showReboot is false', function () {
-    window.__test.showReboot = false;
+  it('hides #nav-actions and removes Reboot when showReboot is false', function () {
     window.__test.groups = [];
     window.__test.statusGroups = [];
+    window.__test.showReboot = true;
+    window.renderNav();
+    expect(document.getElementById('nav-reboot')).not.toBeNull();
+    window.__test.showReboot = false;
     window.renderNav();
     expect(document.getElementById('nav-reboot')).toBeNull();
     expect(document.getElementById('nav-actions').hasAttribute('hidden')).toBe(true);
@@ -2623,5 +2626,19 @@ describe('nav collapse/expand', function () {
     expect(document.querySelectorAll('#nav-list a').length).toBe(2);
     expect(document.getElementById('nav-reboot')).not.toBeNull();
     expect(document.getElementById('nav-sep').hasAttribute('hidden')).toBe(true);
+  });
+
+  it('shows a sections-only menu when collapsed with no device actions', function () {
+    window.__test.showReboot = false;
+    window.renderNav();
+    window.__test.setNavMode(true);
+    expect(document.getElementById('nav-list').hasAttribute('hidden')).toBe(true);
+    expect(document.getElementById('nav-actions').hasAttribute('hidden')).toBe(false);
+    expect(document.getElementById('nav-reboot')).toBeNull();
+    expect(document.getElementById('nav-sep').hasAttribute('hidden')).toBe(true);
+    var labels = Array.prototype.map.call(
+      document.querySelectorAll('#nav-actions a'),
+      function (a) { return a.textContent; });
+    expect(labels).toEqual(['Wifi', 'Gpio']);
   });
 })

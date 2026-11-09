@@ -121,6 +121,17 @@ intact where possible; the header's own flex children are spaced via the
 inline `<style>` (e.g. the ☰ pushed to the far right) rather than relying on
 Pico defaults for a 3-child nav.
 
+**Pico dropdown caveat (implementation note).** Pico's `nav details.dropdown`
+rule carries `margin: calc(var(--pico-nav-element-spacing-vertical) * -1) 0`,
+a negative vertical margin that assumes the dropdown is nested inside
+`nav ul > li` (whose `1rem` padding it cancels). Here the ☰ `details` is a
+**direct child of `nav`**, so that compensation is unbalanced and pushes the
+trigger off the text baseline. The inline `<style>` neutralizes it with
+`#nav-actions { margin: 0 0 0 auto; align-self: center; }`; do not "simplify"
+that rule away — it is what keeps the ☰ vertically centered. The
+section/action divider (`#nav-sep`) is likewise a Pico-variable hairline
+(`border-top: var(--pico-border-width) solid var(--pico-muted-border-color)`).
+
 ## Header DOM shape (target)
 
 ```html

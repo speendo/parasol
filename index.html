@@ -47,8 +47,13 @@
       }
       header nav { justify-content: flex-start; }
       #nav-list[hidden] { display: none; }
-      #nav-actions { margin-left: auto; }
+      #nav-actions { margin: 0 0 0 auto; align-self: center; }
       #nav-actions[hidden], #nav-sep[hidden] { display: none; }
+      #nav-sep {
+        padding: 0;
+        margin: 0.5rem 0;
+        border-top: var(--pico-border-width) solid var(--pico-muted-border-color);
+      }
       #nav-actions summary {
         width: 2.5rem;
         height: 2.5rem;

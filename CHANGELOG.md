@@ -1,7 +1,7 @@
 # Changelog
 
 ## 0.7.0
-- Responsive nav: always-present ☰ device menu; section links collapse into it on narrow screens (replaces the flex-wrap layout and the "System" dropdown).
+- Responsive nav: always-present ☰ device menu; section links collapse into it on narrow screens (replaces the flex-wrap layout and the "System" dropdown); ☰ vertically centered with the nav and a hairline divider above the Reboot action.
 - BREAKING: typed value pipeline — `on_set` now receives a `prsl_val_t *`; add `prsl_set_val`, `prsl_get_int`, `prsl_get_float`, `prsl_get_bool`. No JS/wire change.
 - Reject `_`-prefixed group IDs at registration (`ESP_ERR_INVALID_ARG`).
 - Add `prsl_stop()` lifecycle teardown (symmetric with `prsl_start`).
