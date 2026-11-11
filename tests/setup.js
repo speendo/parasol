@@ -7,6 +7,7 @@ const __dirname = dirname(__filename)
 
 document.head.innerHTML = `
   <meta name="parasol-always-show-save" content="0">
+  <meta name="parasol-ack-timeout" content="5000">
 `
 document.body.innerHTML = `
   <header>

@@ -694,6 +694,7 @@ async def get_root():
     html = html.replace("{{TITLE}}", PARASOL_TITLE)
     html = html.replace("{{LOGO}}", PARASOL_LOGO)
     html = html.replace("{{FAVICON}}", PARASOL_FAVICON)
+    html = html.replace("{{ACK_TIMEOUT_MS}}", "5000")
     return HTMLResponse(html)
 
 

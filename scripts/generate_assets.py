@@ -25,6 +25,7 @@ def config_values(path):
         "logo": cfg.get("logo", "/logo.png"),
         "favicon": cfg.get("favicon", "/favicon.ico"),
         "always_show_save": "1" if cfg.get("always_show_save") else "0",
+        "ack_timeout_ms": str(cfg.get("ack_timeout_ms", 5000)),
     }
 
 def load(assets_src, name):
@@ -47,7 +48,8 @@ def main(assets_src, config, out_dir):
     for key, value in (("{{TITLE}}", vals["title"]),
                        ("{{LOGO}}", vals["logo"]),
                        ("{{FAVICON}}", vals["favicon"]),
-                       ("{{ALWAYS_SHOW_SAVE}}", vals["always_show_save"])):
+                       ("{{ALWAYS_SHOW_SAVE}}", vals["always_show_save"]),
+                       ("{{ACK_TIMEOUT_MS}}", vals["ack_timeout_ms"])):
         html = html.replace(key, value)
     pieces = [
         ("index_html_gz", "text/html", gzip_bytes(html.encode("utf-8"))),

@@ -3197,3 +3197,196 @@ describe('ack correlation', () => {
     expect(last.data.wifi.ssid[2].value).toBe('retry')
   })
 })
+
+describe('ack timeout and recovery', () => {
+  function setup(av) {
+    document.getElementById('config-form').removeAttribute('aria-busy')
+    document.querySelector('#config-form').innerHTML =
+      '<input name="wifi.ssid" value="' + av + '" />' +
+      '<input name="wifi.pass" value="" />'
+    window.__test.groups = [{ id: 'wifi', fields: [
+      { key: 'ssid', type: 'text', label: 'SSID', opts: { value: av } },
+      { key: 'pass', type: 'text', label: 'Pass', opts: { value: '' } },
+    ]}]
+    window.__test.pending = {}
+    window.__test.inFlight = {}
+    window.__test.lastSent = {}
+    window.__test.nextId = 1
+    window.__test.sent = []
+    window.__test.onWSSend = function (d) { window.__test.sent.push(JSON.parse(d)) }
+    document.getElementById('server-changed').hidden = true
+    window.connectWS()
+    window.__test.wsReady()
+    // connectWS() sets aria-busy; clear it again so settings pushes are
+    // classified normally instead of taking the reconnect force-reset branch.
+    document.getElementById('config-form').removeAttribute('aria-busy')
+    window.__test.recovering = {}
+    window.__test.syncId = 0
+  }
+  /* Simulate a user edit: put the value in the widget FIRST, then send it.
+   * writeBack() only rewrites a widget that still holds the value that was
+   * sent, so a bare onUserInput() call would suppress every write-back. */
+  function type(key, val) {
+    var el = document.querySelector('[name="' + key + '"]')
+    if (el.type === 'checkbox') { el.checked = !!val; el.indeterminate = false }
+    else el.value = val
+    window.onUserInput(key, val)
+  }
+  function recv(msg) {
+    window.__test.receiveWSMessage({ data: JSON.stringify(msg) })
+  }
+
+  beforeEach(() => { vi.useFakeTimers(); setup('old') })
+  afterEach(() => { vi.useRealTimers() })
+
+  it('timeout clears inFlight and enters recovery', () => {
+    type('wifi.ssid', 'sent')
+    vi.advanceTimersByTime(5000)
+    expect(window.__test.inFlight['wifi.ssid']).toBe(false)
+    expect(window.__test.pending[1]).toBeUndefined()
+    expect(window.__test.recovering['wifi.ssid']).toEqual({ sent: 'sent', retried: false })
+    expect(window.__test.sent[1]).toEqual({ action: 'sync', i: 2 })
+  })
+
+  it('timeout then landed reply sends no resend', () => {
+    type('wifi.ssid', 'sent')
+    vi.advanceTimersByTime(5000)
+    window.__test.sent = []
+    recv({ type: 'settings', i: 2, _meta: {}, data: { wifi: {
+      ssid: ['text', 'SSID', { value: 'sent' }] }}})
+    expect(window.__test.sent).toEqual([])
+    expect(window.__test.recovering).toEqual({})
+    expect(window.__test.lastSent['wifi.ssid']).toBe('sent')
+  })
+
+  it('timeout then missing reply resends exactly once', () => {
+    type('wifi.ssid', 'sent')
+    vi.advanceTimersByTime(5000)
+    window.__test.sent = []
+    recv({ type: 'settings', i: 2, _meta: {}, data: { wifi: {
+      ssid: ['text', 'SSID', { value: 'old' }] }}})
+    expect(window.__test.sent.length).toBe(1)
+    expect(window.__test.sent[0].i).toBe(3)
+    expect(window.__test.sent[0].data.wifi.ssid[2].value).toBe('sent')
+    expect(window.__test.pending[3].retried).toBe(true)
+    expect(window.__test.recovering).toEqual({})
+  })
+
+  it('a timed-out retry adopts the store value and stops', () => {
+    type('wifi.ssid', 'sent')
+    vi.advanceTimersByTime(5000)              // i:1 timed out → sync i:2
+    recv({ type: 'settings', i: 2, _meta: {}, data: { wifi: {
+      ssid: ['text', 'SSID', { value: 'old' }] }}})   // not landed → resend i:3
+    vi.advanceTimersByTime(5000)              // retry timed out → sync i:4
+    window.__test.sent = []
+    recv({ type: 'settings', i: 4, _meta: {}, data: { wifi: {
+      ssid: ['text', 'SSID', { value: 'old' }] }}})
+    expect(window.__test.sent).toEqual([])
+    expect(window.__test.recovering).toEqual({})
+    expect(document.querySelector('[name="wifi.ssid"]').value).toBe('old')
+    expect(window.__test.lastSent['wifi.ssid']).toBe('old')
+  })
+
+  it('a typed value is not overwritten by recovery', () => {
+    type('wifi.ssid', 'sent')
+    vi.advanceTimersByTime(5000)
+    document.querySelector('[name="wifi.ssid"]').value = 'typed'
+    recv({ type: 'settings', i: 2, _meta: {}, data: { wifi: {
+      ssid: ['text', 'SSID', { value: 'old' }] }}})
+    expect(document.querySelector('[name="wifi.ssid"]').value).toBe('typed')
+    expect(window.__test.sent.filter(function (m) { return m.action === 'apply' }).length).toBe(1)   // only the original apply
+    expect(window.__test.recovering).toEqual({})
+  })
+
+  it('sync is deferred until pending drains', () => {
+    type('wifi.ssid', 'a')                    // i:1
+    type('wifi.pass', 'p')                    // i:2
+    vi.advanceTimersByTime(5000)
+    var syncs = window.__test.sent.filter(function (m) { return m.action === 'sync' })
+    expect(syncs.length).toBe(1)
+    expect(syncs[0].i).toBe(3)
+    expect(window.__test.sent[window.__test.sent.length - 1].action).toBe('sync')
+  })
+
+  it('sync timeout is terminal', () => {
+    type('wifi.ssid', 'sent')
+    vi.advanceTimersByTime(5000)              // sync i:2
+    window.__test.sent = []
+    vi.advanceTimersByTime(5000)              // reply never comes
+    expect(window.__test.syncId).toBe(0)
+    expect(window.__test.recovering).toEqual({})
+    expect(window.__test.sent).toEqual([])
+  })
+
+  it('reconnect clears recovery and timers', () => {
+    type('wifi.ssid', 'sent')
+    vi.advanceTimersByTime(5000)
+    window.__test.sent = []
+    window.onWSClose()                        // no __test hook exists for this
+    expect(window.__test.recovering).toEqual({})
+    expect(window.__test.syncId).toBe(0)
+    expect(window.__test.pending).toEqual({})
+    vi.advanceTimersByTime(60000)             // backoff reconnect must not send
+    expect(window.__test.sent).toEqual([])
+  })
+
+  it('a broadcast resolves recovery without a prompt', () => {
+    type('wifi.ssid', 'sent')
+    vi.advanceTimersByTime(5000)
+    window.__test.sent = []
+    recv({ type: 'settings', _meta: {}, data: { wifi: {
+      ssid: ['text', 'SSID', { value: 'sent' }] }}})
+    expect(window.__test.sent).toEqual([])
+    expect(document.getElementById('server-changed').hidden).toBe(true)
+    expect(window.__test.recovering).toEqual({})
+  })
+
+  it('a broadcast while a batch is pending does not settle it', () => {
+    type('wifi.ssid', 'a')
+    recv({ type: 'settings', _meta: {}, data: { wifi: {
+      ssid: ['text', 'SSID', { value: 'external' }] }}})
+    expect(window.__test.inFlight['wifi.ssid']).toBe(true)
+    expect(window.__test.groups[0].fields[0].opts.value).toBe('old')
+  })
+
+  it('a sync reply does not prompt for an in-flight key', () => {
+    type('wifi.ssid', 'sent')
+    vi.advanceTimersByTime(5000)              // ssid recovering, sync i:2
+    type('wifi.pass', 'p')                    // i:3, in flight
+    recv({ type: 'settings', i: 2, _meta: {}, data: { wifi: {
+      ssid: ['text', 'SSID', { value: 'old' }],
+      pass: ['text', 'Pass', { value: '' }] }}})
+    expect(document.getElementById('server-changed').hidden).toBe(true)
+    expect(window.__test.inFlight['wifi.pass']).toBe(true)
+  })
+
+  it('a late ack for a timed-out batch changes nothing', () => {
+    type('wifi.ssid', 'sent')
+    vi.advanceTimersByTime(5000)              // i:1 timed out; sync i:2
+    window.__test.sent = []
+    recv({ type: 'ack', i: 1, d: { 'wifi.ssid': 'ghost' } })
+    expect(window.__test.sent).toEqual([])
+    expect(window.__test.recovering['wifi.ssid']).toEqual({ sent: 'sent', retried: false })
+    expect(window.__test.lastSent['wifi.ssid']).toBe('old')
+    expect(document.querySelector('[name="wifi.ssid"]').value).toBe('sent')
+  })
+
+  it('ack_timeout_ms comes from the meta tag with a fallback', () => {
+    var m = document.querySelector('meta[name="parasol-ack-timeout"]')
+    m.content = '2500'
+    window.__test.readAckTimeout()
+    expect(window.__test.ackTimeout).toBe(2500)
+    m.content = ''
+    window.__test.readAckTimeout()
+    expect(window.__test.ackTimeout).toBe(5000)
+  })
+
+  it('an old-firmware push that never acks degrades to terminal', () => {
+    type('wifi.ssid', 'sent')
+    vi.advanceTimersByTime(5000)              // sync i:2
+    vi.advanceTimersByTime(5000)              // no reply → terminal
+    expect(document.querySelector('[name="wifi.ssid"]').value).toBe('sent')
+    expect(window.__test.recovering).toEqual({})
+    expect(document.querySelector('#config-form').getAttribute('aria-busy')).not.toBe('true')
+  })
+})

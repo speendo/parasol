@@ -25,6 +25,9 @@ var parasol = (function () {
   var nextId = 1;
   var pending = {};
   var ackTimeout = 5000;
+  var recovering = {};
+  var syncId = 0;
+  var syncTimer = null;
   var wsReconnectTimer = null;
   var wsRetries = 0;
   var formInteracted = false;
@@ -403,10 +406,16 @@ var parasol = (function () {
     dirty = dirtyFlag;
     updateMetaFlags(msg);
 
+    // The sync reply is the only message exempt from the drop-while-in-flight
+    // guard: it must reach recovery and change detection even when another
+    // batch is pending.
+    var isReply = msg.i !== undefined && syncId !== 0 && msg.i === syncId;
+    if (isReply) { syncId = 0; if (syncTimer) { clearTimeout(syncTimer); syncTimer = null; } }
+
     var hasInFlight = false;
     for (var k in inFlight) { if (inFlight[k]) { hasInFlight = true; break; } }
-    if (hasInFlight && configForm.getAttribute('aria-busy') !== 'true') return;
-    if (hasInFlight) {
+    if (!isReply && hasInFlight && configForm.getAttribute('aria-busy') !== 'true') return;
+    if (hasInFlight && !isReply) {
       updateAV(data);
       for (var sk in inFlight) { inFlight[sk] = false; }
       for (var sk in lastSent) { lastSent[sk] = undefined; }
@@ -436,6 +445,18 @@ var parasol = (function () {
       return;
     }
 
+    // Any authoritative value set feeds the recovery ladder. Keys with a
+    // batch in flight are older than that batch: keep their AV.
+    for (var rk in recovering) {
+      if (inFlight[rk]) continue;
+      var rp = rk.split('.');
+      var rv = resolveNested(data, rp);
+      if (rv !== undefined && rv instanceof Array && rv.length >= 3) rv = rv[2] && rv[2].value;
+      if (rv === undefined) continue;
+      resolveRecovering(rk, rv);
+    }
+    maybeSync();
+
     syncFileLabels(data);
 
     var changedFields = {};
@@ -448,6 +469,9 @@ var parasol = (function () {
         if (field.type === 'file') continue;
         var sField = sGroup[field.key];
         if (!sField) continue;
+        var fkey = grp.id + '.' + field.key;
+        if (inFlight[fkey]) continue;     // value predates the pending batch
+        if (recovering[fkey]) continue;   // resolved by the loop above
         var newAV = sField[2].value;
         var oldAV = field.opts.value;
         if (String(newAV) === String(oldAV)) continue;
@@ -508,6 +532,7 @@ var parasol = (function () {
         var field = grp.fields[fi];
         var sField = sGroup[field.key];
         if (!sField) continue;
+        if (inFlight[grp.id + '.' + field.key]) continue;
         field.opts.value = sField[2].value;
       }
     }
@@ -603,6 +628,75 @@ var parasol = (function () {
     for (var k in pending) clearTimeout(pending[k].timer);
     pending = {};
     nextId = 1;
+    recovering = {};
+    syncId = 0;
+    if (syncTimer) { clearTimeout(syncTimer); syncTimer = null; }
+  }
+
+  /**
+   * A batch timed out: drop it, mark each key unreconciled, and ask the
+   * server for authoritative values once every batch has drained.
+   */
+  function onTimeout(id) {
+    var batch = pending[id];
+    if (!batch) return;
+    if (batch.timer) clearTimeout(batch.timer);
+    delete pending[id];
+    for (var i = 0; i < batch.keys.length; i++) {
+      var key = batch.keys[i];
+      inFlight[key] = false;
+      lastSent[key] = avOf(key);
+      recovering[key] = { sent: batch.sent[key], retried: batch.retried };
+    }
+    maybeSync();
+  }
+
+  /** Send one sync when nothing is pending and something is unreconciled. */
+  function maybeSync() {
+    if (syncId) return;                 // one sync at a time
+    for (var p in pending) { return; }  // defer until every batch drains
+    for (var r in recovering) {
+      // A closed socket means a reconnect is about to reset everything; do
+      // not arm a timer that would silently terminate an unrequested recovery.
+      if (!ws || ws.readyState !== 1) return;
+      syncId = nextId++;
+      syncTimer = setTimeout(onSyncTimeout, ackTimeout);
+      ws.send(JSON.stringify({ action: 'sync', i: syncId }));
+      return;
+    }
+  }
+
+  /** The sync reply never came: terminal, leave typed values unsent. */
+  function onSyncTimeout() {
+    syncId = 0;
+    syncTimer = null;
+    recovering = {};
+  }
+
+  /**
+   * Feed one authoritative value into a key's pending recovery, deciding
+   * whether to resend once or adopt the store value.
+   */
+  function resolveRecovering(key, av) {
+    var r = recovering[key];
+    if (!r) return;
+    var f = findField.apply(null, key.split('.'));
+    if (f) f.opts.value = av;
+    lastSent[key] = av;
+    if (String(readFormValue(key.split('.'))) !== String(r.sent)) {
+      delete recovering[key]; return;
+    }
+    if (String(av) === String(r.sent)) { delete recovering[key]; return; }
+    delete recovering[key];
+    if (!r.retried) sendToServer(key, r.sent, true);
+    else writeBack(key, r.sent, av);
+  }
+
+  /** Read the ack timeout from the meta tag, defaulting to 5000 ms. */
+  function readAckTimeout() {
+    var m = document.querySelector('meta[name="parasol-ack-timeout"]');
+    var n = m ? parseInt(m.content, 10) : 0;
+    ackTimeout = n > 0 ? n : 5000;
   }
 
   function settleLower(id) {
@@ -613,8 +707,10 @@ var parasol = (function () {
     for (var i = 0; i < batch.keys.length; i++) {
       var key = batch.keys[i];
       inFlight[key] = false;
+      delete recovering[key];
       lastSent[key] = avOf(key);
     }
+    maybeSync();
   }
 
   function settle(id, msg) {
@@ -625,6 +721,7 @@ var parasol = (function () {
     for (var i = 0; i < batch.keys.length; i++) {
       var key = batch.keys[i];
       inFlight[key] = false;
+      delete recovering[key];
       if (msg.e && msg.e[key]) {
         lastSent[key] = avOf(key);
         writeBack(key, batch.sent[key], lastSent[key]);
@@ -639,6 +736,7 @@ var parasol = (function () {
     flushQueued();
     setBaseline();
     updateUI();
+    maybeSync();
   }
 
   function onAck(msg) {
@@ -669,6 +767,7 @@ var parasol = (function () {
     var i = nextId++;                         // Task 4 closes over this
     pending[i] = { keys: [key], sent: {}, retried: retried === true };
     pending[i].sent[key] = value;
+    pending[i].timer = setTimeout(function () { onTimeout(i); }, ackTimeout);
     var patch = {};
     patch[parts[0]] = {};
     patch[parts[0]][parts[1]] = [field.type, field.label, { value: value }];
@@ -1113,6 +1212,7 @@ var parasol = (function () {
    */
   async function init() {
     if (!configForm || !navList || !statusBar || !footer || !btnSaveApply || !btnReset) return;
+    readAckTimeout();
     wireButtons();
     connectWS();
     window.addEventListener('beforeunload', onBeforeUnload);
@@ -1482,6 +1582,9 @@ var parasol = (function () {
     Object.defineProperty(window.__test, 'pending', { get: function () { return pending; }, set: function (v) { pending = v; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'nextId', { get: function () { return nextId; }, set: function (v) { nextId = v; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'ackTimeout', { get: function () { return ackTimeout; }, set: function (v) { ackTimeout = v; }, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'recovering', { get: function () { return recovering; }, set: function (v) { recovering = v; }, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'syncId', { get: function () { return syncId; }, set: function (v) { syncId = v; }, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'readAckTimeout', { value: readAckTimeout, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'formInteracted', { get: function () { return formInteracted; }, set: function (v) { formInteracted = v; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'showReset', { get: function () { return showReset; }, set: function (v) { showReset = v; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'showReboot', { get: function () { return showReboot; }, set: function (v) { showReboot = v; }, enumerable: true, configurable: true });
