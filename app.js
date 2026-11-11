@@ -22,6 +22,9 @@ var parasol = (function () {
   var ws = null;
   var lastSent = {};
   var inFlight = {};
+  var nextId = 1;
+  var pending = {};
+  var ackTimeout = 5000;
   var wsReconnectTimer = null;
   var wsRetries = 0;
   var formInteracted = false;
@@ -231,6 +234,7 @@ var parasol = (function () {
 
   /** Open a WebSocket connection to /api/events. Sets aria-busy on the form. */
   function connectWS() {
+    resetCorrelation();
     configForm.setAttribute('aria-busy', 'true');
     var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     ws = new WebSocket(proto + '//' + location.host + '/api/events');
@@ -248,6 +252,7 @@ var parasol = (function () {
 
   /** Handle WS close: exponential backoff reconnect up to 5 retries, then show manual retry button. */
   function onWSClose() {
+    resetCorrelation();
     ws = null;
     configForm.setAttribute('aria-busy', 'true');
     if (rebooting) return;
@@ -360,11 +365,11 @@ var parasol = (function () {
   }
 
   /**
-   * WebSocket message handler - implements the 10-case state machine.
+   * WebSocket message handler.
    *
-   * Echo resolution:   Cases 6-7 - match inFlight sends against server echo
-   * External updates:  Cases 1,3,4,5 - handle server-pushed changes
-   * In-flight defer:   Cases 8-9-10 - ignore packets while awaiting echo
+   * Acks (`type:"ack"`) settle pending batches. Settings pushes apply `_meta`
+   * before the in-flight guard, then keep the drop-while-in-flight behavior
+   * for external updates.
    *
    * @param {MessageEvent} event - WS message with JSON data
    */
@@ -386,57 +391,22 @@ var parasol = (function () {
     var msg = JSON.parse(event.data);
     if (msg.type === 'status') { processStatus(msg.data); return; }
     if (msg.type === 'error') { showError(msg.message); return; }
-    if (msg.type !== 'settings' && !msg._meta && !(typeof __DEV__ === 'undefined' || __DEV__)) return;
     wsRetries = 0;
+    if (msg.type === 'ack') { onAck(msg); return; }
+    if (msg.type !== 'settings' && !msg._meta && !(typeof __DEV__ === 'undefined' || __DEV__)) return;
 
+    // `_meta` is applied before the in-flight guard so a pending batch can
+    // never stall Save/Reset/Reboot. `data` must be hoisted with it: Task 4's
+    // recovery loop reads it above the guard as well.
     var data = msg.data || msg;
     var dirtyFlag = metaVal(msg, 'dirty', '_dirty') === true;
-
-    // ── Echo resolution ──
-    var echoMatched = false;
-    for (var key in inFlight) {
-      if (!inFlight[key]) continue;
-      var parts = key.split('.');
-      var serverVal = resolveNested(data, parts);
-      if (serverVal !== undefined && serverVal instanceof Array && serverVal.length >= 3) {
-        serverVal = serverVal[2] && serverVal[2].value;
-      }
-      if (serverVal !== undefined && String(serverVal) === String(lastSent[key])) {
-        inFlight[key] = false;
-        echoMatched = true;
-      }
-    }
-
-    if (echoMatched) {
-      dirty = dirtyFlag;
-      updateMetaFlags(msg);
-      var queuedKeys = [];
-      for (var key in inFlight) {
-        if (inFlight[key]) continue;
-        var parts = key.split('.');
-        var fv = readFormValue(parts);
-        if (fv !== undefined && String(fv) !== String(lastSent[key])) {
-          queuedKeys.push({key: key, value: fv});
-        }
-      }
-      if (queuedKeys.length > 0) {
-        for (var qi = 0; qi < queuedKeys.length; qi++) {
-          sendToServer(queuedKeys[qi].key, queuedKeys[qi].value);
-        }
-      }
-      updateAV(data);
-      setBaseline();
-      updateUI();
-      configForm.removeAttribute('aria-busy');
-      return;
-    }
+    dirty = dirtyFlag;
+    updateMetaFlags(msg);
 
     var hasInFlight = false;
     for (var k in inFlight) { if (inFlight[k]) { hasInFlight = true; break; } }
     if (hasInFlight && configForm.getAttribute('aria-busy') !== 'true') return;
     if (hasInFlight) {
-      dirty = dirtyFlag;
-      updateMetaFlags(msg);
       updateAV(data);
       for (var sk in inFlight) { inFlight[sk] = false; }
       for (var sk in lastSent) { lastSent[sk] = undefined; }
@@ -458,8 +428,6 @@ var parasol = (function () {
       return;
     }
 
-    dirty = dirtyFlag;
-    updateMetaFlags(msg);
     updateUI();
 
     // Initial load — no groups yet, process settings directly
@@ -593,25 +561,118 @@ var parasol = (function () {
     }
   }
 
+  /** Applied value for a flat key, from the in-memory field definitions. */
+  function avOf(key) {
+    var p = key.split('.');
+    var f = findField(p[0], p[1]);
+    return f ? f.opts.value : undefined;
+  }
+  function labelOf(key) {
+    var p = key.split('.');
+    var f = findField(p[0], p[1]);
+    return f ? f.label : key;
+  }
+
+  /**
+   * Write the store's decided value into one widget only if the user has not
+   * typed since the send. Always updates AV.
+   */
+  function writeBack(key, sent, decided) {
+    var p = key.split('.');
+    var f = findField(p[0], p[1]);
+    if (!f) return;
+    f.opts.value = decided;
+    var fv = readFormValue(p);
+    if (String(fv) !== String(sent)) return;
+    populateFromGroups([{ id: p[0], fields: [f] }]);
+  }
+
+  /** Re-send any field whose widget differs from what the server last decided. */
+  function flushQueued() {
+    for (var key in inFlight) {
+      if (inFlight[key]) continue;
+      var fv = readFormValue(key.split('.'));
+      if (fv !== undefined && String(fv) !== String(lastSent[key])) {
+        sendToServer(key, fv);
+      }
+    }
+  }
+
+  /** Clear every correlation artefact; ids are per connection. */
+  function resetCorrelation() {
+    for (var k in pending) clearTimeout(pending[k].timer);
+    pending = {};
+    nextId = 1;
+  }
+
+  function settleLower(id) {
+    var batch = pending[id];
+    if (!batch) return;
+    if (batch.timer) clearTimeout(batch.timer);
+    delete pending[id];
+    for (var i = 0; i < batch.keys.length; i++) {
+      var key = batch.keys[i];
+      inFlight[key] = false;
+      lastSent[key] = avOf(key);
+    }
+  }
+
+  function settle(id, msg) {
+    var batch = pending[id];
+    if (!batch) return;
+    if (batch.timer) clearTimeout(batch.timer);
+    delete pending[id];
+    for (var i = 0; i < batch.keys.length; i++) {
+      var key = batch.keys[i];
+      inFlight[key] = false;
+      if (msg.e && msg.e[key]) {
+        lastSent[key] = avOf(key);
+        writeBack(key, batch.sent[key], lastSent[key]);
+        showError('Rejected: ' + labelOf(key));
+      } else if (msg.d && key in msg.d) {
+        lastSent[key] = msg.d[key];
+        writeBack(key, batch.sent[key], msg.d[key]);
+      } else {
+        lastSent[key] = avOf(key);
+      }
+    }
+    flushQueued();
+    setBaseline();
+    updateUI();
+  }
+
+  function onAck(msg) {
+    // Acks can only reference ids this connection actually sent: ids are
+    // consumed only by a successful send, and the counter resets on connect.
+    // Anything at or above nextId is a stale frame or a bogus id — settling
+    // live batches from it would be worse than ignoring it.
+    if (msg.i >= nextId) return;
+    var older = [];
+    for (var k in pending) { if (+k < msg.i) older.push(+k); }
+    for (var j = 0; j < older.length; j++) settleLower(older[j]);
+    settle(msg.i, msg);
+  }
+
   /**
    * Send a single field value to the server over WebSocket as an `apply` action.
    * Sets lastSent and inFlight tracking.
    * @param {string} key - "grpId.fieldKey"
    * @param {*} value
    */
-  function sendToServer(key, value) {
+  function sendToServer(key, value, retried) {
     if (!ws || ws.readyState !== 1) return;
+    var parts = key.split('.');
+    var field = findField(parts[0], parts[1]);
+    if (!field) return;                       // before any bookkeeping
     lastSent[key] = value;
     inFlight[key] = true;
-    var parts = key.split('.');
-    var grpId = parts[0];
-    var fieldKey = parts[1];
-    var field = findField(grpId, fieldKey);
-    if (!field) return;
+    var i = nextId++;                         // Task 4 closes over this
+    pending[i] = { keys: [key], sent: {}, retried: retried === true };
+    pending[i].sent[key] = value;
     var patch = {};
-    patch[grpId] = {};
-    patch[grpId][fieldKey] = [field.type, field.label, { value: value }];
-    ws.send(JSON.stringify({action: 'apply', data: patch}));
+    patch[parts[0]] = {};
+    patch[parts[0]][parts[1]] = [field.type, field.label, { value: value }];
+    ws.send(JSON.stringify({ action: 'apply', i: i, data: patch }));
   }
 
   /**
@@ -1418,6 +1479,9 @@ var parasol = (function () {
     Object.defineProperty(window.__test, 'dirty', { get: function () { return dirty; }, set: function (v) { dirty = v; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'inFlight', { get: function () { return inFlight; }, set: function (v) { inFlight = v; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'lastSent', { get: function () { return lastSent; }, set: function (v) { lastSent = v; }, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'pending', { get: function () { return pending; }, set: function (v) { pending = v; }, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'nextId', { get: function () { return nextId; }, set: function (v) { nextId = v; }, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'ackTimeout', { get: function () { return ackTimeout; }, set: function (v) { ackTimeout = v; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'formInteracted', { get: function () { return formInteracted; }, set: function (v) { formInteracted = v; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'showReset', { get: function () { return showReset; }, set: function (v) { showReset = v; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'showReboot', { get: function () { return showReboot; }, set: function (v) { showReboot = v; }, enumerable: true, configurable: true });
