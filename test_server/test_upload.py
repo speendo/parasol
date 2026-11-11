@@ -127,9 +127,11 @@ def test_ws_apply_skips_file_field():
     with client.websocket_connect("/api/events") as ws:
         ws.receive_json()  # status push
         ws.receive_json()  # settings push
-        ws.send_json({"action": "apply",
+        ws.send_json({"action": "apply", "i": 1,
                       "data": {"audio": {"clip": ["file", "Clip", {"value": "hacked.mp3"}]}}})
-        ws.receive_json()  # broadcast
+        ack = ws.receive_json()  # file fields ack, but apply nothing
+        assert ack["type"] == "ack"
+        assert ack["d"]["audio.clip"] == "none"
     data = client.get("/api/settings").json()
     assert data["audio"]["clip"][2]["value"] == "none"
 

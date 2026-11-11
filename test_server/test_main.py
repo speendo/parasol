@@ -119,8 +119,12 @@ def test_ws_apply_updates_applied():
     with client.websocket_connect("/api/events") as ws:
         ws.receive_json()  # status push
         ws.receive_json()  # initial settings
-        ws.send_json({"action": "apply", "data": {"wifi": {"ssid": ["text", "SSID", {"value": "WSTest"}]}}})
-        pushed = ws.receive_json()
+        ws.send_json({"action": "apply", "i": 1, "data": {"wifi": {"ssid": ["text", "SSID", {"value": "WSTest"}]}}})
+        ack = ws.receive_json()
+        assert ack["type"] == "ack"
+        assert ack["i"] == 1
+        assert ack["d"]["wifi.ssid"] == "WSTest"
+        pushed = ws.receive_json()  # settings broadcast, written after the ack
         assert pushed["data"]["wifi"]["ssid"][2]["value"] == "WSTest"
 
 
@@ -128,8 +132,10 @@ def test_ws_apply_makes_dirty():
     with client.websocket_connect("/api/events") as ws:
         ws.receive_json()  # status push
         ws.receive_json()  # initial settings
-        ws.send_json({"action": "apply", "data": {"wifi": {"ssid": ["text", "SSID", {"value": "DirtyMaker"}]}}})
-        pushed = ws.receive_json()
+        ws.send_json({"action": "apply", "i": 1, "data": {"wifi": {"ssid": ["text", "SSID", {"value": "DirtyMaker"}]}}})
+        ack = ws.receive_json()
+        assert ack["type"] == "ack"
+        pushed = ws.receive_json()  # settings broadcast, written after the ack
         assert pushed["_meta"]["dirty"] is True
 
 
