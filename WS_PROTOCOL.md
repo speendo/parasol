@@ -125,13 +125,13 @@ accordion section title. If absent, the group ID is title-cased (e.g.,
 
 Sent to the sender of an `apply`, never broadcast. Every apply gets **exactly
 one** ack — including no-ops, unknown keys, file fields, and all-rejected
-batches. It is written **before** the settings broadcast the apply produces.
+applies. It is written **before** the settings broadcast the apply produces.
 
 ```json
 {
   "type": "ack",
   "i": 7,
-  "d": {"wifi.ssid": "station", "gpio.pin": "2"},
+  "d": {"wifi.ssid": "NewName", "wifi.mode": "station"},
   "e": {"wifi.mode": "rejected"}
 }
 ```
@@ -149,11 +149,15 @@ batches. It is written **before** the settings broadcast the apply produces.
   Save abort on the first rejection: fields before the bad one were written,
   fields after it were never attempted, and `d` reports their unchanged stored
   values.
+- **A rejected key appears in both `d` and `e`.** `d` carries the value the
+  store still holds for it (the example's `"wifi.mode": "station"` is the old
+  value, unchanged by the failed write); `e` carries the failure. The client
+  branches on `e` first, so the rejection wins over the stored value.
 
-A correlated rejection is reported only in `e`; no second `type:"error"`
-message follows. A batch that reaches an ack but cannot be applied at all
-(`data` is not an object) gets the ack **and** a `type:"error"`; unparsable
-input has no readable `i` and gets `type:"error"` alone.
+A correlated rejection is reported as a failure only in `e` — no second
+`type:"error"` message follows. A batch that reaches an ack but cannot be
+applied at all (`data` is not an object) gets the ack **and** a `type:"error"`;
+unparsable input has no readable `i` and gets `type:"error"` alone.
 
 ### `type: "error"`
 
@@ -202,9 +206,9 @@ there is nothing to correlate to.
 CPU- and bandwidth-constrained). The server merges the partial update into its
 store.
 
-**Multi-field apply:** If the user changes multiple fields between WS sends,
-the browser batches them under one `i`; the ack settles every key in the
-message:
+**Multi-field apply:** A raw client may batch multiple fields under one `i`; the
+ack reports every key in the message. The bundled browser sends one apply per
+field, each with its own `i`:
 
 ```json
 {
