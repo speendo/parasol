@@ -14,16 +14,15 @@ A new client against old firmware degrades to the timeout path.
 The public API (`prsl_*`) does not change; firmware-visible behavior changes are
 documented in `API_REFERENCE.md`.
 
-**Target codebase:** `main` after 0.8.0 merges. All `app.js` line references are
-verified against the 0.8.0 branch; re-check them after the merge in case the
-line numbers shift.
+**Target codebase:** `main`, with 0.8.0 merged. All `app.js` line references are
+verified against `main` at the time this branch was cut.
 
 ---
 
 ## 1. The defect
 
 The browser correlates a server push with its own `apply` by value equality
-(`app.js:403`: `String(serverVal) === String(lastSent[key])`). The wire carries
+(`app.js:404`: `String(serverVal) === String(lastSent[key])`). The wire carries
 no identifier, so the only signal that a change was processed is "the value I
 sent came back".
 
@@ -39,12 +38,12 @@ one tab and no concurrency:
 Consequences, in order of severity:
 
 1. **The field wedges.** `inFlight[key]` stays `true` forever.
-2. **The whole tab freezes.** `app.js:435` drops *every* settings push while any
+2. **The whole tab freezes.** `app.js:436` drops *every* settings push while any
    field is in flight — other fields' external updates, `_meta.dirty`, the Save
    button, other tabs' edits.
-3. **The user cannot recover.** `onUserInput` (`app.js:623`) early-returns for a
+3. **The user cannot recover.** `onUserInput` (`app.js:624`) early-returns for a
    field that is in flight, so re-editing and blurring does nothing. Only a
-   reconnect clears it, via the force-reset at `app.js:436-457`.
+   reconnect clears it, via the force-reset at `app.js:437-458`.
 
 The docs currently describe this as a "cosmetic sharp edge"
 (`API_REFERENCE.md:434-439`). It is not: trigger 3 makes a field permanently
@@ -112,7 +111,7 @@ broadcast: `{"type":"settings","i":7,"_meta":{...},"data":{...}}`. No new messag
 type, no duplicated values, no extra payload build, ~6 bytes per message.
 
 **Rejected** because the push is broadcast and the client *drops* pushes while
-any field is in flight (`app.js:435`). With two batches outstanding, batch 7's
+any field is in flight (`app.js:436`). With two batches outstanding, batch 7's
 push is discarded while batch 8 is pending — destroying the answer it carries.
 Fixing that means converting the tab-wide guard into per-key gating, which is
 surgery on the state machine and a much larger risk surface. `i` in a broadcast
@@ -462,7 +461,7 @@ Two details:
   global drop (it must be, or a new edit during recovery would swallow it), but
   it is still older than that batch, so its values are ignored for those keys.
 
-Acks and sync replies bypass the guard at `app.js:435`; ordinary pushes keep the
+Acks and sync replies bypass the guard at `app.js:436`; ordinary pushes keep the
 current drop-while-in-flight behavior, which is safe because a push is full
 state and the ack has already settled the client's own keys. Batches no longer
 block each other: batch 7 settles while batch 8 is still pending.
@@ -547,7 +546,7 @@ On close/connect: clear all batch timers, reset `nextId = 1`, and clear
 `pending`, `recovering`, `syncId`, and `syncTimer`. Identifiers
 mean nothing across connections, so a new connection's `i = 1` must not be
 mistaken for an old ticket. The existing reconnect reconciliation
-(`app.js:436-457`) stays as-is for the initial load case.
+(`app.js:437-458`) stays as-is for the initial load case.
 
 ### 9.7 Revisions to the ten-case table
 
