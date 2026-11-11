@@ -89,4 +89,8 @@ and tag accordingly:
 Bump the version yourself when the change clearly fits one of these buckets.
 Ask the user on borderline cases.
 
+**Pre-1.0 exception:** while the version is `0.x`, the Major row is unreachable,
+so breaking wire-format, WS-protocol, and public-API changes ship as a Minor
+bump (`0.X.0`). From 1.0.0 onward the table applies as written.
+
 The tag (`git tag vX.Y.Z`) must match the version in `library.json`.
