@@ -64,6 +64,11 @@ esp_err_t prsl_add_field_opts(prsl_type_t type, const char *group_id, const char
     return prsl_store_add_field(&g_store, &f);
 }
 
+esp_err_t prsl_add_file_field(const char *group_id, const char *key,
+                              const char *label, const prsl_file_opts_t *opts) {
+    return prsl_store_add_file_field(&g_store, group_id, key, label, opts);
+}
+
 /* ── Dirty ─────────────────────────────────────────────────── */
 
 void prsl_set_dirty(bool dirty) {

@@ -1,5 +1,6 @@
 #pragma once
 #include <stdbool.h>
+#include <stddef.h>
 #include "esp_err.h"
 
 #ifdef __cplusplus
@@ -17,7 +18,8 @@ extern "C" {
 typedef enum {
     PRSL_TEXT, PRSL_NUMBER, PRSL_PASSWORD, PRSL_EMAIL, PRSL_TEL,
     PRSL_URL, PRSL_COLOR, PRSL_SWITCH, PRSL_CHECKBOX,
-    PRSL_RANGE, PRSL_TEXTAREA, PRSL_RADIO, PRSL_SELECT
+    PRSL_RANGE, PRSL_TEXTAREA, PRSL_RADIO, PRSL_SELECT,
+    PRSL_FILE
 } prsl_type_t;
 
 typedef enum {
@@ -75,6 +77,84 @@ typedef esp_err_t (*prsl_reset_cb_t)(void);
  *          May be NULL — if so, Reboot option hidden. */
 typedef esp_err_t (*prsl_reboot_cb_t)(void);
 
+/* ── File upload ───────────────────────────────────────────── */
+
+/** @brief Upload stream event. */
+typedef enum {
+    PRSL_UPLOAD_META,   /* metadata only, exactly once, before any CHUNK */
+    PRSL_UPLOAD_CHUNK,  /* data bytes; zero or more */
+    PRSL_UPLOAD_END,    /* body complete; commit here; exactly once */
+    PRSL_UPLOAD_ABORT   /* client gone / idle timeout / prsl_stop; cleanup */
+} prsl_upload_event_t;
+
+/** @brief One on_upload callback invocation.
+ *  @var name    Basename of the uploaded file; never NULL.
+ *  @var mime    Declared Content-Type, or NULL when absent.
+ *  @var size    Declared Content-Length.
+ *  @var offset  Byte offset of data (CHUNK only).
+ *  @var data    CHUNK only. Valid ONLY during this call — write or copy it
+ *               synchronously.
+ *  @var len     CHUNK length; 0 for other events.
+ *  @var err     Callback writes an error message here.
+ *  @var err_len Size of err, including NUL.
+ *  @var status  HTTP status hint on rejection; 0 = library default
+ *               (400 for META/CHUNK, 500 for END). Clamped to 400–599.
+ *
+ *  META is metadata only and is not a chunk: the first data callback is a
+ *  separate CHUNK. name/size/mime are valid on every event.
+ *
+ *  Returning anything other than ESP_OK from META/CHUNK/END rejects the
+ *  upload; write a reason to err or the library supplies a generic one.
+ *  On ABORT the return value and status are ignored.
+ *
+ *  ABORT is guaranteed exactly once for every upload that reached META,
+ *  unless END returned ESP_OK — including a META/CHUNK rejection, an END
+ *  error, a transport drop, an idle timeout, and prsl_stop() during the
+ *  upload. It never fires after a successful END and never twice. ABORT is
+ *  the only cleanup signal: close/delete temp files and free resources there.
+ */
+typedef struct {
+    prsl_upload_event_t event;
+    const char *group_id;   /* registered group, e.g. "audio" */
+    const char *key;        /* registered key, e.g. "clip" */
+    const char *name;       /* basename of the uploaded file; never NULL */
+    const char *mime;       /* declared Content-Type, or NULL */
+    size_t size;            /* declared Content-Length */
+    size_t offset;          /* byte offset of data (CHUNK only) */
+    const uint8_t *data;    /* CHUNK only; valid only during this call */
+    size_t len;             /* CHUNK length; 0 for other events */
+    char *err;              /* callback writes an error message here */
+    size_t err_len;         /* size of err, including NUL */
+    int status;             /* HTTP status hint on rejection; 0 = default */
+} prsl_upload_t;
+
+/** @brief Called for each upload event of a file field.
+ *  Runs in the AsyncTCP task: return promptly and do NOT block (a blocking
+ *  callback also blocks prsl_stop()/teardown).
+ *  @return ESP_OK to accept, anything else to reject (ignored on ABORT). */
+typedef esp_err_t (*prsl_upload_cb_t)(prsl_upload_t *u);
+
+/** @brief Per-file-field options.
+ *  @var on_get  Current file label, or NULL. Loaded at init and on reset,
+ *               like any other field value.
+ *  @var on_upload Required. Runs in the AsyncTCP task; see prsl_upload_cb_t.
+ *  @var accept  Optional HTML accept list, e.g. ".bin,application/octet-stream".
+ *               A UX/policy filter backed by declared metadata, NOT a security
+ *               boundary — content checks belong in on_upload.
+ *  @var max_size Device limit; 0 = no limit. Empty files are always rejected.
+ *  @var idle_timeout_ms Device inactivity timeout; 0 = default (30000 ms).
+ *  @var help   NULL = no help text rendered.
+ *  @var attrs  Optional extra HTML attributes JSON. Presentation-only. */
+typedef struct {
+    prsl_get_cb_t    on_get;
+    prsl_upload_cb_t on_upload;
+    const char      *accept;
+    size_t           max_size;
+    uint32_t         idle_timeout_ms;
+    const char      *help;
+    const char      *attrs;
+} prsl_file_opts_t;
+
 /** @brief Per-field options. All fields are required; pass NULL to opt out.
  *  @var is_status false by default (via designated initializer). true = read-only status field.
  *  @var on_get    NULL = type-dependent (checkbox→indeterminate, else empty).
@@ -111,6 +191,15 @@ esp_err_t prsl_add_field_opts(prsl_type_t type, const char *group_id, const char
                               const char *label,
                               const char *options[][2], int option_count,
                               const prsl_field_opts_t *opts);
+
+/** @brief Register a file field. This is the ONLY registration path for
+ *  PRSL_FILE; prsl_add_field(PRSL_FILE, ...) returns ESP_ERR_INVALID_ARG.
+ *  @param opts Required; opts->on_upload is required. */
+esp_err_t prsl_add_file_field(const char *group_id, const char *key,
+                              const char *label, const prsl_file_opts_t *opts);
+
+/** @brief True while a file upload is in progress (any file field). */
+bool prsl_is_uploading(void);
 
 /* ── Dirty ─────────────────────────────────────────────────── */
 
