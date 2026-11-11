@@ -8,6 +8,9 @@ extern "C" {
 
 cJSON *prsl_json_build_settings(prsl_store_t *store);
 cJSON *prsl_json_build_status(prsl_store_t *store);
+cJSON *prsl_json_build_settings_payload(prsl_store_t *store, bool dirty,
+                                        bool show_reset, bool show_reboot,
+                                        bool uploading);
 char *prsl_json_fix_attrs_quotes(const char *attrs_str);
 
 #ifdef __cplusplus

@@ -350,14 +350,14 @@ bool prsl_has_reboot(void) {
 
 /* ── Shared settings payload builder ─────────────────────────── */
 
+/* Temporary: the real atomic upload flag lands with the HTTP upload path
+ * (Task 5). Native payload tests pass the boolean explicitly, so both states
+ * are already covered; this definition is a build-time bridge only. */
+bool prsl_is_uploading(void) { return false; }
+
 cJSON *prsl_build_settings_payload(prsl_store_t *store) {
-    cJSON *root = cJSON_CreateObject();
-    cJSON_AddStringToObject(root, "type", "settings");
-    cJSON_AddBoolToObject(root, "_dirty", prsl_store_is_dirty(store));
-    cJSON_AddBoolToObject(root, "_show_reset", prsl_has_reset());
-    cJSON_AddBoolToObject(root, "_show_reboot", prsl_has_reboot());
-    cJSON_AddItemToObject(root, "data", prsl_json_build_settings(store));
-    return root;
+    return prsl_json_build_settings_payload(store, prsl_store_is_dirty(store),
+        prsl_has_reset(), prsl_has_reboot(), prsl_is_uploading());
 }
 
 /* ── Push / broadcast ───────────────────────────────────────── */

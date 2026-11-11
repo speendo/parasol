@@ -3,6 +3,7 @@
 #include "prsl_store.h"
 #include "cJSON.h"
 #include <stdlib.h>
+#include <string.h>
 
 static prsl_store_t store;
 
@@ -171,6 +172,145 @@ void test_attrs_fixer_null_input(void) {
     free(fixed);
 }
 
+static esp_err_t on_upload_spy(prsl_upload_t *u) { (void)u; return ESP_OK; }
+
+void test_build_file_field(void) {
+    prsl_store_add_group(&store, "audio", "Audio");
+    prsl_field_t f = {0};
+    f.group_id = "audio"; f.key = "clip"; f.label = "Clip";
+    f.type = PRSL_FILE;
+    f.on_upload = on_upload_spy;
+    f.accept = ".mp3,audio/*";
+    f.max_size = 512 * 1024;
+    f.idle_timeout_ms = 30000;
+    f.help = "MP3";
+    f.attrs = "{\"title\":\"Clip\"}";
+    prsl_store_add_field(&store, &f);
+    prsl_store_set_json(&store, "audio", "clip", cJSON_CreateString("beep.mp3"));
+
+    cJSON *out = prsl_json_build_settings(&store);
+    cJSON *arr = cJSON_GetObjectItem(cJSON_GetObjectItem(out, "audio"), "clip");
+    TEST_ASSERT_EQUAL_INT(3, cJSON_GetArraySize(arr));
+    TEST_ASSERT_EQUAL_STRING("file", cJSON_GetStringValue(cJSON_GetArrayItem(arr, 0)));
+    TEST_ASSERT_EQUAL_STRING("Clip", cJSON_GetStringValue(cJSON_GetArrayItem(arr, 1)));
+    cJSON *opts = cJSON_GetArrayItem(arr, 2);
+    TEST_ASSERT_TRUE(cJSON_IsObject(opts));
+    TEST_ASSERT_EQUAL_STRING("beep.mp3", cJSON_GetStringValue(cJSON_GetObjectItem(opts, "value")));
+    TEST_ASSERT_EQUAL_STRING(".mp3,audio/*", cJSON_GetStringValue(cJSON_GetObjectItem(opts, "accept")));
+    TEST_ASSERT_EQUAL_INT(512 * 1024, cJSON_GetNumberValue(cJSON_GetObjectItem(opts, "max_size")));
+    TEST_ASSERT_NULL(cJSON_GetObjectItem(opts, "idle_timeout_ms"));
+    TEST_ASSERT_NOT_NULL(cJSON_GetObjectItem(opts, "help"));
+    TEST_ASSERT_NOT_NULL(cJSON_GetObjectItem(opts, "attrs"));
+    cJSON_Delete(out);
+}
+
+void test_build_file_field_no_optional_opts(void) {
+    prsl_store_add_group(&store, "audio", "Audio");
+    prsl_field_t f = {0};
+    f.group_id = "audio"; f.key = "clip"; f.label = "Clip";
+    f.type = PRSL_FILE;
+    f.on_upload = on_upload_spy;
+    prsl_store_add_field(&store, &f);
+
+    cJSON *out = prsl_json_build_settings(&store);
+    cJSON *arr = cJSON_GetObjectItem(cJSON_GetObjectItem(out, "audio"), "clip");
+    cJSON *opts = cJSON_GetArrayItem(arr, 2);
+    TEST_ASSERT_NULL(cJSON_GetObjectItem(opts, "accept"));
+    TEST_ASSERT_NULL(cJSON_GetObjectItem(opts, "max_size"));
+    TEST_ASSERT_NULL(cJSON_GetObjectItem(opts, "idle_timeout_ms"));
+    cJSON_Delete(out);
+}
+
+void test_build_settings_payload_meta(void) {
+    cJSON *out = prsl_json_build_settings_payload(&store, true, true, false, true);
+    cJSON *meta = cJSON_GetObjectItem(out, "_meta");
+    TEST_ASSERT_TRUE(cJSON_IsObject(meta));
+    TEST_ASSERT_TRUE(cJSON_IsTrue(cJSON_GetObjectItem(meta, "dirty")));
+    TEST_ASSERT_TRUE(cJSON_IsTrue(cJSON_GetObjectItem(meta, "show_reset")));
+    TEST_ASSERT_FALSE(cJSON_IsTrue(cJSON_GetObjectItem(meta, "show_reboot")));
+    TEST_ASSERT_TRUE(cJSON_IsTrue(cJSON_GetObjectItem(meta, "uploading")));
+    /* Legacy aliases remain for 0.8.0. */
+    TEST_ASSERT_TRUE(cJSON_IsTrue(cJSON_GetObjectItem(out, "_dirty")));
+    TEST_ASSERT_TRUE(cJSON_IsTrue(cJSON_GetObjectItem(out, "_show_reset")));
+    TEST_ASSERT_FALSE(cJSON_IsTrue(cJSON_GetObjectItem(out, "_show_reboot")));
+    TEST_ASSERT_NULL(cJSON_GetObjectItem(out, "_uploading"));
+    TEST_ASSERT_NOT_NULL(cJSON_GetObjectItem(out, "data"));
+    cJSON_Delete(out);
+}
+
+void test_build_settings_payload_not_uploading(void) {
+    cJSON *out = prsl_json_build_settings_payload(&store, false, false, true, false);
+    cJSON *meta = cJSON_GetObjectItem(out, "_meta");
+    TEST_ASSERT_TRUE(cJSON_IsObject(meta));
+    TEST_ASSERT_FALSE(cJSON_IsTrue(cJSON_GetObjectItem(meta, "dirty")));
+    TEST_ASSERT_FALSE(cJSON_IsTrue(cJSON_GetObjectItem(meta, "show_reset")));
+    TEST_ASSERT_TRUE(cJSON_IsTrue(cJSON_GetObjectItem(meta, "show_reboot")));
+    TEST_ASSERT_FALSE(cJSON_IsTrue(cJSON_GetObjectItem(meta, "uploading")));
+    TEST_ASSERT_FALSE(cJSON_IsTrue(cJSON_GetObjectItem(out, "_dirty")));
+    TEST_ASSERT_FALSE(cJSON_IsTrue(cJSON_GetObjectItem(out, "_show_reset")));
+    TEST_ASSERT_TRUE(cJSON_IsTrue(cJSON_GetObjectItem(out, "_show_reboot")));
+    cJSON_Delete(out);
+}
+
+/* Guards against a parallel schema: _meta is the exact 4-key direct child,
+ * legacy aliases sit next to it, and field data stays in the `data` object. */
+void test_build_payload_meta_convention(void) {
+    prsl_store_add_group(&store, "audio", "Audio");
+    prsl_field_t f = {0};
+    f.group_id = "audio"; f.key = "clip"; f.label = "Clip";
+    f.type = PRSL_FILE;
+    f.on_upload = on_upload_spy;
+    prsl_store_add_field(&store, &f);
+    prsl_store_set_json(&store, "audio", "clip", cJSON_CreateString("beep.mp3"));
+
+    cJSON *out = prsl_json_build_settings_payload(&store, true, true, false, true);
+
+    /* Root: type, _meta, _dirty, _show_reset, _show_reboot, data only. */
+    TEST_ASSERT_EQUAL_INT(6, cJSON_GetArraySize(out));
+    TEST_ASSERT_NULL(cJSON_GetObjectItem(out, "_uploading"));
+
+    cJSON *meta = cJSON_GetObjectItem(out, "_meta");
+    TEST_ASSERT_TRUE(cJSON_IsObject(meta));
+    TEST_ASSERT_EQUAL_INT(4, cJSON_GetArraySize(meta));
+    TEST_ASSERT_TRUE(cJSON_IsTrue(cJSON_GetObjectItem(meta, "dirty")));
+    TEST_ASSERT_TRUE(cJSON_IsTrue(cJSON_GetObjectItem(meta, "show_reset")));
+    TEST_ASSERT_FALSE(cJSON_IsTrue(cJSON_GetObjectItem(meta, "show_reboot")));
+    TEST_ASSERT_TRUE(cJSON_IsTrue(cJSON_GetObjectItem(meta, "uploading")));
+    for (cJSON *c = meta->child; c; c = c->next) {
+        TEST_ASSERT_TRUE(strcmp(c->string, "dirty") == 0 ||
+                         strcmp(c->string, "show_reset") == 0 ||
+                         strcmp(c->string, "show_reboot") == 0 ||
+                         strcmp(c->string, "uploading") == 0);
+    }
+
+    TEST_ASSERT_TRUE(cJSON_IsTrue(cJSON_GetObjectItem(out, "_dirty")));
+    TEST_ASSERT_TRUE(cJSON_IsTrue(cJSON_GetObjectItem(out, "_show_reset")));
+    TEST_ASSERT_FALSE(cJSON_IsTrue(cJSON_GetObjectItem(out, "_show_reboot")));
+
+    cJSON *data = cJSON_GetObjectItem(out, "data");
+    TEST_ASSERT_TRUE(cJSON_IsObject(data));
+    cJSON *clip = cJSON_GetObjectItem(cJSON_GetObjectItem(data, "audio"), "clip");
+    TEST_ASSERT_TRUE(cJSON_IsArray(clip));
+    TEST_ASSERT_EQUAL_INT(3, cJSON_GetArraySize(clip));
+    TEST_ASSERT_TRUE(cJSON_IsString(cJSON_GetArrayItem(clip, 0)));
+    TEST_ASSERT_TRUE(cJSON_IsString(cJSON_GetArrayItem(clip, 1)));
+    TEST_ASSERT_TRUE(cJSON_IsObject(cJSON_GetArrayItem(clip, 2)));
+
+    cJSON_Delete(out);
+}
+
+/* The upload flag is process-global, not per-store state. */
+void test_build_payload_uploading_is_global(void) {
+    prsl_store_t a, b;
+    prsl_store_init(&a); prsl_store_init(&b);
+    cJSON *pa = prsl_json_build_settings_payload(&a, false, true, true, true);
+    cJSON *pb = prsl_json_build_settings_payload(&b, false, true, true, true);
+    TEST_ASSERT_TRUE(cJSON_IsTrue(cJSON_GetObjectItem(cJSON_GetObjectItem(pa, "_meta"), "uploading")));
+    TEST_ASSERT_TRUE(cJSON_IsTrue(cJSON_GetObjectItem(cJSON_GetObjectItem(pb, "_meta"), "uploading")));
+    cJSON_Delete(pa); cJSON_Delete(pb);
+    prsl_store_deinit(&a); prsl_store_deinit(&b);
+}
+
 void test_build_interleaved_fields(void) {
     prsl_store_add_group(&store, "groupA", "Group A");
     prsl_store_add_group(&store, "groupB", "Group B");
@@ -234,5 +374,11 @@ int main(void) {
     RUN_TEST(test_build_group_no_label);
     RUN_TEST(test_attrs_fixer_null_input);
     RUN_TEST(test_build_interleaved_fields);
+    RUN_TEST(test_build_file_field);
+    RUN_TEST(test_build_file_field_no_optional_opts);
+    RUN_TEST(test_build_settings_payload_meta);
+    RUN_TEST(test_build_settings_payload_not_uploading);
+    RUN_TEST(test_build_payload_meta_convention);
+    RUN_TEST(test_build_payload_uploading_is_global);
     return UNITY_END();
 }

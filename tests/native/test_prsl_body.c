@@ -18,6 +18,8 @@ static esp_err_t on_set_reject(const char *g, const char *k, const prsl_val_t *v
     return ESP_ERR_INVALID_ARG;
 }
 
+static esp_err_t on_upload_spy(prsl_upload_t *u) { (void)u; return ESP_OK; }
+
 static prsl_val_kind_t last_kind;
 static double last_num;
 static bool   last_bool;
@@ -267,6 +269,68 @@ void test_on_set_receives_null_kind(void) {
     cJSON_Delete(body);
 }
 
+static cJSON *make_file_body(void) {
+    cJSON *body = cJSON_CreateObject();
+    cJSON *grp = cJSON_CreateObject();
+    cJSON *arr = cJSON_CreateArray();
+    cJSON_AddItemToArray(arr, cJSON_CreateString("file"));
+    cJSON_AddItemToArray(arr, cJSON_CreateString("Clip"));
+    cJSON *opts = cJSON_CreateObject();
+    cJSON_AddStringToObject(opts, "value", "evil.mp3");
+    cJSON_AddItemToArray(arr, opts);
+    cJSON_AddItemToObject(grp, "clip", arr);
+    cJSON_AddItemToObject(body, "audio", grp);
+    return body;
+}
+
+static void add_file_field(void) {
+    prsl_store_add_group(&store, "audio", "Audio");
+    prsl_field_t f = {0};
+    f.group_id = "audio"; f.key = "clip"; f.label = "Clip";
+    f.type = PRSL_FILE; f.on_upload = on_upload_spy;
+    f.on_set = on_set_spy;  /* the guard must win over on_set too */
+    prsl_store_add_field(&store, &f);
+    prsl_store_set_json(&store, "audio", "clip", cJSON_CreateString("old.mp3"));
+}
+
+void test_apply_skips_file_field(void) {
+    add_file_field();
+
+    cJSON *body = make_file_body();
+    prsl_rejection_t rej;
+    TEST_ASSERT_EQUAL(0, prsl_apply_body(body, &store, &rej));
+    TEST_ASSERT_EQUAL(0, set_calls);
+    cJSON *v = prsl_store_get_value(&store, "audio", "clip");
+    TEST_ASSERT_EQUAL_STRING("old.mp3", cJSON_GetStringValue(v));
+    cJSON_Delete(body);
+}
+
+void test_apply_save_skips_file_field(void) {
+    add_file_field();
+
+    const char *json =
+        "{\"audio\":{\"clip\":[\"file\",\"Clip\",{\"value\":\"evil.mp3\"}]}}";
+    char err[128];
+    prsl_save_status_t st = prsl_apply_save_body(json, strlen(json), &store,
+                                                 err, sizeof(err));
+    TEST_ASSERT_EQUAL(PRSL_SAVE_APPLIED, st);
+    TEST_ASSERT_EQUAL(0, set_calls);
+    cJSON *v = prsl_store_get_value(&store, "audio", "clip");
+    TEST_ASSERT_EQUAL_STRING("old.mp3", cJSON_GetStringValue(v));
+}
+
+void test_apply_save_still_applies_normal_field(void) {
+    add_field_no_cb("wifi", "ssid");
+    const char *json =
+        "{\"wifi\":{\"ssid\":[\"text\",\"SSID\",{\"value\":\"MyNet\"}]}}";
+    char err[128];
+    prsl_save_status_t st = prsl_apply_save_body(json, strlen(json), &store,
+                                                 err, sizeof(err));
+    TEST_ASSERT_EQUAL(PRSL_SAVE_APPLIED, st);
+    cJSON *v = prsl_store_get_value(&store, "wifi", "ssid");
+    TEST_ASSERT_EQUAL_STRING("MyNet", cJSON_GetStringValue(v));
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_apply_no_on_set_writes_store);
@@ -282,5 +346,8 @@ int main(void) {
     RUN_TEST(test_on_set_receives_number_kind);
     RUN_TEST(test_on_set_receives_bool_kind);
     RUN_TEST(test_on_set_receives_null_kind);
+    RUN_TEST(test_apply_skips_file_field);
+    RUN_TEST(test_apply_save_skips_file_field);
+    RUN_TEST(test_apply_save_still_applies_normal_field);
     return UNITY_END();
 }

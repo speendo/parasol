@@ -33,6 +33,12 @@ int prsl_apply_body(cJSON *body, prsl_store_t *store, prsl_rejection_t *rejectio
             }
 
             prsl_field_t *f = prsl_store_find(store, group->string, field->string);
+            if (f && f->type == PRSL_FILE) {
+                /* File values only change through the upload path. Skip
+                 * before on_set and the direct-store fallback so a settings
+                 * body can never overwrite a file label. */
+                field = field->next; continue;
+            }
             if (f && f->on_set) {
                 esp_err_t ae = f->on_set(group->string, field->string, &v);
                 if (ae != ESP_OK) {
