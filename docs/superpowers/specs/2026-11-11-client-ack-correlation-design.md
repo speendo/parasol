@@ -488,12 +488,19 @@ The bounds, per user edit:
 - **At most one resend per key.** `retried` is the loop breaker and it travels
   with the batch, not the `recovering` entry: the resend deletes that entry, so
   the flag has to ride on the new pending batch to come back on the retry's
-  timeout. That is why `sendToServer` takes it.
+  timeout. That is why `sendToServer` takes it. One resend means **two sends in
+  total** — the original and the retry — never three.
 - **At most one sync outstanding**, and an unanswered sync is terminal.
-- **At most two syncs per key**, and this falls out rather than being counted: a
-  key can enter `recovering` at most twice (the initial send, then its single
-  retry), and each entry converges to at most one sync. The first sync decides
-  whether to resend; the second checks whether the resend landed.
+- **Two syncs, one before and one after the resend.** They fall out rather than
+  being counted: a key can enter `recovering` at most twice (after the original
+  send, then after its single retry), and each entry converges to at most one
+  sync. The second sync is not a second chance to resend; it is how the client
+  finds out whether the retry landed:
+
+  ```
+  edit → send #1 → timeout → sync #1 → "not landed" → resend (send #2)
+       → timeout → sync #2 → "not landed" → adopt store value, stop
+  ```
 
 There is deliberately no `syncTries` counter. An earlier draft capped it at 2 as
 belt and braces; `retried` plus the sync timeout already make the ladder finite,
