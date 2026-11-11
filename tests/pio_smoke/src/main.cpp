@@ -2,6 +2,13 @@
 #include "ESPAsyncWebServer.h"
 #include "prsl.h"
 
+/* The three examples define app_main under unique names via their .cpp
+ * wrappers. Referencing them here keeps the linker from discarding them. */
+void simple_app_main(void);
+void ota_app_main(void);
+void upload_app_main(void);
+static void (*const examples[])(void) = { simple_app_main, ota_app_main, upload_app_main };
+
 AsyncWebServer server(80);
 
 static esp_err_t on_fw(prsl_upload_t *u) {
@@ -18,6 +25,7 @@ static const prsl_file_opts_t fw_opts = {
 };
 
 void setup() {
+    (void)examples;
     prsl_add_group("wifi", "Wi-Fi");
     prsl_add_field(PRSL_TEXT, "wifi", "ssid", "SSID", NULL);
     prsl_add_file_field("wifi", "fw", "Firmware", &fw_opts);
