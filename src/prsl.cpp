@@ -308,8 +308,16 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
         [](AsyncWebServerRequest *req, uint8_t *data, size_t len,
            size_t index, size_t total) {
             /* During an upload, skip allocation and the apply/send path; the
-             * final handler above reports 409 without buffering a large body. */
-            if (prsl_is_uploading()) return;
+             * final handler above reports 409 without buffering a large body.
+             * If an upload began after an earlier chunk allocated _tempObject,
+             * free it so the buffer isn't leaked. */
+            if (prsl_is_uploading()) {
+                if (req->_tempObject) {
+                    free(req->_tempObject);
+                    req->_tempObject = NULL;
+                }
+                return;
+            }
 
             if (index == 0) {
                 req->_tempObject = malloc(total + 1);
@@ -573,8 +581,13 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
             }
             if (g_upload.err[0]) {
                 int st = upload_final_status(&g_upload);
+                /* Snapshot the error while still under the mutex; prsl_stop()
+                 * memsets g_upload and a concurrent body callback can clobber
+                 * g_upload.err once the mutex is released. */
+                char msg[PRSL_UPLOAD_ERR_MAX];
+                snprintf(msg, sizeof(msg), "%s", g_upload.err);
                 xSemaphoreGiveRecursive(g_upload_mutex);
-                upload_send(req, st, g_upload.err);
+                upload_send(req, st, msg);
                 return;
             }
             if (g_upload.default_status) {
