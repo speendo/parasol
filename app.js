@@ -58,6 +58,7 @@ var parasol = (function () {
       if (!grp.fields) continue;
       for (var fi = 0; fi < grp.fields.length; fi++) {
         var field = grp.fields[fi];
+        if (field.type === 'file') continue;
         var val = readFormValue([grp.id, field.key]);
         data[grp.id + '.' + field.key] = val === undefined
           ? (field.type === 'radio' ? null : '')
@@ -127,18 +128,38 @@ var parasol = (function () {
     }
   }
 
+  /** True while a local or server-side upload is active. */
+  function isLocked() { return localUploading || serverUploading; }
+
   /**
    * Determine whether the Save button should be visible.
    * Gated by formInteracted — validity only checked after first user interaction.
    */
   function updateUI() {
+    var locked = isLocked();
     var formOk = formInteracted ? configForm.checkValidity() : true;
     var alwaysShow = document.querySelector('meta[name="parasol-always-show-save"]');
     alwaysShow = alwaysShow && alwaysShow.content === '1';
-    var showBtn = (dirty || alwaysShow) && formOk;
+    var showBtn = !locked && (dirty || alwaysShow) && formOk;
     btnSaveApply.hidden = !showBtn;
     btnSaveApply.disabled = !showBtn;
-    btnReset.hidden = !(showReset && (dirty || alwaysShow));
+    btnReset.hidden = !(!locked && showReset && (dirty || alwaysShow));
+    btnReset.disabled = locked;
+    var nr = document.getElementById('nav-reboot');
+    if (nr) {
+      nr.setAttribute('aria-disabled', locked ? 'true' : 'false');
+      nr.style.pointerEvents = locked ? 'none' : '';
+    }
+    var rc = document.getElementById('reboot-confirm');
+    if (rc) rc.disabled = locked;
+    for (var k in fileFields) {
+      var e = fileFields[k];
+      e.input.disabled = locked;
+      e.btn.disabled = locked || !e.valid;
+      e.cancel.hidden = !(activeUpload && activeUpload.key === k);
+      if (serverUploading && !localUploading && e.msg.textContent === '') e.msg.textContent = 'Another upload is in progress.';
+      else if (!locked && e.msg.textContent === 'Another upload is in progress.') e.msg.textContent = '';
+    }
   }
 
   /**
@@ -175,7 +196,7 @@ var parasol = (function () {
       var fieldKey = name.slice(dot + 1);
       if (!data[grpId]) data[grpId] = {};
       var field = findField(grpId, fieldKey);
-      if (field) data[grpId][fieldKey] = [field.type, field.label, { value: changes[name] }];
+      if (field && field.type !== 'file') data[grpId][fieldKey] = [field.type, field.label, { value: changes[name] }];
     }
     return data;
   }
@@ -346,13 +367,19 @@ var parasol = (function () {
    *
    * @param {MessageEvent} event - WS message with JSON data
    */
+  /** Read a metadata flag from `_meta` first, falling back to a legacy key. */
+  function metaVal(msg, name, legacy) {
+    var m = msg._meta;
+    if (m && typeof m === 'object' && m[name] !== undefined) return m[name];
+    return msg[legacy];
+  }
   function updateMetaFlags(msg) {
-    if (msg._show_reset !== undefined) {
-      showReset = msg._show_reset;
-    }
-    if (msg._show_reboot !== undefined) {
-      showReboot = msg._show_reboot;
-    }
+    var sr = metaVal(msg, 'show_reset', '_show_reset');
+    var sb = metaVal(msg, 'show_reboot', '_show_reboot');
+    var up = metaVal(msg, 'uploading', '_uploading');
+    if (sr !== undefined) showReset = sr === true;
+    if (sb !== undefined) showReboot = sb === true;
+    if (up !== undefined) serverUploading = up === true;
   }
   function onWSMessage(event) {
     var msg = JSON.parse(event.data);
@@ -362,6 +389,7 @@ var parasol = (function () {
     wsRetries = 0;
 
     var data = msg.data || msg;
+    var dirtyFlag = metaVal(msg, 'dirty', '_dirty') === true;
 
     // ── Echo resolution ──
     var echoMatched = false;
@@ -379,7 +407,7 @@ var parasol = (function () {
     }
 
     if (echoMatched) {
-      dirty = msg._dirty;
+      dirty = dirtyFlag;
       updateMetaFlags(msg);
       var queuedKeys = [];
       for (var key in inFlight) {
@@ -406,7 +434,7 @@ var parasol = (function () {
     for (var k in inFlight) { if (inFlight[k]) { hasInFlight = true; break; } }
     if (hasInFlight && configForm.getAttribute('aria-busy') !== 'true') return;
     if (hasInFlight) {
-      dirty = msg._dirty;
+      dirty = dirtyFlag;
       updateMetaFlags(msg);
       updateAV(data);
       for (var sk in inFlight) { inFlight[sk] = false; }
@@ -429,15 +457,17 @@ var parasol = (function () {
       return;
     }
 
-    dirty = msg._dirty;
+    dirty = dirtyFlag;
     updateMetaFlags(msg);
     updateUI();
 
     // Initial load — no groups yet, process settings directly
     if (groups.length === 0) {
-      processSettings(data, msg._dirty);
+      processSettings(data, dirtyFlag);
       return;
     }
+
+    syncFileLabels(data);
 
     var changedFields = {};
     for (var ci = 0; ci < groups.length; ci++) {
@@ -446,6 +476,7 @@ var parasol = (function () {
       if (!sGroup) continue;
       for (var fi = 0; fi < grp.fields.length; fi++) {
         var field = grp.fields[fi];
+        if (field.type === 'file') continue;
         var sField = sGroup[field.key];
         if (!sField) continue;
         var newAV = sField[2].value;
@@ -521,6 +552,31 @@ var parasol = (function () {
   }
 
   /**
+   * Update file field AVs and their "Current" labels from a server settings
+   * payload, without treating them as editable form changes.
+   * @param {Object} data - settings payload keyed by group ID
+   */
+  function syncFileLabels(data) {
+    for (var ci = 0; ci < groups.length; ci++) {
+      var grp = groups[ci];
+      if (!grp.fields) continue;
+      var sGroup = data[grp.id];
+      if (!sGroup) continue;
+      for (var fi = 0; fi < grp.fields.length; fi++) {
+        var field = grp.fields[fi];
+        if (field.type !== 'file') continue;
+        var sField = sGroup[field.key];
+        if (!sField) continue;
+        field.opts.value = sField[2].value;
+        var key = grp.id + '.' + field.key;
+        var el = fileFields[key] && fileFields[key].current;
+        if (!el) el = document.getElementById(key + '-current');
+        if (el) setFileLabel(el, field.opts.value);
+      }
+    }
+  }
+
+  /**
    * Sync the lastSent tracking map with current AV values
    * (so subsequent user changes are detected as new).
    */
@@ -529,6 +585,7 @@ var parasol = (function () {
       var fs = groups[ci].fields;
       if (!fs) continue;
       for (var fi = 0; fi < fs.length; fi++) {
+        if (fs[fi].type === 'file') continue;
         var key = groups[ci].id + '.' + groups[ci].fields[fi].key;
         lastSent[key] = groups[ci].fields[fi].opts.value;
       }
@@ -591,6 +648,8 @@ var parasol = (function () {
    * @returns {(string|number|boolean|undefined)}
    */
   function readFormValue(parts) {
+    var f = findField(parts[0], parts[1]);
+    if (f && f.type === 'file') return undefined;
     var nameSel = '[name="' + parts.join('.') + '"]';
     var el = document.querySelector(nameSel);
     if (!el) return undefined;
@@ -718,6 +777,7 @@ var parasol = (function () {
     a.textContent = 'Reboot';
     a.addEventListener('click', function (e) {
       e.preventDefault();
+      if (isLocked()) return;
       if (navActions) navActions.open = false;
       var dd = document.getElementById('reboot-dialog');
       if (dd) dd.showModal();
@@ -939,6 +999,7 @@ var parasol = (function () {
     var rebootConfirm = document.getElementById('reboot-confirm');
     if (rebootConfirm) {
       rebootConfirm.addEventListener('click', function () {
+        if (isLocked()) return;
         document.getElementById('reboot-dialog').close();
         rebooting = true;
         postJSON('/api/system/reboot', {}).then(function () {
@@ -1379,6 +1440,7 @@ var parasol = (function () {
     Object.defineProperty(window.__test, 'serverUploading', { get: function () { return serverUploading; }, set: function (v) { serverUploading = v; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'fileFields', { get: function () { return fileFields; }, set: function (v) { fileFields = v; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'onBeforeUnload', { value: onBeforeUnload, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'startUpload', { value: startUpload, enumerable: true, configurable: true });
   }
 
   return {

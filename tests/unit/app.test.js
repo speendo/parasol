@@ -3071,3 +3071,239 @@ describe('nav collapse/expand', function () {
     expect(labels).toEqual(['Wifi', 'Gpio']);
   });
 })
+
+describe('upload lock and file-value exclusion', function () {
+  function setupWifi() {
+    document.querySelector('#config-form').innerHTML = '<input name="wifi.ssid" value="" />'
+    window.__test.groups = [{ id: 'wifi', fields: [{ key: 'ssid', type: 'text', label: 'SSID', opts: { value: '' } }] }]
+  }
+
+  function renderFileField() {
+    document.querySelector('#config-form').innerHTML = ''
+    window.__test.fileFields = {}
+    var field = window.createField('audio', {
+      key: 'clip', type: 'file', label: 'Clip',
+      opts: { value: 'beep.mp3', accept: '.bin' },
+    })
+    document.querySelector('#config-form').appendChild(field)
+    return field
+  }
+
+  function renderRebootLink() {
+    document.getElementById('nav-list').innerHTML = ''
+    window.__test.groups = []
+    window.__test.statusGroups = []
+    window.__test.showReboot = true
+    window.renderNav()
+  }
+
+  beforeEach(function () {
+    window.__test.dirty = false
+    window.__test.showReset = false
+    window.__test.showReboot = false
+    window.__test.localUploading = false
+    window.__test.serverUploading = false
+    window.__test.fileFields = {}
+    window.__test.inFlight = {}
+    window.__test.lastSent = {}
+    document.querySelector('#config-form').innerHTML = ''
+    document.getElementById('nav-list').innerHTML = ''
+    document.getElementById('server-changed').hidden = true
+    document.getElementById('notif-load').hidden = true
+    document.getElementById('notif-keep').hidden = true
+    document.getElementById('notif-keep-local').hidden = true
+    document.getElementById('notif-accept-server').hidden = true
+  })
+
+  afterEach(function () {
+    window.__test.localUploading = false
+    window.__test.serverUploading = false
+  })
+
+  it('locks Save, Reset, Reboot and Upload when serverUploading', function () {
+    renderRebootLink()
+    var field = renderFileField()
+    selectFile(field.querySelector('input[type=file]'), fakeFile('a.bin', 'application/octet-stream', 10))
+    window.__test.dirty = true
+    window.__test.showReset = true
+    window.__test.serverUploading = true
+    window.updateUI()
+    expect(document.getElementById('btn-save-apply').hidden).toBe(true)
+    expect(document.getElementById('btn-save-apply').disabled).toBe(true)
+    expect(document.getElementById('btn-reset').hidden).toBe(true)
+    expect(document.getElementById('btn-reset').disabled).toBe(true)
+    expect(document.getElementById('nav-reboot').getAttribute('aria-disabled')).toBe('true')
+    expect(document.getElementById('reboot-confirm').disabled).toBe(true)
+    expect(field.querySelector('#audio\\.clip-upload').disabled).toBe(true)
+  })
+
+  it('does not show Save on a _meta.uploading push even when dirty', function () {
+    setupWifi()
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      type: 'settings',
+      _meta: { dirty: true, uploading: true },
+      data: { wifi: { ssid: ['text', 'SSID', { value: '' }] } },
+    })})
+    expect(window.__test.serverUploading).toBe(true)
+    expect(document.getElementById('btn-save-apply').hidden).toBe(true)
+    expect(document.getElementById('btn-save-apply').disabled).toBe(true)
+  })
+
+  it('restores Save on a _meta.uploading:false push when dirty', function () {
+    setupWifi()
+    window.__test.serverUploading = true
+    window.updateUI()
+    expect(document.getElementById('btn-save-apply').hidden).toBe(true)
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      type: 'settings',
+      _meta: { dirty: true, uploading: false },
+      data: { wifi: { ssid: ['text', 'SSID', { value: '' }] } },
+    })})
+    expect(window.__test.serverUploading).toBe(false)
+    expect(document.getElementById('btn-save-apply').hidden).toBe(false)
+  })
+
+  it('serialize and getPending omit file fields', function () {
+    document.querySelector('#config-form').innerHTML =
+      '<input name="audio.clip" type="file" /><input name="audio.volume" type="range" value="50" />'
+    window.__test.groups = [{ id: 'audio', fields: [
+      { key: 'clip', type: 'file', label: 'Clip', opts: {} },
+      { key: 'volume', type: 'range', label: 'Volume', opts: {} },
+    ]}]
+    var data = window.serialize()
+    expect(data['audio.clip']).toBeUndefined()
+    expect(data['audio.volume']).toBe(50)
+    window.setBaseline()
+    expect(window.getPending()).toEqual({})
+  })
+
+  it('buildPatch omits file fields', function () {
+    window.__test.groups = [{ id: 'audio', fields: [
+      { key: 'clip', type: 'file', label: 'Clip', opts: {} },
+      { key: 'volume', type: 'range', label: 'Volume', opts: {} },
+    ]}]
+    var patch = window.buildPatch({ 'audio.clip': 'evil.mp3', 'audio.volume': 50 })
+    expect(patch).toEqual({ audio: { volume: ['range', 'Volume', { value: 50 }] } })
+  })
+
+  it('readFormValue returns undefined for a file field', function () {
+    document.querySelector('#config-form').innerHTML = '<input name="audio.clip" type="file" />'
+    window.__test.groups = [{ id: 'audio', fields: [
+      { key: 'clip', type: 'file', label: 'Clip', opts: {} },
+    ]}]
+    expect(window.readFormValue(['audio', 'clip'])).toBeUndefined()
+  })
+
+  it('silently updates the file label without a conflict bar', function () {
+    var field = renderFileField()
+    window.__test.groups = [{ id: 'audio', fields: [
+      { key: 'clip', type: 'file', label: 'Clip', opts: { value: 'old.mp3', accept: '.bin' } },
+    ]}]
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      _dirty: false,
+      audio: { clip: ['file', 'Clip', { value: 'new.mp3' }] },
+    })})
+    expect(document.getElementById('audio.clip-current').textContent).toContain('new.mp3')
+    expect(document.getElementById('server-changed').hidden).toBe(true)
+  })
+
+  it('restores controls on _meta.uploading:false when no local upload', function () {
+    setupWifi()
+    window.__test.showReset = true
+    window.__test.serverUploading = true
+    window.updateUI()
+    expect(document.getElementById('btn-save-apply').hidden).toBe(true)
+    expect(document.getElementById('btn-reset').disabled).toBe(true)
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      type: 'settings',
+      _meta: { dirty: true, uploading: false },
+      data: { wifi: { ssid: ['text', 'SSID', { value: '' }] } },
+    })})
+    expect(window.__test.serverUploading).toBe(false)
+    expect(document.getElementById('btn-save-apply').hidden).toBe(false)
+    expect(document.getElementById('btn-reset').hidden).toBe(false)
+    expect(document.getElementById('btn-reset').disabled).toBe(false)
+  })
+
+  it('keeps controls locked on _meta.uploading:false while a local upload runs', function () {
+    setupWifi()
+    window.__test.localUploading = true
+    window.__test.serverUploading = true
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      type: 'settings',
+      _meta: { dirty: true, uploading: false },
+      data: { wifi: { ssid: ['text', 'SSID', { value: '' }] } },
+    })})
+    expect(window.__test.serverUploading).toBe(false)
+    expect(document.getElementById('btn-save-apply').hidden).toBe(true)
+  })
+
+  it('prefers _meta.uploading over legacy _uploading', function () {
+    setupWifi()
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      type: 'settings',
+      _meta: { uploading: false },
+      _uploading: true,
+      _dirty: false,
+      data: { wifi: { ssid: ['text', 'SSID', { value: '' }] } },
+    })})
+    expect(window.__test.serverUploading).toBe(false)
+  })
+
+  it('falls back to legacy _uploading when _meta is absent', function () {
+    setupWifi()
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      type: 'settings',
+      _uploading: true,
+      _dirty: false,
+      data: { wifi: { ssid: ['text', 'SSID', { value: '' }] } },
+    })})
+    expect(window.__test.serverUploading).toBe(true)
+  })
+
+  it('shows Save after a deferred dirty push once the local upload ends', function () {
+    setupWifi()
+    window.__test.localUploading = true
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      type: 'settings',
+      _meta: { dirty: true, uploading: false },
+      data: { wifi: { ssid: ['text', 'SSID', { value: '' }] } },
+    })})
+    expect(document.getElementById('btn-save-apply').hidden).toBe(true)
+    window.__test.localUploading = false
+    window.updateUI()
+    expect(document.getElementById('btn-save-apply').hidden).toBe(false)
+  })
+
+  it('warns on beforeunload when _meta.uploading is true', function () {
+    setupWifi()
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      type: 'settings',
+      _meta: { uploading: true },
+      _dirty: false,
+      data: { wifi: { ssid: ['text', 'SSID', { value: '' }] } },
+    })})
+    expect(window.__test.serverUploading).toBe(true)
+    var e = { preventDefault: vi.fn(), returnValue: '' }
+    window.__test.onBeforeUnload(e)
+    expect(e.preventDefault).toHaveBeenCalled()
+  })
+
+  it('locks controls immediately when a local upload starts', function () {
+    renderRebootLink()
+    var field = renderFileField()
+    selectFile(field.querySelector('input[type=file]'), fakeFile('a.bin', 'application/octet-stream', 10))
+    window.__test.dirty = true
+    window.__test.showReset = true
+    var realFetch = window.fetch
+    window.fetch = function () { return new Promise(function () {}) }
+    window.__test.startUpload('audio.clip')
+    expect(window.__test.localUploading).toBe(true)
+    expect(document.getElementById('btn-save-apply').hidden).toBe(true)
+    expect(document.getElementById('btn-save-apply').disabled).toBe(true)
+    expect(document.getElementById('btn-reset').disabled).toBe(true)
+    expect(document.getElementById('nav-reboot').getAttribute('aria-disabled')).toBe('true')
+    expect(document.getElementById('reboot-confirm').disabled).toBe(true)
+    window.fetch = realFetch
+  })
+})
