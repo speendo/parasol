@@ -55,7 +55,11 @@ void test_file_field_label_reset(void) {
     opts.on_get = file_label;
     TEST_ASSERT_EQUAL(ESP_OK, prsl_store_add_file_field(&store, "sys", "fw", "Firmware", &opts));
     TEST_ASSERT_EQUAL(ESP_OK, prsl_store_load_values(&store));
-    TEST_ASSERT_NOT_NULL(prsl_store_get_value(&store, "sys", "fw"));
+    cJSON *loaded = prsl_store_get_value(&store, "sys", "fw");
+    TEST_ASSERT_EQUAL_STRING("firmware.bin", cJSON_GetStringValue(loaded));
+    prsl_store_set_json(&store, "sys", "fw", cJSON_CreateString("changed"));
+    cJSON *changed = prsl_store_get_value(&store, "sys", "fw");
+    TEST_ASSERT_EQUAL_STRING("changed", cJSON_GetStringValue(changed));
     TEST_ASSERT_EQUAL(ESP_OK, prsl_store_reset_values(&store));
     cJSON *rv = prsl_store_get_value(&store, "sys", "fw");
     TEST_ASSERT_EQUAL_STRING("firmware.bin", cJSON_GetStringValue(rv));
