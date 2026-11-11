@@ -10,6 +10,10 @@ data, multiplexed by a `type` field (server to client) or `action` field
 - **Lifecycle:** Browser opens at page load. Server pushes status then settings.
   On disconnect, browser shows retry button. On reconnect, server re-sends
   status then settings.
+- **Queue policy:** a client whose send queue fills is disconnected rather than
+  silently losing messages (`setCloseClientOnQueueFull(true)`). The page
+  reconnects with backoff, so a stalled reader recovers instead of drifting
+  stale.
 
 ## Server to Client Messages
 
@@ -57,6 +61,10 @@ name collisions when a status and settings group share the same `id`.
 
 Sent on initial connect, reconnect, and after any settings change (push or
 apply). Contains the full settings state.
+
+Ordinary pushes carry **no `i`**: they are broadcast to every client and carry
+no per-client bookkeeping. Only the reply to an `action:"sync"` request
+(see below) carries the requester's `i`.
 
 ```json
 {
@@ -113,9 +121,44 @@ and the nav is not collapsed, the ☰ is hidden.
 accordion section title. If absent, the group ID is title-cased (e.g.,
 `"gpio"` to `"Gpio"`, `"audio_interface"` to `"Audio Interface"`).
 
+### `type: "ack"`
+
+Sent to the sender of an `apply`, never broadcast. Every apply gets **exactly
+one** ack — including no-ops, unknown keys, file fields, and all-rejected
+batches. It is written **before** the settings broadcast the apply produces.
+
+```json
+{
+  "type": "ack",
+  "i": 7,
+  "d": {"wifi.ssid": "station", "gpio.pin": "2"},
+  "e": {"wifi.mode": "rejected"}
+}
+```
+
+- **`i`:** the id of the batch being answered, echoed from the apply.
+- **`d`:** decided values, flat `"group.key"` → value. Each value is **read
+  back from the store after applying**, not copied from what `on_set` intended.
+  A transform therefore reports the stored value, a discard reports the old
+  value, and a field whose `on_set` wrote nothing reports what is actually
+  stored. Keys that exist in the store get an entry; keys that do not exist are
+  omitted. Omission means "no value to report", and the client leaves the
+  applied value unchanged.
+- **`e`:** per-key failures, flat key → short reason. 0.9.0 always emits
+  `"rejected"`. At most one key per batch, because both the WS apply path and
+  Save abort on the first rejection: fields before the bad one were written,
+  fields after it were never attempted, and `d` reports their unchanged stored
+  values.
+
+A correlated rejection is reported only in `e`; no second `type:"error"`
+message follows. A batch that reaches an ack but cannot be applied at all
+(`data` is not an object) gets the ack **and** a `type:"error"`; unparsable
+input has no readable `i` and gets `type:"error"` alone.
+
 ### `type: "error"`
 
-Sent on processing errors.
+Sent on processing errors and protocol errors (for example an `apply` with no
+numeric `i`).
 
 ```json
 {
@@ -138,6 +181,7 @@ changed fields, never the full settings object.
 ```json
 {
   "action": "apply",
+  "i": 7,
   "data": {
     "wifi": {
       "ssid": ["text", "SSID", {"value": "NewNetworkName"}]
@@ -146,16 +190,26 @@ changed fields, never the full settings object.
 }
 ```
 
+**`i` is required and numeric.** It is a positive integer chosen by the client,
+meaningful only for the connection that sent it: it is not a version and not
+device-global. The server never stores it and never uses it as a precondition
+for applying a value; it only echoes it in the `ack`. **A missing or
+non-numeric `i` is a protocol error:** the batch is not applied, nothing is
+broadcast, and the sender gets `type:"error"`. No ack is possible, because
+there is nothing to correlate to.
+
 **Why partial?** Sending only changed fields minimizes wire overhead (ESP32 is
 CPU- and bandwidth-constrained). The server merges the partial update into its
 store.
 
 **Multi-field apply:** If the user changes multiple fields between WS sends,
-the browser batches them:
+the browser batches them under one `i`; the ack settles every key in the
+message:
 
 ```json
 {
   "action": "apply",
+  "i": 8,
   "data": {
     "wifi": {
       "ssid": ["text", "SSID", {"value": "NewName"}],
@@ -165,26 +219,67 @@ the browser batches them:
 }
 ```
 
+### `action: "sync"`
+
+Requests a full settings payload, for recovery only — it is **not** a polling
+mechanism.
+
+```json
+{
+  "action": "sync",
+  "i": 9
+}
+```
+
+The reply is the standard `type:"settings"` payload sent **to the requester
+only**, carrying the same `i`:
+
+```json
+{"type": "settings", "i": 9, "_meta": {"dirty": true, "show_reset": true, "show_reboot": true, "uploading": false}, "data": {}}
+```
+
+Ordinary broadcasts carry no `i`, so a reply is recognized exactly rather than
+as "the next push after I asked" — the user can start a new batch before the
+reply arrives. The sync id is drawn from the same per-connection counter as
+batch ids, so the two spaces never collide. A `sync` without a numeric `i` gets
+`type:"error"` and no reply. It mutates nothing and triggers no broadcast.
+
 ## State Machine Summary
 
 The browser tracks per-field state to handle concurrent edits, external
-updates, and echo resolution:
+updates, and the outcome of its own applies:
 
 | State | Meaning | Browser Behavior |
 |---|---|---|
-| **Idle** | FV = LS = AV, inFlight = false | No action |
-| **Local Input** | User changed field, not yet confirmed | Send FV to server; set inFlight = true |
-| **External Update** | Server pushed new value, user hasn't changed it | Show notification: "Load" or "Keep" |
-| **Coincidental Sync** | Server echoed the same value user was about to send | Silent sync, no notification |
-| **Collision** | User changed field AND server pushed different value | Prompt: "Keep all local" or "Accept all server" |
-| **Echo Received** | Server confirmed user's change | Clear inFlight = false |
+| **Idle** | FV = LS = AV, no batch pending for the field | No action |
+| **Local Input** | User changed the field, batch not yet answered | Send FV with a fresh `i`; set inFlight = true |
+| **External Update** | Server pushed a value the user hasn't changed | Show notification: "Load" or "Keep" |
+| **Coincidental Sync** | Server pushed the same value the user was about to send | Silent sync, no notification |
+| **Collision** | User changed the field AND the server pushed a different value | Prompt: "Keep all local" or "Accept all server" |
+| **Ack Received** | `type:"ack"` for the batch arrived | Clear inFlight; adopt `d` (which may differ from what was sent) |
+| **Rejected** | Ack `e` names the key | Revert to AV, show the rejection, keep the field retryable |
+| **Recovering** | Batch timed out; the store's contents are unknown | Ask once with `action:"sync"`, then resend at most once if the store does not hold the sent value |
 
-**Legend:** FV = Form Value (what user sees), LS = Last Sent (last value sent
-to server), AV = Applied Value (what server reports), inFlight = waiting for
-server echo.
+**Legend:** FV = Form Value (what the user sees), LS = Last Sent (the last value
+sent for the field, updated to the decided value on ack), AV = Applied Value
+(what the server reports), inFlight = no answer yet for this field.
 
-For the full state machine with all 10 cases, see the
-[architecture spec](docs/superpowers/specs/2026-06-18-unified-settings-design.md).
+For the full design — the timeout, the sync request, and the bounded resend —
+see the
+[client ack-correlation design](docs/superpowers/specs/2026-11-11-client-ack-correlation-design.md).
+
+### Recovery and `ack_timeout_ms`
+
+A batch with no ack within `ack_timeout_ms` (default **5000 ms**, set via
+`parasol_config.json` and rendered into the page as
+`<meta name="parasol-ack-timeout">`) enters **Recovering**: the client asks once
+with `action:"sync"` and resends at most once per key if the store does not hold
+the sent value. If the sync goes unanswered the field is left unsent — the
+ladder is finite by design and has no further retries.
+
+A too-small timeout degrades visibly: the late ack is ignored, and the user's
+own change arrives in the broadcast with nothing in flight, so it reads as an
+external update (Load/Keep).
 
 ## HTTP Endpoints (Fallback)
 

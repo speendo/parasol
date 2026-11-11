@@ -429,16 +429,29 @@ typedef struct {
 |---|---|---|
 | `is_status` | `bool` | `false` by default. `true` = read-only status field (renders disabled). |
 | `on_get` | `prsl_get_cb_t` | Called once per field at init. Return persisted value string, or NULL for default (checkbox→indeterminate, others→empty). |
-| `on_set` | `prsl_set_cb_t` | Called on every value change and on Save with a typed `prsl_val_t *`. The callback OWNS persistence — accept by writing the value back via `prsl_set_val()` (may transform first), or write nothing to discard. Return `ESP_OK` to accept, anything else to reject (Save aborts). |
+| `on_set` | `prsl_set_cb_t` | Called on every value change and on Save with a typed `prsl_val_t *`. The callback OWNS persistence — accept by writing the value back via `prsl_set_val()` (may transform first), or write nothing to discard. Return `ESP_OK` to accept, anything else to reject (WS apply and Save both abort at the first rejection). |
 | `help` | `const char *` | Helper text shown below the field. NULL = no help text rendered. |
 | `attrs` | `const char *` | JSON string of HTML form attributes (see Attrs Format below). NULL = no validation attributes. |
 
-> **Sharp edge (transform / accept-but-don't-store):** the browser assumes
-> the server echoes back exactly the value it sent. If `on_set` stores a
-> *different* value (transform) or stores nothing (discard), the field
-> silently desyncs in the UI until re-touched or reconnected. That is a
-> documented cosmetic edge of callback-owned writes, not data loss. There is
-> no echo/correlation fix in 0.7.0.
+> **Ack guarantee (0.9.0+):** every WS apply is answered with an `ack` carrying
+> the value the store holds afterwards, read back after `on_set` returns — not
+> the value the browser sent. Transforms and discards therefore update the
+> widget silently, and a rejection reverts the field and leaves it retryable.
+> Nothing is left waiting for an echo.
+
+`on_set` contract for callback-owned writes:
+
+- **Idempotent.** A lost ack makes the browser resend a value once, and a
+  reconnect can replay an apply, so `on_set` may be called twice with the same
+  value. Writing the value and setting dirty must be safe to repeat.
+- **Store values the widget can display.** The ack reports the stored value and
+  the browser writes it back verbatim. If you normalize `"auto"` to
+  `"station"`, the `select` options must contain `"station"`; if you store a
+  number, the `number`/`range` widget must be able to show it.
+- **Rejections abort the batch.** WS apply and Save both stop at the first
+  rejection; fields after it are never attempted. The ack's `d` still reports
+  their current stored values, so the client does not mistake "never attempted"
+  for "applied as sent".
 
 ---
 

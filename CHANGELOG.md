@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.9.0
+- BREAKING (wire): `action:"apply"` now requires a numeric `i`. A message without one is a protocol error — nothing is applied, nothing is broadcast, and the sender gets `type:"error"` (no ack is possible, because there is nothing to correlate to).
+- New `type:"ack"` sent to the sender of every apply, including no-ops and all-rejected batches, and written before the resulting settings broadcast. `d` carries the decided `"group.key"` → value **read back from the store after `on_set`**, so transforms, discards, and fields with no `on_set` all report what is actually stored; `e` names the rejected key with reason `"rejected"`.
+- Rejections stay abort-on-first for both WS apply and Save; `d` reports the untouched tail fields with their current stored values, so "never attempted" is not mistaken for "applied as sent".
+- New `action:"sync"` recovery request: the standard settings payload goes to the requester only, tagged with the same `i`. Ordinary broadcasts still carry no `i`, so a reply is recognized exactly rather than as "the next push".
+- Client: acks settle batches by key, not by value; `lastSent` adopts the decided value; transforms and discards update the widget silently when the user has not typed since; a rejection reverts the field and keeps it retryable. Batches settle independently, so one outstanding batch no longer blocks another, and `_meta` is applied before the in-flight guard so the Save button cannot stall.
+- Client: bounded recovery ladder — `ack_timeout_ms` (default 5000, set in `parasol_config.json` and emitted as `<meta name="parasol-ack-timeout">`), then at most one `action:"sync"`, then at most one resend per key, then adopt the store value and stop. An unanswered sync is terminal.
+- Server: the WS message handler moves to host-testable `src/prsl_ws_handle.c` (`prsl_ws_handle()`); `src/prsl_ws.cpp` is now glue.
+- Server: `setCloseClientOnQueueFull(true)` disconnects a client whose send queue fills instead of silently dropping messages; the page reconnects with backoff.
+- Docs: `WS_PROTOCOL.md` (required `i`, `ack`, `sync`, new state machine, queue policy), `API_REFERENCE.md` (ack guarantee, `on_set` idempotency and display contract), README, backlog. Spec: `docs/superpowers/specs/2026-11-11-client-ack-correlation-design.md`.
+- JS budget: `app.min.js` 22,737 raw / 7,808 gzip vs `main` 20,877 raw / 7,218 gzip = **+1,860 raw / +590 gzip**, inside the +1.0 KB gzip target. (`gzip -9` on stdin, so no filename/mtime header; a bare `gzip -9 -c app.min.js` prints 7,819.)
+
 ## 0.8.0
 - Generic file upload: `PRSL_FILE` field type + `prsl_add_file_field` / `prsl_file_opts_t` / `prsl_upload_t` / `prsl_upload_cb_t`. `prsl_add_field(PRSL_FILE, ...)` returns `ESP_ERR_INVALID_ARG`.
 - Upload lifecycle `META → CHUNK* → END/ABORT` with an exactly-once `ABORT` guarantee (META/CHUNK rejection, END error, transport drop, idle timeout, and `prsl_stop()` each deliver `ABORT` exactly once; never after a successful `END`).

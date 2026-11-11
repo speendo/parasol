@@ -1,6 +1,6 @@
 # Client ack-correlation design
 
-**Status:** design, awaiting approval (target 0.9.0). Supersedes the "Deferred —
+**Status:** implemented in 0.9.0. Supersedes the "Deferred —
 client echo-correlation gap" section of
 `2026-09-02-architectural-decisions-design.md`, and replaces the ten-case
 state machine in `2026-06-18-unified-settings-design.md` as the authoritative

@@ -33,7 +33,7 @@ npm run build
 | Document | Audience | Content |
 |---|---|---|
 | [`API_REFERENCE.md`](API_REFERENCE.md) | ESP32 firmware developers | C API reference with doxygen examples — group registration, field types, save callbacks, dirty check, runtime value access |
-| [`WS_PROTOCOL.md`](WS_PROTOCOL.md) | Developers debugging WebSocket traffic | Message format reference — status, settings, apply, error payloads, state machine summary |
+| [`WS_PROTOCOL.md`](WS_PROTOCOL.md) | Developers debugging WebSocket traffic | Message format reference — status, settings, apply, ack, sync, error payloads, recovery |
 | [`docs/BACKLOG.md`](docs/BACKLOG.md) | Contributors | Living list of open work before/after 1.0, deferred items, and resolved/superseded decisions |
 | [`docs/superpowers/specs/2026-06-18-unified-settings-design.md`](docs/superpowers/specs/2026-06-18-unified-settings-design.md) | Contributors | Full architecture spec, API contract, JSON wire format, state machine *(internal design artifact — may reference superseded APIs)* |
 
@@ -52,7 +52,7 @@ lib_deps = https://github.com/speendo/parasol.git#v0.8.0
 > **Assets:** default `prsl_assets.h`/`prsl_assets.c` (gzip of the minified UI,
 > config-injected) are committed under `src/` and auto-compiled by PlatformIO
 > and Arduino — default users need zero generation. To customize
-> (`title`/`logo`/`favicon`/`always_show_save`), edit `parasol_config.json`
+> (`title`/`logo`/`favicon`/`always_show_save`/`ack_timeout_ms`), edit `parasol_config.json`
 > and `index.html`, then run `python3 scripts/generate_assets.py` (or wire it
 > as `extra_scripts = pre:scripts/generate_assets.py`) so the committed copy
 > stays in sync. ESP-IDF generates into the build dir via CMake, which invokes
@@ -62,7 +62,7 @@ lib_deps = https://github.com/speendo/parasol.git#v0.8.0
 
 ## Troubleshooting
 
-- **Asset generation:** default `prsl_assets.h`/`prsl_assets.c` (gzip of the minified UI, config-injected) are committed under `src/` and auto-compiled by PlatformIO and Arduino — default users need zero generation. To customize (`title`/`logo`/`favicon`/`always_show_save`), edit `parasol_config.json` and `index.html`, then run `python3 scripts/generate_assets.py` (or wire it as `extra_scripts = pre:scripts/generate_assets.py`) so the committed copy stays in sync. Stale assets silently serve the wrong UI.
+- **Asset generation:** default `prsl_assets.h`/`prsl_assets.c` (gzip of the minified UI, config-injected) are committed under `src/` and auto-compiled by PlatformIO and Arduino — default users need zero generation. To customize (`title`/`logo`/`favicon`/`always_show_save`/`ack_timeout_ms`), edit `parasol_config.json` and `index.html`, then run `python3 scripts/generate_assets.py` (or wire it as `extra_scripts = pre:scripts/generate_assets.py`) so the committed copy stays in sync. Stale assets silently serve the wrong UI.
 - **C++ compound literals:** option structs must be `static const prsl_field_opts_t` objects. C99 compound literals passed inline at file scope are not safely initialised and are rejected by some toolchains.
 - **`prsl_get` returns `NULL`:** it only reads fields stored as strings. Numeric/boolean fields need the typed getters `prsl_get_int` / `prsl_get_float` / `prsl_get_bool`.
 - **Dirty flag:** if firmware never calls `prsl_set_dirty(true)`, the Save button never shows and a Save click is a silent no-op. Call `prsl_set_dirty(true)` inside `on_set` (or wherever external state changes).

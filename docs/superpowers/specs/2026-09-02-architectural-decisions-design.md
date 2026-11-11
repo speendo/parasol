@@ -430,8 +430,8 @@ it is a one-line client fix plus test/doc alignment, not a wire or API change.
 
 ## Deferred — client echo-correlation gap (transform / accept-don't-store)
 
-**Status: deferred. Option A for 0.7.0 — document as a sharp edge, no code or
-wire change. Revisit in a later release.**
+**Status: resolved in 0.9.0 — see
+`2026-11-11-client-ack-correlation-design.md`.**
 
 The client correlates a server echo to its own `apply` by value equality
 (`app.js:363`: `String(serverVal) === String(lastSent[key])`). It assumes a

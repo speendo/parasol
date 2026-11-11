@@ -1,5 +1,9 @@
 # Unified Settings API & WebSocket Design
 
+> **Superseded in 0.9.0:** the browser's settings state machine is now described
+> by `2026-11-11-client-ack-correlation-design.md`. This document is kept for
+> history; its ten-case echo model no longer matches the code.
+
 ## Guiding Constraints
 
 The server is an ESP32 with constrained RAM, flash storage, and CPU. All design

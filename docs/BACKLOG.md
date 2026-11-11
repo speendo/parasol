@@ -15,8 +15,7 @@ Release sequence:
 1. **0.7.0** — already-implemented architectural decisions + asset generator
    fix.
 2. **0.8.0** — generic file upload.
-3. **0.9.0** — client echo-correlation fix (wire change; write the spec after
-   0.8.0, implement before 1.0).
+3. **0.9.0** — client echo-correlation fix (wire change; shipped).
 4. **1.0.0** — after the contract/security/hardware/distribution items below.
 
 ### Release 0.7.0
@@ -60,12 +59,33 @@ Design: `docs/superpowers/specs/2026-11-10-file-upload-design.md`.
 Deferred from this feature (tracked separately below): auth, upload chunk size,
 filename pattern, modal/confirmation, download.
 
+### Deferred from 0.9.0 (client ack correlation)
+
+Design: `docs/superpowers/specs/2026-11-11-client-ack-correlation-design.md` §12.
+
+- [ ] **Continue past a rejection on the WS apply path.** The first rejection
+  aborts the batch and leaves the tail fields unattempted. Reporting every
+  failing key is a good fix, but it is independent of the wire change and does
+  not block 0.9.0 (the ack's dense `d` already keeps the tail coherent).
+- [ ] **"Server adjusted this" notice.** Client-derived from `d` vs `sent`; no
+  wire change. Deliberately not in 0.9.0 — silent acceptance was chosen.
+- [ ] **Fire-and-forget action field type**, so one-shot actions stop wearing a
+  value field's clothes.
+- [ ] **`_meta.v` device-wide version**, only if the in-flight guard proves to
+  drop pushes in practice.
+- [ ] **Per-field timeout**, only if someone asks. It would ride in every
+  field's `opts` forever for a rare need.
+- [ ] **Server-side last-processed-ticket memory.** Would make automatic resend
+  provably safe; rejected for 0.9.0 to keep the device stateless.
+- [ ] **Bound consecutive syncs when the store omits a recovering key.** A sync
+  reply that resolves nothing re-arms `maybeSync()`, so a store that never
+  reports a recovering key can keep the client syncing until the sync timeout.
+  Cap the consecutive recovery rounds (found in the 0.9.0 budget review).
+
 ### 1.0 contract and release
 
-- [ ] **Client echo-correlation gap.** Deferred from 0.7.0; fixed by a wire
-  change (apply/ack separated from value push). See
-  `2026-09-02-architectural-decisions-design.md` → "Deferred — client
-  echo-correlation gap".
+- [x] **Client echo-correlation gap** — fixed in 0.9.0 (ack correlation; see
+  `docs/superpowers/specs/2026-11-11-client-ack-correlation-design.md`).
 - [ ] **Security posture.**
   - [ ] Protect the API with HTTP Basic/Digest + middleware, and partition
     fields by access level (e.g. `/user` vs `/admin`). The ESPAsyncWebServer
