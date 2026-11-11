@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 describe('serialize', () => {
   beforeEach(() => {
@@ -641,6 +641,218 @@ describe('file field change handling', function () {
     selectFile(field.querySelector('input[type=file]'), fakeFile('a.bin', 'application/octet-stream', 10))
     expect(window.__test.formInteracted).toBe(false)
     expect(field.querySelector('#audio\\.clip-upload').disabled).toBe(false)
+  })
+})
+
+describe('upload flow', function () {
+  var xhr, xhrs, file, field
+  var realFetch = window.fetch
+  var realXHR = window.XMLHttpRequest
+
+  function makeField() {
+    document.querySelector('#config-form').innerHTML = ''
+    window.__test.fileFields = {}
+    field = window.createField('audio', {
+      key: 'clip', type: 'file', label: 'Clip',
+      opts: { accept: '.mp3,audio/*', max_size: 1000 },
+    })
+    document.querySelector('#config-form').appendChild(field)
+    file = fakeFile('beep.mp3', 'audio/mpeg', 100)
+    selectFile(field.querySelector('input[type=file]'), file)
+  }
+
+  function upload() {
+    field.querySelector('#audio\\.clip-upload').click()
+  }
+
+  function msg() {
+    return field.querySelector('#audio\\.clip-msg').textContent
+  }
+
+  function progress() {
+    return field.querySelector('#audio\\.clip-progress')
+  }
+
+  function cancelBtn() {
+    return field.querySelector('#audio\\.clip-cancel')
+  }
+
+  async function flush() {
+    for (var i = 0; i < 5; i++) await Promise.resolve()
+  }
+
+  beforeEach(function () {
+    window.__test.localUploading = false
+    window.__test.serverUploading = false
+    window.__test.fileFields = {}
+    document.querySelector('#config-form').innerHTML = ''
+    xhr = undefined
+    xhrs = 0
+    window.XMLHttpRequest = function () {
+      xhrs++
+      xhr = this
+      this.upload = {}
+      this.open = vi.fn()
+      this.setRequestHeader = vi.fn()
+      this.send = vi.fn()
+      this.abort = vi.fn(function () { if (xhr.onabort) xhr.onabort() })
+    }
+    window.fetch = vi.fn(function () {
+      return Promise.resolve({ ok: true, text: function () { return Promise.resolve('OK') } })
+    })
+  })
+
+  afterEach(function () {
+    window.fetch = realFetch
+    window.XMLHttpRequest = realXHR
+    window.__test.localUploading = false
+    window.__test.serverUploading = false
+  })
+
+  it('posts preflight metadata, then PUTs the file', async function () {
+    makeField()
+    upload()
+    await flush()
+    expect(window.fetch).toHaveBeenCalledTimes(1)
+    var args = window.fetch.mock.calls[0]
+    expect(args[0]).toBe('/api/upload/audio/clip')
+    expect(args[1].method).toBe('POST')
+    expect(JSON.parse(args[1].body)).toEqual({ name: 'beep.mp3', size: 100, type: 'audio/mpeg' })
+    expect(xhr.open).toHaveBeenCalledWith('PUT', '/api/upload/audio/clip?name=beep.mp3&type=audio%2Fmpeg')
+    expect(xhr.setRequestHeader).toHaveBeenCalledWith('Content-Type', 'application/octet-stream')
+    expect(xhr.send).toHaveBeenCalledWith(file)
+    expect(window.__test.localUploading).toBe(true)
+  })
+
+  it('shows the preflight response text and skips the PUT on failure', async function () {
+    window.fetch = vi.fn(function () {
+      return Promise.resolve({ ok: false, status: 413, text: function () { return Promise.resolve('File too large') } })
+    })
+    makeField()
+    upload()
+    await flush()
+    expect(msg()).toBe('File too large')
+    expect(xhrs).toBe(0)
+    expect(window.__test.localUploading).toBe(false)
+    expect(progress().hidden).toBe(true)
+  })
+
+  it('shows Upload failed when the preflight request rejects', async function () {
+    window.fetch = vi.fn(function () { return Promise.reject(new Error('Network error')) })
+    makeField()
+    upload()
+    await flush()
+    expect(msg()).toBe('Upload failed')
+    expect(window.__test.localUploading).toBe(false)
+  })
+
+  it('updates progress from upload.onprogress while visible', async function () {
+    makeField()
+    upload()
+    await flush()
+    expect(progress().hidden).toBe(false)
+    expect(cancelBtn().hidden).toBe(false)
+    xhr.upload.onprogress({ lengthComputable: true, loaded: 50, total: 100 })
+    expect(progress().value).toBe(50)
+  })
+
+  it('shows Uploaded and clears the upload state on 2xx', async function () {
+    makeField()
+    upload()
+    await flush()
+    xhr.status = 200
+    xhr.onload()
+    expect(msg()).toBe('Uploaded')
+    expect(window.__test.localUploading).toBe(false)
+    expect(progress().hidden).toBe(true)
+    expect(cancelBtn().hidden).toBe(true)
+  })
+
+  it('shows the response text and clears the lock on a non-2xx', async function () {
+    makeField()
+    upload()
+    await flush()
+    xhr.status = 415
+    xhr.responseText = 'File type not allowed'
+    xhr.onload()
+    expect(msg()).toBe('File type not allowed')
+    expect(window.__test.localUploading).toBe(false)
+  })
+
+  it('shows Upload failed on a transport error', async function () {
+    makeField()
+    upload()
+    await flush()
+    xhr.onerror()
+    expect(msg()).toBe('Upload failed')
+    expect(window.__test.localUploading).toBe(false)
+  })
+
+  it('shows Device restarting... when the device vanishes at 100%', async function () {
+    makeField()
+    upload()
+    await flush()
+    progress().value = 100
+    xhr.onerror()
+    expect(msg()).toBe('Device restarting...')
+    expect(window.__test.localUploading).toBe(false)
+  })
+
+  it('aborts and shows Upload cancelled when Cancel is clicked', async function () {
+    makeField()
+    upload()
+    await flush()
+    cancelBtn().click()
+    expect(xhr.abort).toHaveBeenCalled()
+    expect(msg()).toBe('Upload cancelled')
+    expect(window.__test.localUploading).toBe(false)
+    expect(progress().hidden).toBe(true)
+    expect(cancelBtn().hidden).toBe(true)
+  })
+})
+
+describe('beforeunload during upload', function () {
+  var sock
+  var realWS = window.WebSocket
+
+  beforeEach(function () {
+    window.__test.localUploading = false
+    window.__test.serverUploading = false
+    sock = { readyState: 1, close: vi.fn() }
+    window.WebSocket = function () { return sock }
+  })
+
+  afterEach(function () {
+    window.WebSocket = realWS
+    window.__test.localUploading = false
+    window.__test.serverUploading = false
+  })
+
+  it('warns while a local upload is active', function () {
+    window.__test.localUploading = true
+    window.connectWS()
+    var e = { preventDefault: vi.fn(), returnValue: '' }
+    window.__test.onBeforeUnload(e)
+    expect(e.preventDefault).toHaveBeenCalled()
+    expect(e.returnValue).toBe('')
+    expect(sock.close).not.toHaveBeenCalled()
+  })
+
+  it('warns while the server reports an upload', function () {
+    window.__test.serverUploading = true
+    window.connectWS()
+    var e = { preventDefault: vi.fn(), returnValue: '' }
+    window.__test.onBeforeUnload(e)
+    expect(e.preventDefault).toHaveBeenCalled()
+    expect(sock.close).not.toHaveBeenCalled()
+  })
+
+  it('disconnects the WebSocket when idle', function () {
+    window.connectWS()
+    var e = { preventDefault: vi.fn(), returnValue: '' }
+    window.__test.onBeforeUnload(e)
+    expect(e.preventDefault).not.toHaveBeenCalled()
+    expect(sock.close).toHaveBeenCalled()
   })
 })
 

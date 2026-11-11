@@ -30,6 +30,9 @@ var parasol = (function () {
   var pendingConflicts = [];
   var resetInProgress = false;
   var rebooting = false;
+  var localUploading = false;
+  var serverUploading = false;
+  var activeUpload = null;
 
   /** Show an error message in the status bar. @param {string} msg */
   function showError(msg) {
@@ -991,7 +994,17 @@ var parasol = (function () {
     if (!configForm || !navList || !statusBar || !footer || !btnSaveApply || !btnReset) return;
     wireButtons();
     connectWS();
-    window.addEventListener('beforeunload', disconnectWS);
+    window.addEventListener('beforeunload', onBeforeUnload);
+  }
+
+  /** Warn before unloading while an upload is active; otherwise close the socket. */
+  function onBeforeUnload(e) {
+    if (localUploading || serverUploading) {
+      e.preventDefault();
+      e.returnValue = '';
+      return;
+    }
+    disconnectWS();
   }
 
   var fileFields = {};
@@ -1113,7 +1126,88 @@ var parasol = (function () {
       field: field, group: namePrefix, key: key,
     };
     input.addEventListener('change', function () { fileSelected(id); });
+    btn.addEventListener('click', function () { startUpload(id); });
+    cancel.addEventListener('click', function () { cancelUpload(); });
     return container;
+  }
+
+  /** Build the upload endpoint path for a file field, URL-encoding group and key. */
+  function uploadURL(f) {
+    return '/api/upload/' + encodeURIComponent(f.group) + '/' + encodeURIComponent(f.key);
+  }
+
+  /** Finish an upload: clear the lock, hide progress/Cancel, show a message. */
+  function finishUpload(f, msg) {
+    localUploading = false;
+    if (f) {
+      f.progress.hidden = true;
+      f.cancel.hidden = true;
+      f.msg.textContent = msg;
+    }
+    activeUpload = null;
+    updateUI();
+  }
+
+  /** Stream the file with XHR so upload.onprogress is available. */
+  function putFile(f, url, file, au) {
+    if (au.cancelled) return;
+    var xhr = au.xhr = new XMLHttpRequest();
+    xhr.open('PUT', url + '?name=' + encodeURIComponent(file.name) + '&type=' + encodeURIComponent(file.type));
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+    xhr.upload.onprogress = function (e) {
+      if (e.lengthComputable) f.progress.value = Math.round(e.loaded / e.total * 100);
+    };
+    xhr.onload = function () {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        finishUpload(f, 'Uploaded');
+      } else {
+        finishUpload(f, xhr.responseText || 'HTTP ' + xhr.status);
+      }
+    };
+    xhr.onerror = function () {
+      finishUpload(f, f.progress.value >= 100 ? 'Device restarting...' : 'Upload failed');
+    };
+    xhr.onabort = function () { finishUpload(f, 'Upload cancelled'); };
+    xhr.send(file);
+  }
+
+  /** POST the preflight metadata, then PUT the raw file on success. */
+  function startUpload(key) {
+    var f = fileFields[key];
+    if (!f || !f.valid || localUploading || serverUploading) return;
+    localUploading = true;
+    updateUI();
+    f.progress.hidden = false;
+    f.progress.value = 0;
+    f.cancel.hidden = false;
+    f.msg.textContent = '';
+    var file = f.file;
+    var url = uploadURL(f);
+    var au = activeUpload = { key: key, xhr: null, cancelled: false };
+    au.ac = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    var req = {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: file.name, size: file.size, type: file.type })
+    };
+    if (au.ac) req.signal = au.ac.signal;
+    fetch(url, req).then(function (res) {
+      if (au.cancelled) return;
+      if (res.ok) return putFile(f, url, file, au);
+      return res.text().then(function (t) { finishUpload(f, t || 'HTTP ' + res.status); });
+    }).catch(function () {
+      if (!au.cancelled) finishUpload(f, 'Upload failed');
+    });
+  }
+
+  /** Abort the active upload (preflight or PUT) and report it as cancelled. */
+  function cancelUpload() {
+    var au = activeUpload;
+    if (!au) return;
+    au.cancelled = true;
+    if (au.ac) au.ac.abort();
+    if (au.xhr) { au.xhr.abort(); return; }
+    finishUpload(fileFields[au.key], 'Upload cancelled');
   }
 
   /**
@@ -1281,6 +1375,10 @@ var parasol = (function () {
     Object.defineProperty(window.__test, 'setNavMode', { value: function (v) { applyNavMode(!!v); }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'acceptsFile', { value: acceptsFile, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'checkFile', { value: checkFile, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'localUploading', { get: function () { return localUploading; }, set: function (v) { localUploading = v; }, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'serverUploading', { get: function () { return serverUploading; }, set: function (v) { serverUploading = v; }, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'fileFields', { get: function () { return fileFields; }, set: function (v) { fileFields = v; }, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'onBeforeUnload', { value: onBeforeUnload, enumerable: true, configurable: true });
   }
 
   return {
