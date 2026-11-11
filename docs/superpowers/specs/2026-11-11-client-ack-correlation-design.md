@@ -187,9 +187,9 @@ Revisit only if the guard keeps dropping pushes in practice.
   do not exist are omitted. Omission means "no value to report"; the client
   leaves the applied value unchanged.
 - `e` — per-key failures, flat key → short reason string. 0.9.0 always emits
-  `"rejected"`. Present only for keys whose `on_set` returned non-`ESP_OK`.
-  Because the WS apply path continues past a rejection (§8.2), a batch can
-  contain both applied keys and rejected keys.
+  `"rejected"`. Present at most once per batch: both the WS apply path and Save
+  abort on the first rejection (§8.3), so at most one key can fail and the keys
+  after it are never attempted.
 - The ack is written **before** the broadcast. Order is not relied on by the
   client, but this ordering costs nothing and reduces visible churn.
 - An ack is sent even when nothing was applied, which is what removes the
@@ -271,10 +271,10 @@ Inside the handler:
 
 1. Parse; read `i`. If it is absent or not a number, return an error string and
    apply nothing (protocol error, §7.2).
-2. Apply the batch (8.3), collecting per-key errors.
+2. Apply the batch (8.3), capturing the first rejection, if any.
 3. Build the ack: `d` from `prsl_store_find()` + `cJSON_Duplicate(f->value, 1)`
-   (the existing per-field serialization, `src/prsl_json.c:60-64`), `e` from the
-   collected errors, `i` echoed.
+   (the existing per-field serialization, `src/prsl_json.c:60-64`), `e` from that
+   rejection, `i` echoed.
 4. Return it as `to_sender`. If `client->text()` returns `false`, the frame was
    not queued; log it. `setCloseClientOnQueueFull(true)` (8.5) closes the
    connection in that case, so the client recovers by reconnecting.
@@ -292,21 +292,20 @@ send the ack **and** a `type:"error"` message. Unparsable input has no readable
 `"on_set rejected g.k"` string and its non-2xx response are unchanged
 (`tests/native/test_save_body.c:75`).
 
-### 8.3 Continue past rejection on the WS apply path
+### 8.3 Rejection stays abort-on-first
 
-`prsl_apply_body` currently stops at the first rejection
-(`src/prsl_body.c:17`) and the batch is prefix-applied: fields before the bad
-one were written, fields after it were silently skipped, and if anything was
-written the server still broadcasts. The ack makes that visible but does not
-make it sensible.
+`prsl_apply_body` stops at the first rejection (`src/prsl_body.c:17`). That is
+unchanged in 0.9.0, for the WS apply path and for Save alike. A batch is
+therefore prefix-applied: fields before the bad one were written, fields after
+it were never attempted, and `e` names at most one key.
 
-Change: give `prsl_apply_body` an optional `cJSON *errors` out-parameter.
+This is safe with a dense `d` (§7.2): the keys after the rejection are reported
+with their current stored values, so the client adopts those values and does not
+mistake "never attempted" for "applied as sent". Because the browser sends one
+field per apply, a mixed batch cannot originate here anyway.
 
-- When `errors` is supplied (WS apply), continue after a rejection and record
-  `errors["group.key"] = "rejected"`.
-- When `errors` is NULL (HTTP save, via `prsl_apply_save_body`), keep the
-  current abort-on-first behavior; a save is a transaction and the caller
-  returns a single error with a non-2xx status.
+Continuing past a rejection to report every failing key is a real improvement,
+but it is independent of the wire change and moves to the backlog (§12).
 
 Also fix the `no on_set` branch (`src/prsl_body.c:52-59`) so the ack reports what
 the store actually holds, rather than assuming the write succeeded.
@@ -412,38 +411,59 @@ This is silent acceptance, deliberately: transform and discard both resolve to
 the store's value with no prompt. The user's only signal is the value changing.
 Help text and HTML validation are the dev-side tools to prevent surprise.
 
-### 9.4 Sync replies and the in-flight guard
+### 9.4 Recovery is fed by any authoritative value set
 
-A settings message whose `i` equals `syncId` is the recovery reply, not a
-broadcast. It is processed like a broadcast — `_meta`, `updateAV()`, and the
-normal change detection — with one exemption: keys in `recovering` do not go
-through external-update/conflict classification, because the ladder resolves
-them. That exemption is what prevents the forbidden outcome here: `newAV`,
-`fv`, and `oldAV` all differ, which the normal path would turn into a conflict
-prompt right after the user's own edit.
+The recovery ladder does not care *how* it learns the store's contents. It needs
+one function fed by two sources:
+
+- the reply to `sync`, identified by `i === syncId`;
+- an ordinary `type:"settings"` push.
+
+This matters because of ordering. In the transform-plus-lost-ack case, the
+broadcast produced by the original apply is queued behind the ack that was lost,
+so it arrives *after* the timeout, with nothing in flight. If only the sync reply
+were exempt from classification, that push would be treated as an external
+update: `av != oldAV`, `fv == sent`, so the user gets a Load/Keep prompt for a
+change they just made — the anti-goal in §4.
+
+So the exemption belongs to the keys, not to the message:
 
 ```
-onSyncReply(msg):                    // after the normal push path ran updateAV()
-  syncId = 0; clearTimeout(syncTimer)
-  for key in recovering:
-    lastSent[key] = AV               // AV may now equal `sent`, or may differ
-    if widget no longer holds recovering[key].sent: delete; continue
-    if String(AV) === String(recovering[key].sent): delete; continue
-    if (!recovering[key].retried):
-      recovering[key].retried = true; delete
-      sendToServer(key, recovering[key].sent, true)  // it did not land; one retry
-    else:
-      writeBack(key, recovering[key].sent, AV)  // transformed or dropped
-      delete
-  maybeSync()
+onSettings(msg):
+  apply _meta                      // before the guard
+  isReply = msg.i && msg.i === syncId
+  if (isReply) { syncId = 0; clearTimeout(syncTimer) }
+  else if (any batch pending) return          // existing drop, unchanged
+  for each key not in flight: AV = msg.data[key]   // in-flight keys keep theirs
+  for each key in recovering: resolveRecovering(key, AV)
+  normal change detection for the rest
+
+resolveRecovering(key, AV):
+  lastSent[key] = AV               // may now equal `sent`, or may differ
+  if widget no longer holds recovering[key].sent: delete; return
+  if String(AV) === String(recovering[key].sent): delete; return
+  if (!recovering[key].retried):
+    recovering[key].retried = true; delete
+    sendToServer(key, recovering[key].sent, true)  // it did not land; one retry
+  else:
+    writeBack(key, recovering[key].sent, AV)       // transformed or dropped
+    delete
+
+// after the loop
+maybeSync()
 ```
 
-`lastSent[key] = AV` matters here for the same reason as on ack: a timeout set it
-to the pre-sync applied value, so without this a key whose change *did* land
-would compare unequal to `lastSent` and be re-sent on the next blur.
+Two details:
 
-Acks and sync replies bypass the guard at `app.js:435`; broadcasts keep the
-current drop-while-in-flight behavior, which is safe because every push is full
+- `lastSent[key] = AV` for the same reason as on ack. A timeout set it to the
+  pre-recovery applied value, so without this a key whose change *did* land would
+  compare unequal to `lastSent` and be re-sent on the next blur.
+- Keys with a batch in flight are skipped. The sync reply is exempt from the
+  global drop (it must be, or a new edit during recovery would swallow it), but
+  it is still older than that batch, so its values are ignored for those keys.
+
+Acks and sync replies bypass the guard at `app.js:435`; ordinary pushes keep the
+current drop-while-in-flight behavior, which is safe because a push is full
 state and the ack has already settled the client's own keys. Batches no longer
 block each other: batch 7 settles while batch 8 is still pending.
 
@@ -479,9 +499,10 @@ onSyncTimeout():
   syncId = 0; recovering = {}
 ```
 
-`maybeSync()` is called from every settle path — ack, timeout, and sync reply —
-so a sync deferred because another batch was pending still fires once that batch
-settles, by ack or by its own timeout.
+`maybeSync()` is called from every settle path — ack, timeout, and any
+authoritative value set (sync reply or ordinary push) — so a sync deferred
+because another batch was pending still fires once that batch settles, by ack or
+by its own timeout.
 
 The bounds, per user edit:
 
@@ -491,16 +512,21 @@ The bounds, per user edit:
   timeout. That is why `sendToServer` takes it. One resend means **two sends in
   total** — the original and the retry — never three.
 - **At most one sync outstanding**, and an unanswered sync is terminal.
-- **Two syncs, one before and one after the resend.** They fall out rather than
-  being counted: a key can enter `recovering` at most twice (after the original
-  send, then after its single retry), and each entry converges to at most one
-  sync. The second sync is not a second chance to resend; it is how the client
-  finds out whether the retry landed:
+- **At most one read per send.** A key can enter `recovering` at most twice
+  (after the original send, then after its single retry), and each entry resolves
+  from at most one authoritative value set. The first read decides whether to
+  resend; the second finds out whether the resend landed. That second read is not
+  a second chance to resend — it is the only way to learn the retry's outcome,
+  because the retry's own broadcast is emitted while the batch is still in
+  flight and is dropped by the guard:
 
   ```
-  edit → send #1 → timeout → sync #1 → "not landed" → resend (send #2)
-       → timeout → sync #2 → "not landed" → adopt store value, stop
+  edit → send #1 → timeout → read → "not landed" → resend (send #2)
+       → timeout → read → "not landed" → adopt store value, stop
   ```
+
+  Either read may be satisfied by an ordinary push instead of the sync reply
+  (§9.4), so the ladder often finishes without a `sync` at all.
 
 There is deliberately no `syncTries` counter. An earlier draft capped it at 2 as
 belt and braces; `retried` plus the sync timeout already make the ladder finite,
@@ -574,7 +600,8 @@ update (Load/Keep). Documented so the symptom is recognizable.
 - Transform (`d != sent`): widget rewritten when untouched; no notification; the
   widget is not re-sent on the next blur (`lastSent` is the decided value).
 - Transform while the user has typed: widget untouched, typed value queued.
-- Skip (key absent from `d`): AV unchanged, no notification.
+- Same-value (`d == sent`): no widget write, no notification.
+- Key absent from `d` (unknown key): AV unchanged, no notification.
 - Reject (`e`): key reverted to AV, error shown, field retryable on next blur —
   including retyping the exact rejected value.
 - Higher ack settles lower batches; a gap leaves no pending entry.
@@ -583,12 +610,15 @@ update (Load/Keep). Documented so the symptom is recognizable.
 - `_meta` applied while a batch is pending.
 - A settings push without `i` is not treated as a sync reply.
 - A settings push with `i != syncId` keeps normal external/conflict handling.
+- **A broadcast while a key is `recovering` resolves it (transform case) with no
+  Load/Keep prompt.**
+- **A broadcast that arrives while a batch is pending does not settle that
+  batch's keys.**
 - Timeout: `inFlight` cleared, `lastSent` reset to AV, field can be sent again.
 - Timeout → sync sent only when `pending` is empty.
 - Deferred sync fires when the last pending batch settles by ack.
-- Sync reply: landed → no resend and `lastSent` catches up; not landed →
-  exactly one resend; after retry → adopt and stop; user typed meanwhile → no
-  resend.
+- Read reply: landed → no resend and `lastSent` catches up; not landed → exactly
+  one resend; after retry → adopt and stop; user typed meanwhile → no resend.
 - A timed-out retry keeps `retried = true` (no unbounded resend).
 - Sync timeout → terminal: `recovering` cleared, typed values left unsent.
 - Reconnect resets ids, pending, recovering, timers.
@@ -599,8 +629,10 @@ update (Load/Keep). Documented so the symptom is recognizable.
 Possible only because of the extraction in §8.1. Feed JSON to `prsl_ws_handle()`
 and inspect the three reply strings.
 
-- WS apply continues past a rejection and reports every failing key.
-- Save still aborts on the first rejection (`test_save_body.c` unchanged).
+- WS apply and Save both abort on the first rejection
+  (`test_save_body.c` unchanged).
+- A rejected batch still acks, with `e` naming exactly one key, and the keys after
+  it reported in `d` with their unchanged store values.
 - Ack `d` reflects the store after `on_set`, including a transform and a
   no-write accept.
 - `d` includes a key whose `on_set` wrote nothing (resolves to the old value).
@@ -616,9 +648,9 @@ and inspect the three reply strings.
 ### 11.3 E2E + test server
 
 `test_server/main.py` must mirror the contract or the suite proves nothing:
-echo `i`, send the ack with `d`/`e`, implement `action:"sync"` to one client,
-and continue past rejection. Add fixture fields that transform, discard, and
-reject. Close the existing `_show_reset` fidelity item in the same pass.
+echo `i`, send the ack with `d`/`e`, implement `action:"sync"` to one client, and
+keep abort-on-first. Add fixture fields that transform, discard, and reject.
+Close the existing `_show_reset` fidelity item in the same pass.
 
 Playwright: transform shows the decided value with no prompt; reject leaves the
 field retryable; the page stays responsive after a transform (other fields and
@@ -636,7 +668,7 @@ Regenerate `app.min.js` and `prsl_assets.c`; the CI drift check must pass.
 | File | Change |
 |---|---|
 | `WS_PROTOCOL.md` | `i` on apply, `type:"ack"`, `action:"sync"`, mandatory-ack rule, per-connection ids, recovery ladder, queue policy. Link the state machine here instead of the June spec. |
-| `API_REFERENCE.md` | Replace the sharp-edge block (:434-439) with the new guarantee. Add: `on_set` must be idempotent; store values the widget can display; WS apply continues past rejection while Save aborts. |
+| `API_REFERENCE.md` | Replace the sharp-edge block (:434-439) with the new guarantee. Add: `on_set` must be idempotent; store values the widget can display; WS apply and Save both abort on the first rejection. |
 | `2026-06-18-unified-settings-design.md` | Two-line "superseded in 0.9.0" header pointing here. Kept for history. |
 | `2026-09-02-architectural-decisions-design.md` | One line on the deferred section: resolved in 0.9.0, pointer here. |
 | `README.md`, `CHANGELOG.md`, `library.json` | Sharp-edge wording removed, 0.9.0 entry, version bump. |
@@ -650,6 +682,10 @@ release sequence notes that it shipped.
 
 Deferred follow-ups to record in the backlog:
 
+- **Continue past a rejection on the WS apply path.** Today the first rejection
+  aborts the batch and leaves the tail fields unattempted. Reporting every
+  failing key instead is a good fix, but it is independent of the wire change
+  and does not block 0.9.0 (dense `d` already keeps the tail coherent).
 - A "server adjusted this" notice (client-derived from `d` vs `sent`; no wire
   change). Deliberately not in 0.9.0 — silent acceptance chosen.
 - A fire-and-forget action field type, so one-shot actions stop wearing a value
@@ -663,13 +699,13 @@ Deferred follow-ups to record in the backlog:
 
 ## 13. Left to the builder
 
-- Whether per-key errors are a `cJSON` object built inline or a small struct
-  array in front of the response.
+- Where the single rejected key is captured (the existing `prsl_rejection_t` is
+  enough) and how it is copied into `e`.
 - Whether the ack is built field by field during the apply loop or in a second
   pass over the batch.
 - Where `writeBack` lives and how it maps a decided value onto each widget type
   (select/radio need the option lookup; checkbox needs the indeterminate case).
 - Test-server fixture design for transform/discard/reject.
 - Whether `ack_timeout_ms` also gets a debug log line when it fires.
-- The wording of the "Rejected: <label>" status-bar message (single vs several
-  keys) — the client has labels, the server only has keys.
+- The wording of the "Rejected: <label>" status-bar message — the client has
+  labels, the server only has keys.
