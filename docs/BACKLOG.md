@@ -6,7 +6,7 @@ outstanding. Add items here instead of leaving them buried in prose.
 
 Legend: `[ ]` open · `[~]` in progress · `[x]` done · `[-]` dropped/superseded
 
-Last updated: 2026-11-10
+Last updated: 2026-11-11
 
 ## Before 1.0
 
@@ -45,9 +45,11 @@ Design: `docs/superpowers/specs/2026-11-10-file-upload-design.md` (to be written
 - [ ] `attrs` for presentation-only HTML extras (e.g. `title`, `aria-*`);
   `accept`/`max_size`/`idle_timeout_ms` stay typed.
 - [ ] Upload lock: disable Save, Reset, Reboot and other uploads while a
-  transfer is active. `_uploading` is **device-global**: every settings payload
-  (including future endpoints/namespaces) carries the same value, and every
-  save/reset/reboot handler checks the global state.
+  transfer is active. `_meta.uploading` is **device-global**: every settings
+  payload (including future endpoints/namespaces) carries the same value, and
+  every save/reset/reboot handler checks the global state. 0.8.0 adds the
+  `_meta` box and keeps the legacy `_dirty`/`_show_reset`/`_show_reboot`
+  aliases until 1.0.0.
 - [ ] Docs + complete examples: `examples/simple/main.c` (minimal JSON upload
   with one content guard), `examples/ota/main.c` (respond, then reboot),
   `examples/upload/main.c` (temp file → dirty → `on_save` commit / `on_reset`
@@ -77,14 +79,25 @@ filename pattern, modal/confirmation, download.
 - [ ] **Real-hardware verification.** OTA end-to-end, LittleFS/SD writes,
   disconnect → `ABORT`, idle timeout, `prsl_stop()` mid-upload, real save/reset.
   Consider hardware/QEMU coverage in CI.
+- [ ] **`prsl_stop()` request quiescing.** `prsl_stop()` deinitializes the store
+  and stops the server while save/reset/reboot/preflight handlers may still be
+  running in the AsyncTCP task. This is a pre-existing race; 0.8.0 only
+  serializes upload body callbacks with an upload mutex. Add an in-flight
+  request counter (or equivalent stopping barrier) that waits for all handlers
+  before deinit, or make the AsyncTCP-task-only contract explicit and enforce
+  it. Cover with a host test and the 1.0 hardware check.
 - [ ] **Distribution.** Publish to the PlatformIO Registry (`pio pkg pack`,
   account). Document the Arduino IDE limitation (dependency graph).
 - [ ] **Stability promise.** Freeze public API and wire format; document semver,
   deprecation policy, and the 0.8 → 1.0 migration.
+- [ ] **`_meta` migration.** Remove the legacy `_dirty`/`_show_reset`/`_show_reboot`
+  aliases and make `_meta` the only meta container. Document the removal in the
+  1.0 migration notes.
 - [ ] **Release checklist/docs.** README, `API_REFERENCE.md`, `WS_PROTOCOL.md`,
   `docs/reference/field-format.md` (upload), CHANGELOG, examples, tags.
-- [ ] **Test-server fidelity.** `_show_reset` is sent as `_dirty`; the device
-  sends `prsl_has_reset()`. Align the Python test server.
+- [ ] **Test-server fidelity.** `_show_reset` was sent as `_dirty`; the device
+  sends `prsl_has_reset()`. The 0.8.0 plan changes the test server to `True`;
+  verify the existing Reset e2e tests after implementation and close this.
 - [ ] **Multi-client/reconnect review.** Verify multiple tabs and reconnect
   during an upload / dirty state before declaring 1.0.
 
