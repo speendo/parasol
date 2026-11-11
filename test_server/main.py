@@ -554,9 +554,16 @@ async def api_upload_put(group: str, key: str, request: Request,
         if _upload_delay_ms:
             await asyncio.sleep(_upload_delay_ms / 1000)
         body = await request.body()
-        if await request.is_disconnected():
-            _upload_aborted.add(store_key)
-            return PlainTextResponse("Upload aborted", status_code=499)
+        # A browser XHR abort closes the connection only after the buffered
+        # body has been consumed, and uvicorn surfaces that asynchronously.
+        # Poll the disconnect flag briefly (mirrors the device's recv() loop,
+        # which observes the client hang-up during the transfer) so a cancel
+        # is recorded as an abort before we decide whether to commit.
+        for _ in range(10):
+            if await request.is_disconnected():
+                _upload_aborted.add(store_key)
+                return PlainTextResponse("Upload aborted", status_code=499)
+            await asyncio.sleep(0.05)
     except Exception:
         _upload_aborted.add(store_key)
         return PlainTextResponse("Upload failed", status_code=499)
@@ -567,6 +574,7 @@ async def api_upload_put(group: str, key: str, request: Request,
     if store_key == "config.file":
         # Immediate commit.
         final = FINAL_PATHS[store_key]
+        final.parent.mkdir(parents=True, exist_ok=True)
         final.write_bytes(body)
         COMMITTED[store_key] = final
         nvs_store[store_key] = name
@@ -601,6 +609,11 @@ async def api_test_reset_uploads():
     for p in UPLOAD_DIR.glob("**/*"):
         if p.is_file():
             p.unlink()
+    # Playwright clears its test-results output dir between runs, which can
+    # remove the upload directory tree; recreate the committed dirs so the
+    # next immediate upload can write its final path.
+    for p in FINAL_PATHS.values():
+        p.parent.mkdir(parents=True, exist_ok=True)
     for k in FINAL_PATHS:
         COMMITTED[k] = None
     await broadcast_settings()
@@ -632,10 +645,18 @@ async def api_test_upload_timeout(body: dict):
     _uploading = True
     await broadcast_settings()
 
+    loop = asyncio.get_running_loop()
+
     def _flip():
         global _uploading
         time.sleep(ms / 1000)
         _uploading = False
+        # Broadcast the unlock so connected clients see _meta.uploading -> false.
+        if not loop.is_closed():
+            try:
+                asyncio.run_coroutine_threadsafe(broadcast_settings(), loop)
+            except RuntimeError:
+                pass  # loop torn down (e.g. TestClient portal) before the flip
 
     threading.Thread(target=_flip, daemon=True).start()
     return {"ok": True}

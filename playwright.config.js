@@ -12,6 +12,11 @@ if (existsSync(testDepsLib)) {
 
 export default defineConfig({
   testDir: './tests/e2e',
+  // The FastAPI test server mirrors a single device with a global upload lock
+  // and broadcasts settings to every connected client. Running test files in
+  // parallel would make those shared globals race across files, so run tests
+  // sequentially.
+  workers: 1,
   fullyParallel: false,
   retries: 1,
   use: {
