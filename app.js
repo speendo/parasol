@@ -114,6 +114,9 @@ var parasol = (function () {
           for (var ri = 0; ri < radios.length; ri++) {
             radios[ri].checked = fopts.value !== undefined && String(radios[ri].value) === String(fopts.value);
           }
+        } else if (field.type === 'file') {
+          var cur = document.getElementById(pfx + grp.id + '.' + field.key + '-current');
+          if (cur) setFileLabel(cur, fopts.value);
         } else {
           el.value = fopts.value !== undefined ? fopts.value : '';
         }
@@ -820,6 +823,7 @@ var parasol = (function () {
   }
 
   function renderForm() {
+    fileFields = {};
     configForm.innerHTML = '';
     var seen = {};
     for (var si = 0; si < statusGroups.length; si++) {
@@ -888,6 +892,7 @@ var parasol = (function () {
     var els = configForm.querySelectorAll('input, select, textarea');
     for (var ei = 0; ei < els.length; ei++) {
       var el = els[ei];
+      if (el.type === 'file') continue;
       var key = el.name;
       if (!key) continue;
       (function (el, key) {
@@ -989,6 +994,128 @@ var parasol = (function () {
     window.addEventListener('beforeunload', disconnectWS);
   }
 
+  var fileFields = {};
+
+  /** Set the read-only current-file line for a file field. */
+  function setFileLabel(el, value) {
+    el.textContent = value ? 'Current: ' + value : 'No file';
+  }
+
+  /** Return true when a file's name or MIME type matches an accept list. */
+  function acceptsFile(file, accept) {
+    if (!accept || accept === '*/*') return true;
+    var name = file.name.toLowerCase();
+    var mime = (file.type || '').toLowerCase();
+    var parts = accept.split(',');
+    for (var i = 0; i < parts.length; i++) {
+      var p = parts[i].replace(/^\s+|\s+$/g, '').toLowerCase();
+      if (!p) continue;
+      if (p.charAt(0) === '.') {
+        if (name.length >= p.length && name.slice(name.length - p.length) === p) return true;
+      } else if (p.indexOf('/') >= 0) {
+        if (p === '*/*') return true;
+        if (mime && (mime === p || (p.slice(-2) === '/*' && mime.indexOf(p.slice(0, -1)) === 0))) return true;
+      }
+    }
+    return false;
+  }
+
+  /** Return an inline error for a selected file, or '' when it passes the local checks. */
+  function checkFile(file, opts) {
+    if (!file.size) return 'Empty file';
+    if (opts.max_size && file.size > opts.max_size) return 'File too large';
+    if (!acceptsFile(file, opts.accept)) return 'File type not allowed';
+    return '';
+  }
+
+  /** Read input.files[0] and update a file field's validity, message, and Upload button. */
+  function fileSelected(id) {
+    var f = fileFields[id];
+    if (!f) return;
+    var file = f.input.files && f.input.files[0];
+    if (!file) {
+      f.file = null;
+      f.valid = false;
+      f.msg.textContent = '';
+      f.btn.disabled = true;
+      return;
+    }
+    var err = checkFile(file, f.field.opts || {});
+    f.file = file;
+    f.valid = err === '';
+    f.msg.textContent = err;
+    f.btn.disabled = !f.valid;
+  }
+
+  /** Build the file input, Upload button, current label, progress, Cancel, and status line. */
+  function createFileField(namePrefix, field, isStatus) {
+    var key = field.key;
+    var opts = field.opts || {};
+    var id = (isStatus ? 'st-' + namePrefix : namePrefix) + '.' + key;
+    var required = opts.attrs && opts.attrs.required;
+    var container = document.createElement('div');
+
+    var label = document.createElement('label');
+    label.setAttribute('for', id);
+    label.textContent = field.label + (required ? '*' : '');
+    container.appendChild(label);
+
+    var row = document.createElement('div');
+    row.setAttribute('role', 'group');
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.name = input.id = id;
+    if (opts.accept) input.setAttribute('accept', opts.accept);
+    applyAttrs(input, opts.attrs);
+    if (isStatus) input.disabled = true;
+    row.appendChild(input);
+
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = id + '-upload';
+    btn.textContent = 'Upload';
+    btn.disabled = true;
+    row.appendChild(btn);
+    container.appendChild(row);
+
+    var current = document.createElement('small');
+    current.id = id + '-current';
+    current.className = 'file-status';
+    setFileLabel(current, opts.value);
+    container.appendChild(current);
+
+    addHelperText(container, id, opts.help, input);
+
+    var progress = document.createElement('progress');
+    progress.id = id + '-progress';
+    progress.max = 100;
+    progress.value = 0;
+    progress.hidden = true;
+    container.appendChild(progress);
+
+    var cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.id = id + '-cancel';
+    cancel.className = 'secondary';
+    cancel.textContent = 'Cancel';
+    cancel.hidden = true;
+    container.appendChild(cancel);
+
+    var msg = document.createElement('small');
+    msg.id = id + '-msg';
+    msg.className = 'file-msg';
+    msg.setAttribute('role', 'status');
+    container.appendChild(msg);
+
+    fileFields[id] = {
+      input: input, btn: btn, progress: progress, cancel: cancel,
+      msg: msg, current: current, file: null, valid: false,
+      field: field, group: namePrefix, key: key,
+    };
+    input.addEventListener('change', function () { fileSelected(id); });
+    return container;
+  }
+
   /**
    * Create a DOM element for a settings field.
    * @param {string} namePrefix - group ID (e.g. "wifi")
@@ -1004,6 +1131,8 @@ var parasol = (function () {
     var required = opts.attrs && opts.attrs.required;
     var inputTypes = ['text', 'email', 'number', 'password', 'tel', 'url', 'color'];
     var effectivePrefix = isStatus ? 'st-' + namePrefix : namePrefix;
+
+    if (type === 'file') return createFileField(namePrefix, field, isStatus);
 
     if (type === 'checkbox' || type === 'switch') {
       var input = document.createElement('input');
@@ -1150,6 +1279,8 @@ var parasol = (function () {
     Object.defineProperty(window.__test, 'receiveWSMessage', { get: function () { return onWSMessage; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'wsReady', { get: function () { return function () { if (ws) ws.readyState = 1; }; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'setNavMode', { value: function (v) { applyNavMode(!!v); }, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'acceptsFile', { value: acceptsFile, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'checkFile', { value: checkFile, enumerable: true, configurable: true });
   }
 
   return {

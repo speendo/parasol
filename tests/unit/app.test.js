@@ -427,6 +427,223 @@ describe('createField', () => {
   })
 })
 
+function fakeFile(name, type, size) {
+  var f = new File(['x'], name, { type: type })
+  Object.defineProperty(f, 'size', { value: size })
+  return f
+}
+
+function selectFile(input, file) {
+  Object.defineProperty(input, 'files', { value: [file], configurable: true })
+  input.dispatchEvent(new Event('change'))
+}
+
+describe('createField: file', () => {
+  it('renders a file input, Upload button, current label, help, accept, attrs', () => {
+    var field = window.createField('audio', {
+      key: 'clip', type: 'file', label: 'Clip',
+      opts: { value: 'beep.mp3', accept: '.mp3,audio/*', max_size: 1024,
+              help: 'MP3, up to 1 KiB', attrs: { title: 'Clip' } },
+    })
+    var input = field.querySelector('input[type=file]')
+    expect(input.name).toBe('audio.clip')
+    expect(input.id).toBe('audio.clip')
+    expect(input.getAttribute('accept')).toBe('.mp3,audio/*')
+    expect(input.title).toBe('Clip')
+    expect(field.querySelector('#audio\\.clip-upload').textContent).toBe('Upload')
+    expect(field.querySelector('#audio\\.clip-upload').disabled).toBe(true)
+    expect(field.querySelector('#audio\\.clip-current').textContent).toContain('beep.mp3')
+    expect(field.querySelector('#audio\\.clip-helper').textContent).toContain('MP3')
+    expect(field.querySelector('progress').hidden).toBe(true)
+    expect(field.querySelector('#audio\\.clip-cancel').hidden).toBe(true)
+  })
+
+  it('shows "No file" when value is missing', function () {
+    var field = window.createField('audio', {
+      key: 'clip', type: 'file', label: 'Clip', opts: {},
+    })
+    expect(field.querySelector('#audio\\.clip-current').textContent).toBe('No file')
+  })
+
+  it('renders the progress element at zero and hidden by default', function () {
+    var field = window.createField('audio', {
+      key: 'clip', type: 'file', label: 'Clip', opts: {},
+    })
+    var progress = field.querySelector('#audio\\.clip-progress')
+    expect(progress.max).toBe(100)
+    expect(progress.value).toBe(0)
+    expect(progress.hidden).toBe(true)
+  })
+
+  it('enables Upload for a valid selected file', function () {
+    var field = window.createField('audio', {
+      key: 'clip', type: 'file', label: 'Clip',
+      opts: { accept: '.bin', max_size: 100 },
+    })
+    var input = field.querySelector('input[type=file]')
+    selectFile(input, fakeFile('fw.bin', 'application/octet-stream', 10))
+    expect(field.querySelector('#audio\\.clip-upload').disabled).toBe(false)
+    expect(field.querySelector('#audio\\.clip-msg').textContent).toBe('')
+  })
+
+  it('shows the reason inline and keeps Upload disabled for an invalid file', function () {
+    var field = window.createField('audio', {
+      key: 'clip', type: 'file', label: 'Clip',
+      opts: { accept: '.bin', max_size: 100 },
+    })
+    var input = field.querySelector('input[type=file]')
+    selectFile(input, fakeFile('fw.bin', 'application/octet-stream', 200))
+    expect(field.querySelector('#audio\\.clip-upload').disabled).toBe(true)
+    expect(field.querySelector('#audio\\.clip-msg').textContent).toContain('too large')
+  })
+
+  it('disables Upload and clears the message when the selection is cleared', function () {
+    var field = window.createField('audio', {
+      key: 'clip', type: 'file', label: 'Clip',
+      opts: { accept: '.bin', max_size: 100 },
+    })
+    var input = field.querySelector('input[type=file]')
+    selectFile(input, fakeFile('fw.bin', 'application/octet-stream', 10))
+    Object.defineProperty(input, 'files', { value: [], configurable: true })
+    input.dispatchEvent(new Event('change'))
+    expect(field.querySelector('#audio\\.clip-upload').disabled).toBe(true)
+    expect(field.querySelector('#audio\\.clip-msg').textContent).toBe('')
+  })
+
+  it('follows existing field conventions and adds no new class names', function () {
+    var field = window.createField('audio', {
+      key: 'clip', type: 'file', label: 'Clip',
+      opts: { value: 'beep.mp3', accept: '.mp3', help: 'MP3' },
+    })
+    expect(field.tagName).toBe('DIV')
+    var input = field.querySelector('input[type=file]')
+    expect(field.querySelector('label').getAttribute('for')).toBe(input.id)
+    var row = field.querySelector('[role="group"]')
+    expect(row).not.toBeNull()
+    expect(row.contains(input)).toBe(true)
+    expect(row.contains(field.querySelector('#audio\\.clip-upload'))).toBe(true)
+    expect(field.querySelector('#audio\\.clip-msg').getAttribute('role')).toBe('status')
+    expect(field.querySelector('#audio\\.clip-helper').id).toBe('audio.clip-helper')
+
+    var custom = []
+    var els = field.querySelectorAll('[class]')
+    for (var i = 0; i < els.length; i++) {
+      var names = els[i].className.split(/\s+/)
+      for (var j = 0; j < names.length; j++) {
+        if (names[j].indexOf('file-') === 0) custom.push(names[j])
+      }
+    }
+    expect(custom.sort()).toEqual(['file-msg', 'file-status'])
+    expect(field.querySelectorAll('style, link').length).toBe(0)
+  })
+})
+
+describe('acceptsFile', function () {
+  it('matches extensions case-insensitively', function () {
+    expect(window.__test.acceptsFile(fakeFile('FW.BIN', '', 10), '.bin')).toBe(true)
+  })
+
+  it('matches a MIME wildcard', function () {
+    expect(window.__test.acceptsFile(fakeFile('beep.mp3', 'audio/mpeg', 10), 'audio/*')).toBe(true)
+  })
+
+  it('matches an exact MIME type', function () {
+    expect(window.__test.acceptsFile(fakeFile('a.png', 'image/png', 10), 'image/png')).toBe(true)
+  })
+
+  it('accepts any file when accept is empty or */*', function () {
+    expect(window.__test.acceptsFile(fakeFile('a.txt', 'text/plain', 10), '')).toBe(true)
+    expect(window.__test.acceptsFile(fakeFile('a.txt', 'text/plain', 10), '*/*')).toBe(true)
+  })
+
+  it('rejects a wrong extension', function () {
+    expect(window.__test.acceptsFile(fakeFile('a.txt', 'text/plain', 10), '.bin')).toBe(false)
+  })
+
+  it('rejects a wrong MIME type', function () {
+    expect(window.__test.acceptsFile(fakeFile('a.png', 'image/png', 10), 'audio/*,image/jpeg')).toBe(false)
+  })
+
+  it('matches any entry in a comma-separated list', function () {
+    expect(window.__test.acceptsFile(fakeFile('a.mp3', 'audio/mpeg', 10), '.bin, audio/*')).toBe(true)
+  })
+})
+
+describe('checkFile', function () {
+  var opts = { accept: '.bin', max_size: 100 }
+
+  it('rejects an empty file', function () {
+    expect(window.__test.checkFile(fakeFile('a.bin', 'application/octet-stream', 0), opts)).toBe('Empty file')
+  })
+
+  it('rejects a file over max_size', function () {
+    expect(window.__test.checkFile(fakeFile('a.bin', 'application/octet-stream', 101), opts)).toBe('File too large')
+  })
+
+  it('rejects a file of the wrong type', function () {
+    expect(window.__test.checkFile(fakeFile('a.txt', 'text/plain', 10), opts)).toBe('File type not allowed')
+  })
+
+  it('returns an empty string for a valid file', function () {
+    expect(window.__test.checkFile(fakeFile('a.bin', 'application/octet-stream', 100), opts)).toBe('')
+  })
+
+  it('allows any size when max_size is unset', function () {
+    expect(window.__test.checkFile(fakeFile('a.bin', 'application/octet-stream', 999999), { accept: '.bin' })).toBe('')
+  })
+})
+
+describe('populateFromGroups: file', function () {
+  beforeEach(function () {
+    document.querySelector('#config-form').innerHTML = ''
+  })
+
+  it('updates the current label instead of assigning input.value', function () {
+    var field = window.createField('audio', {
+      key: 'clip', type: 'file', label: 'Clip', opts: { value: 'old.mp3' },
+    })
+    document.querySelector('#config-form').appendChild(field)
+    expect(function () {
+      window.populateFromGroups([{
+        id: 'audio',
+        fields: [{ key: 'clip', type: 'file', label: 'Clip', opts: { value: 'new.mp3' } }],
+      }])
+    }).not.toThrow()
+    expect(document.getElementById('audio.clip-current').textContent).toContain('new.mp3')
+    expect(field.querySelector('input[type=file]').value).toBe('')
+  })
+
+  it('renders "No file" when the pushed value is null', function () {
+    var field = window.createField('audio', {
+      key: 'clip', type: 'file', label: 'Clip', opts: { value: 'old.mp3' },
+    })
+    document.querySelector('#config-form').appendChild(field)
+    window.populateFromGroups([{
+      id: 'audio',
+      fields: [{ key: 'clip', type: 'file', label: 'Clip', opts: { value: null } }],
+    }])
+    expect(document.getElementById('audio.clip-current').textContent).toBe('No file')
+  })
+})
+
+describe('file field change handling', function () {
+  beforeEach(function () {
+    document.querySelector('#config-form').innerHTML = ''
+    window.__test.formInteracted = false
+  })
+
+  it('does not treat a file change as a form value edit', function () {
+    var field = window.createField('audio', {
+      key: 'clip', type: 'file', label: 'Clip', opts: { accept: '.bin' },
+    })
+    document.querySelector('#config-form').appendChild(field)
+    window.bindChangeListeners()
+    selectFile(field.querySelector('input[type=file]'), fakeFile('a.bin', 'application/octet-stream', 10))
+    expect(window.__test.formInteracted).toBe(false)
+    expect(field.querySelector('#audio\\.clip-upload').disabled).toBe(false)
+  })
+})
+
 describe('addHelperText', function () {
   it('creates small element with aria-describedby', function () {
     var container = document.createElement('div')
