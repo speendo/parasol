@@ -439,7 +439,10 @@ onSettings(msg):
 
 resolveRecovering(key, AV):
   lastSent[key] = AV               // may now equal `sent`, or may differ
-  if widget no longer holds recovering[key].sent: delete; return
+  if widget no longer holds recovering[key].sent:
+    delete
+    if widget differs from AV: sendToServer(key, widget)   // newer edit, resent
+    return
   if String(AV) === String(recovering[key].sent): delete; return
   if (!recovering[key].retried):
     recovering[key].retried = true; delete
@@ -457,6 +460,13 @@ Two details:
 - `lastSent[key] = AV` for the same reason as on ack. A timeout set it to the
   pre-recovery applied value, so without this a key whose change *did* land would
   compare unequal to `lastSent` and be re-sent on the next blur.
+- A key whose widget no longer holds `sent` was edited again while the batch was
+  in flight. The ack path rescues that edit with `flushQueued()`; the timeout path
+  has no flush, so it re-sends the newer widget value directly when it differs
+  from `AV`. Without that, a checkbox/select/radio edited during the batch would
+  never send the newer value and would keep the store at the old one — a silent
+  drop (§4). `sendToServer` sets `inFlight`/`lastSent`, so the change-detection
+  loop skips the key and `maybeSync()` defers until the new batch settles.
 - Keys with a batch in flight are skipped. The sync reply is exempt from the
   global drop (it must be, or a new edit during recovery would swallow it), but
   it is still older than that batch, so its values are ignored for those keys.
@@ -585,9 +595,10 @@ blocking callback delays the ack. It is the same rationale as the upload
 per-field timeouts (they would travel in every field's `opts` forever for a rare
 need).
 
-A too-small timeout degrades visibly: the late ack is unknown, the late push
-arrives with nothing in flight, and the user's own change reads as an external
-update (Load/Keep). Documented so the symptom is recognizable.
+A too-small timeout is reconciled by the ladder, not a dead end: the late ack is
+unknown, but the sync/broadcast read silently resolves a change that landed; a
+transformed one can still show the conflict prompt, and Load/Keep appears only if
+the widget was left at the old AV. Documented so the symptom is recognizable.
 
 ---
 

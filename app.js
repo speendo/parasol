@@ -416,9 +416,12 @@ var parasol = (function () {
     for (var k in inFlight) { if (inFlight[k]) { hasInFlight = true; break; } }
     if (!isReply && hasInFlight && configForm.getAttribute('aria-busy') !== 'true') return;
     if (hasInFlight && !isReply) {
-      updateAV(data);
+      // Clear the stale correlation state first: updateAV() skips in-flight
+      // keys, so a key that was pending at disconnect would otherwise keep
+      // its pre-disconnect AV.
       for (var sk in inFlight) { inFlight[sk] = false; }
       for (var sk in lastSent) { lastSent[sk] = undefined; }
+      updateAV(data);
       for (var ci = 0; ci < groups.length; ci++) {
         var grp = groups[ci];
         if (!grp.fields) continue;
@@ -540,7 +543,19 @@ var parasol = (function () {
 
   /** Write AV from in-memory fields into the DOM form and update baseline. */
   function applyAV() {
-    populateFromGroups();
+    // Keys with a batch in flight have an AV older than the batch: leaving
+    // their widget alone keeps the user's edit visible until the ack lands.
+    var grps = [];
+    for (var ci = 0; ci < groups.length; ci++) {
+      var grp = groups[ci];
+      if (!grp.fields) continue;
+      var fs = [];
+      for (var fi = 0; fi < grp.fields.length; fi++) {
+        if (!inFlight[grp.id + '.' + grp.fields[fi].key]) fs.push(grp.fields[fi]);
+      }
+      grps.push({ id: grp.id, fields: fs });
+    }
+    populateFromGroups(grps);
     setBaseline();
     updateUI();
   }
@@ -581,6 +596,7 @@ var parasol = (function () {
       for (var fi = 0; fi < fs.length; fi++) {
         if (fs[fi].type === 'file') continue;
         var key = groups[ci].id + '.' + groups[ci].fields[fi].key;
+        if (inFlight[key]) continue;
         lastSent[key] = groups[ci].fields[fi].opts.value;
       }
     }
@@ -683,8 +699,11 @@ var parasol = (function () {
     var f = findField.apply(null, key.split('.'));
     if (f) f.opts.value = av;
     lastSent[key] = av;
-    if (String(readFormValue(key.split('.'))) !== String(r.sent)) {
-      delete recovering[key]; return;
+    var cur = readFormValue(key.split('.'));
+    if (String(cur) !== String(r.sent)) {
+      delete recovering[key];
+      if (cur !== undefined && String(cur) !== String(av)) sendToServer(key, cur);
+      return;
     }
     if (String(av) === String(r.sent)) { delete recovering[key]; return; }
     delete recovering[key];

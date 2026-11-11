@@ -1825,6 +1825,9 @@ describe('WS reconnect', () => {
   it('shows retry button after 5 failed attempts', () => {
     for (var i = 0; i < 5; i++) {
       window.onWSClose()
+      // Drop the reconnect timer each attempt so no stray connectWS() fires
+      // after this test (real timers are in use here).
+      window.disconnectWS()
     }
     expect(document.getElementById('status-bar').textContent).toContain('Cannot connect')
     expect(document.getElementById('btn-ws-retry').hidden).toBe(false)
@@ -1832,6 +1835,7 @@ describe('WS reconnect', () => {
 
   it('sets aria-busy on close', () => {
     window.onWSClose()
+    window.disconnectWS()                     // clear the scheduled reconnect timer
     expect(document.getElementById('config-form').getAttribute('aria-busy')).toBe('true')
   })
 })
@@ -3081,6 +3085,40 @@ describe('ack correlation', () => {
     expect(document.getElementById('server-changed').hidden).toBe(true)
   })
 
+  it('an ack that omits a key leaves AV and widget unchanged', () => {
+    type('wifi.ssid', 'new')
+    recv({ type: 'ack', i: 1, d: {} })
+    expect(window.__test.groups[0].fields[0].opts.value).toBe('old')
+    expect(document.querySelector('[name="wifi.ssid"]').value).toBe('new')
+    expect(document.getElementById('server-changed').hidden).toBe(true)
+  })
+
+  it('a same-value ack writes nothing and shows no prompt', () => {
+    type('wifi.ssid', 'same')
+    recv({ type: 'ack', i: 1, d: { 'wifi.ssid': 'same' } })
+    expect(window.__test.groups[0].fields[0].opts.value).toBe('same')
+    expect(window.__test.lastSent['wifi.ssid']).toBe('same')
+    expect(document.querySelector('[name="wifi.ssid"]').value).toBe('same')
+    expect(document.getElementById('server-changed').hidden).toBe(true)
+  })
+
+  it('adopts a falsey decided value', () => {
+    type('wifi.ssid', 'x')
+    recv({ type: 'ack', i: 1, d: { 'wifi.ssid': '' } })
+    expect(window.__test.groups[0].fields[0].opts.value).toBe('')
+    expect(window.__test.lastSent['wifi.ssid']).toBe('')
+    expect(document.querySelector('[name="wifi.ssid"]').value).toBe('')
+  })
+
+  it('a settings push with i != syncId keeps normal handling', () => {
+    recv({ type: 'settings', i: 5, _meta: {}, data: { wifi: {
+      ssid: ['text', 'SSID', { value: 'external' }] }}})
+    expect(window.__test.groups[0].fields[0].opts.value).toBe('external')
+    expect(document.querySelector('[name="wifi.ssid"]').value).toBe('old')
+    expect(document.getElementById('server-changed').hidden).toBe(false)
+    expect(document.getElementById('notif-load').hidden).toBe(false)
+  })
+
   it('does not rewrite a widget the user has typed into', () => {
     type('wifi.ssid', 'sent')
     document.querySelector('[name="wifi.ssid"]').value = 'typed'
@@ -3171,6 +3209,7 @@ describe('ack correlation', () => {
   it('reconnect resets ids and pending batches', () => {
     type('wifi.ssid', 'a')
     window.onWSClose()                        // no __test hook exists for this
+    window.disconnectWS()                     // clear the scheduled reconnect timer
     expect(window.__test.pending).toEqual({})
     expect(window.__test.nextId).toBe(1)
   })
@@ -3294,7 +3333,9 @@ describe('ack timeout and recovery', () => {
     recv({ type: 'settings', i: 2, _meta: {}, data: { wifi: {
       ssid: ['text', 'SSID', { value: 'old' }] }}})
     expect(document.querySelector('[name="wifi.ssid"]').value).toBe('typed')
-    expect(window.__test.sent.filter(function (m) { return m.action === 'apply' }).length).toBe(1)   // only the original apply
+    var applies = window.__test.sent.filter(function (m) { return m.action === 'apply' })
+    expect(applies.length).toBe(2)                // original + newer typed value
+    expect(applies[1].data.wifi.ssid[2].value).toBe('typed')
     expect(window.__test.recovering).toEqual({})
   })
 

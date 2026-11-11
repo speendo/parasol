@@ -207,8 +207,8 @@ CPU- and bandwidth-constrained). The server merges the partial update into its
 store.
 
 **Multi-field apply:** A raw client may batch multiple fields under one `i`; the
-ack reports every key in the message. The bundled browser sends one apply per
-field, each with its own `i`:
+ack reports every key in the message that the store knows. The bundled browser
+sends one apply per field, each with its own `i`:
 
 ```json
 {
@@ -278,12 +278,17 @@ A batch with no ack within `ack_timeout_ms` (default **5000 ms**, set via
 `parasol_config.json` and rendered into the page as
 `<meta name="parasol-ack-timeout">`) enters **Recovering**: the client asks once
 with `action:"sync"` and resends at most once per key if the store does not hold
-the sent value. If the sync goes unanswered the field is left unsent — the
-ladder is finite by design and has no further retries.
+the sent value. The ladder is bounded by: one resend per key (the retry's timeout
+adopts the store value instead of resending again), at most one sync outstanding,
+and a terminal sync timeout after which `recovering` is cleared and typed values
+are left unsent. A store that omits a recovering key from the sync reply is
+covered by the sync timeout; the extra sync-round bound is tracked in
+`docs/BACKLOG.md` ("Bound consecutive syncs when the store omits a recovering
+key").
 
-A too-small timeout degrades visibly: the late ack is ignored, and the user's
-own change arrives in the broadcast with nothing in flight, so it reads as an
-external update (Load/Keep).
+A too-small timeout is reconciled by the ladder: a change that landed is silently
+adopted when the sync or broadcast arrives, a transformed one can show the
+conflict prompt, and Load/Keep appears only if the widget was left at the old AV.
 
 ## HTTP Endpoints (Fallback)
 

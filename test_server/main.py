@@ -330,9 +330,20 @@ async def events_ws(ws: WebSocket):
                 # dense d: every requested key that exists, read AFTER the apply
                 ack_d = {}
                 for group_key, fields in data.items():
-                    for field_key in fields:
-                        schema_entry = SETTINGS.get(group_key, {}).get(field_key)
-                        if schema_entry is None:
+                    if not isinstance(fields, dict):
+                        continue
+                    schema = SETTINGS.get(group_key)
+                    if not isinstance(schema, dict):
+                        continue
+                    for field_key, field_arr in fields.items():
+                        # The device omits a requested key whose field array is
+                        # malformed; mirror that instead of indexing it.
+                        if not isinstance(field_arr, list) or len(field_arr) < 3:
+                            continue
+                        schema_entry = schema.get(field_key)
+                        # A group also carries a string "label" key, which the
+                        # schema walk must not treat as a field definition.
+                        if not isinstance(schema_entry, list) or len(schema_entry) < 3:
                             continue
                         store_key = group_key + "." + field_key
                         ack_d[store_key] = applied_store.get(store_key, schema_entry[2].get("value"))

@@ -68,7 +68,15 @@ int prsl_ws_handle(const char *json, size_t len, prsl_store_t *store,
             return 0;
         }
         cJSON *root = prsl_build_settings_payload(store);
-        cJSON_AddItemToObject(root, "i", cJSON_Duplicate(id, 1));
+        cJSON *id_copy = cJSON_Duplicate(id, 1);
+        if (!root) {
+            /* Allocation failure: no reply, but never call into cJSON with a
+             * NULL parent. */
+            cJSON_Delete(id_copy);
+            cJSON_Delete(msg);
+            return 0;
+        }
+        cJSON_AddItemToObject(root, "i", id_copy);
         out->to_sender = print_and_delete(root);
         cJSON_Delete(msg);
         return 0;

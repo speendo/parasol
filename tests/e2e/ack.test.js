@@ -49,5 +49,10 @@ test.describe('ack correlation', () => {
     await page.locator('[name="gpio.enabled"]').uncheck()
     await expect(page.locator('[name="gpio.enabled"]')).not.toBeChecked()
     await expect(page.locator('#btn-save-apply')).toBeVisible()
+    // Prove the second apply actually reached the server, not just the widget.
+    await page.reload()
+    await expect(page.locator('#config-form')).not.toHaveAttribute('aria-busy', 'true')
+    await page.locator('details#gpio summary').click()
+    await expect(page.locator('[name="gpio.enabled"]')).not.toBeChecked()
   })
 })

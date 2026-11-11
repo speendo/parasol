@@ -112,6 +112,8 @@ Design: `docs/superpowers/specs/2026-11-11-client-ack-correlation-design.md` §1
   deprecation policy, and the 0.8 → 1.0 migration.
 - [ ] **Release checklist/docs.** README, `API_REFERENCE.md`, `WS_PROTOCOL.md`,
   `docs/reference/field-format.md` (upload), CHANGELOG, examples, tags.
+  README install URLs must point at the real `v0.9.0` tag (tagged on merge), not
+  a placeholder.
 - [x] **Test-server fidelity.** `_show_reset` was sent as `_dirty`; the device
   sends `prsl_has_reset()`. Aligned in 0.8.0: the test server sends
   `_meta.show_reset: True` and the existing Reset e2e tests pass.

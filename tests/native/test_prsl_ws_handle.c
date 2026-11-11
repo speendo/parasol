@@ -110,6 +110,7 @@ void test_ack_with_rejection_sets_e_and_no_error(void) {
     TEST_ASSERT_EQUAL_STRING("rejected",
         cJSON_GetStringValue(cJSON_GetObjectItem(cJSON_GetObjectItem(ack, "e"), "wifi.ssid")));
     TEST_ASSERT_NULL(r.error);           /* correlated rejection: ack only */
+    TEST_ASSERT_NULL(r.to_all);          /* all-rejected batch broadcasts nothing */
     cJSON_Delete(ack); free_reply(&r);
 }
 
