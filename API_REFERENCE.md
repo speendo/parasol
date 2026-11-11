@@ -302,7 +302,7 @@ prsl_add_group("auto_label_group", NULL); /* renders as "Auto Label Group" */
 ```
 
 > **Group IDs must not start with `_`.** The `_` namespace is reserved for
-> protocol meta keys (`_dirty`, `_show_reset`, `_show_reboot`). `prsl_add_group`
+> protocol meta keys (`_meta`). `prsl_add_group`
 > rejects `_`-prefixed IDs with `ESP_ERR_INVALID_ARG`; subsequent
 > `prsl_add_field` calls for that group return `ESP_ERR_NOT_FOUND`. Use a
 > non-underscore ID for internal/read-only groups.
@@ -670,12 +670,11 @@ Every settings payload carries a top-level `_meta` object:
 "_meta": {"dirty": false, "show_reset": true, "show_reboot": true, "uploading": false}
 ```
 
-- `dirty`, `show_reset`, and `show_reboot` mirror the legacy top-level
-  `_dirty`/`_show_reset`/`_show_reboot` flags. Those legacy aliases are
-  deprecated in 0.8.0 and removed in 1.0.0; clients read `_meta` first.
+- `dirty`, `show_reset`, `show_reboot`, and `uploading` live only inside
+  `_meta`; there are no top-level meta keys.
 - `uploading` is device-global: `true` from an upload's first `META` until its
   `END`/`ABORT`, and present in every settings payload even for endpoints with
-  no file fields. There is no top-level `_uploading` alias.
+  no file fields.
 
 ## Dirty
 

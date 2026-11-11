@@ -120,13 +120,6 @@ cJSON *prsl_json_build_settings_payload(prsl_store_t *store, bool dirty,
     cJSON_AddBoolToObject(meta, "show_reboot", show_reboot);
     cJSON_AddBoolToObject(meta, "uploading", uploading);
 
-    /* Legacy aliases: deprecated in 0.8.0, removed in 1.0.0. Clients read
-     * _meta first; these keep pre-0.8 clients and fixtures working. Note
-     * that uploading has no alias — no released client can depend on it. */
-    cJSON_AddBoolToObject(root, "_dirty", dirty);
-    cJSON_AddBoolToObject(root, "_show_reset", show_reset);
-    cJSON_AddBoolToObject(root, "_show_reboot", show_reboot);
-
     cJSON_AddItemToObject(root, "data", prsl_json_build_settings(store));
     return root;
 }

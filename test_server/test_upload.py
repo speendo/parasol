@@ -29,9 +29,6 @@ def test_settings_wire_shape():
         "show_reboot": True,
         "uploading": False,
     }
-    assert data["_dirty"] is False
-    assert data["_show_reset"] is True
-    assert data["_show_reboot"] is True
     assert "wifi" in data and "audio" in data and "config" in data
     clip = data["audio"]["clip"]
     assert isinstance(clip, list) and len(clip) == 3

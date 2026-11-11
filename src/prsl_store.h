@@ -24,7 +24,7 @@ typedef struct {
     prsl_set_cb_t on_set;
     prsl_get_cb_t on_get;
     prsl_upload_cb_t on_upload;   /* PRSL_FILE only */
-    const char *accept;           /* PRSL_FILE only, or NULL */
+    const char *accept;           /* PRSL_FILE only, or "" (registration defaults NULL to "") */
     size_t max_size;              /* PRSL_FILE only; 0 = no limit */
     uint32_t idle_timeout_ms;     /* PRSL_FILE only; 0 = default */
     const char *(*options)[2]; /* points to static array of [value,label] pairs */
@@ -89,9 +89,9 @@ esp_err_t prsl_store_load_values(prsl_store_t *store);
 /** @brief Re-call on_get on every field (for reset). */
 esp_err_t prsl_store_reset_values(prsl_store_t *store);
 
-/** @brief Build the full settings WS payload ({type, _meta, legacy
- *  _dirty/_show_reset/_show_reboot aliases, data}). Returns a caller-owned
- *  cJSON * (internal helper; not part of the public API). */
+/** @brief Build the full settings WS payload ({type, _meta, data}).
+ *  Returns a caller-owned cJSON * (internal helper; not part of the public
+ *  API). */
 cJSON *prsl_build_settings_payload(prsl_store_t *store);
 
 #ifdef __cplusplus

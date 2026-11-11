@@ -62,9 +62,6 @@ apply). Contains the full settings state.
 {
   "type": "settings",
   "_meta": {"dirty": true, "show_reset": true, "show_reboot": true, "uploading": false},
-  "_dirty": true,
-  "_show_reset": true,
-  "_show_reboot": true,
   "data": {
     "wifi": {
       "label": "Wi-Fi Setup",
@@ -90,17 +87,13 @@ apply). Contains the full settings state.
 ```
 
 **`_meta`:** Object carrying the current meta state: `dirty`, `show_reset`,
-`show_reboot`, and `uploading`. This is the canonical container from 0.8.0 on.
+`show_reboot`, and `uploading`. This is the only meta container; there are no
+top-level meta keys.
 
 **`uploading` (inside `_meta`):** Boolean owned by the server, device-global.
 `true` from an upload's first `META` until its `END`/`ABORT`, and present in
 **every** settings payload even for endpoints with no file fields. A tab that
 connects mid-upload receives `true` in its initial settings push.
-
-**`_dirty` / `_show_reset` / `_show_reboot`:** Legacy top-level aliases that
-mirror `_meta.dirty` / `_meta.show_reset` / `_meta.show_reboot`. They are kept
-for one release in 0.8.0 so pre-0.8 clients keep working, and are removed in
-1.0.0. There is no top-level `_uploading` alias.
 
 **`dirty`:** Boolean owned by the server. `true` when at least one applied
 value differs from the stored (NVS) value. Drives the Save button: enabled

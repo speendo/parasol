@@ -48,14 +48,13 @@ Design: `docs/superpowers/specs/2026-11-10-file-upload-design.md`.
   transfer is active. `_meta.uploading` is **device-global**: every settings
   payload (including future endpoints/namespaces) carries the same value, and
   every save/reset/reboot handler checks the global state. 0.8.0 adds the
-  `_meta` box and keeps the legacy `_dirty`/`_show_reset`/`_show_reboot`
-  aliases until 1.0.0.
+  `_meta` box as the only meta container (no legacy aliases).
 - [x] Docs + complete examples: `examples/simple/main.c` (minimal JSON upload
   with one content guard), `examples/ota/main.c` (respond, then reboot),
   `examples/upload/main.c` (temp file → dirty → `on_save` commit / `on_reset`
   discard), plus the bounded JSON pattern. Compile-check the examples in CI.
 - [x] Native, unit, e2e, and PIO-smoke tests; measure JS min+gzip delta
-  (target ≤ +1.2 KB gzip, review at +1.5 KB). Measured +1,751 gzip — reviewed
+  (target ≤ +1.2 KB gzip, review at +1.5 KB). Measured +1,704 gzip — reviewed
   and accepted (see `CHANGELOG.md` 0.8.0).
 
 Deferred from this feature (tracked separately below): auth, upload chunk size,
@@ -91,9 +90,6 @@ filename pattern, modal/confirmation, download.
   account). Document the Arduino IDE limitation (dependency graph).
 - [ ] **Stability promise.** Freeze public API and wire format; document semver,
   deprecation policy, and the 0.8 → 1.0 migration.
-- [ ] **`_meta` migration.** Remove the legacy `_dirty`/`_show_reset`/`_show_reboot`
-  aliases and make `_meta` the only meta container. Document the removal in the
-  1.0 migration notes.
 - [ ] **Release checklist/docs.** README, `API_REFERENCE.md`, `WS_PROTOCOL.md`,
   `docs/reference/field-format.md` (upload), CHANGELOG, examples, tags.
 - [ ] **Test-server fidelity.** `_show_reset` was sent as `_dirty`; the device

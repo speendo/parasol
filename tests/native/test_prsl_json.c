@@ -229,10 +229,10 @@ void test_build_settings_payload_meta(void) {
     TEST_ASSERT_TRUE(cJSON_IsTrue(cJSON_GetObjectItem(meta, "show_reset")));
     TEST_ASSERT_FALSE(cJSON_IsTrue(cJSON_GetObjectItem(meta, "show_reboot")));
     TEST_ASSERT_TRUE(cJSON_IsTrue(cJSON_GetObjectItem(meta, "uploading")));
-    /* Legacy aliases remain for 0.8.0. */
-    TEST_ASSERT_TRUE(cJSON_IsTrue(cJSON_GetObjectItem(out, "_dirty")));
-    TEST_ASSERT_TRUE(cJSON_IsTrue(cJSON_GetObjectItem(out, "_show_reset")));
-    TEST_ASSERT_FALSE(cJSON_IsTrue(cJSON_GetObjectItem(out, "_show_reboot")));
+    /* Legacy aliases are gone: only _meta and data are top-level. */
+    TEST_ASSERT_NULL(cJSON_GetObjectItem(out, "_dirty"));
+    TEST_ASSERT_NULL(cJSON_GetObjectItem(out, "_show_reset"));
+    TEST_ASSERT_NULL(cJSON_GetObjectItem(out, "_show_reboot"));
     TEST_ASSERT_NULL(cJSON_GetObjectItem(out, "_uploading"));
     TEST_ASSERT_NOT_NULL(cJSON_GetObjectItem(out, "data"));
     cJSON_Delete(out);
@@ -246,14 +246,11 @@ void test_build_settings_payload_not_uploading(void) {
     TEST_ASSERT_FALSE(cJSON_IsTrue(cJSON_GetObjectItem(meta, "show_reset")));
     TEST_ASSERT_TRUE(cJSON_IsTrue(cJSON_GetObjectItem(meta, "show_reboot")));
     TEST_ASSERT_FALSE(cJSON_IsTrue(cJSON_GetObjectItem(meta, "uploading")));
-    TEST_ASSERT_FALSE(cJSON_IsTrue(cJSON_GetObjectItem(out, "_dirty")));
-    TEST_ASSERT_FALSE(cJSON_IsTrue(cJSON_GetObjectItem(out, "_show_reset")));
-    TEST_ASSERT_TRUE(cJSON_IsTrue(cJSON_GetObjectItem(out, "_show_reboot")));
     cJSON_Delete(out);
 }
 
-/* Guards against a parallel schema: _meta is the exact 4-key direct child,
- * legacy aliases sit next to it, and field data stays in the `data` object. */
+/* Guards against a parallel schema: _meta is the exact 4-key direct child
+ * and field data stays in the `data` object; no legacy aliases remain. */
 void test_build_payload_meta_convention(void) {
     prsl_store_add_group(&store, "audio", "Audio");
     prsl_field_t f = {0};
@@ -265,8 +262,8 @@ void test_build_payload_meta_convention(void) {
 
     cJSON *out = prsl_json_build_settings_payload(&store, true, true, false, true);
 
-    /* Root: type, _meta, _dirty, _show_reset, _show_reboot, data only. */
-    TEST_ASSERT_EQUAL_INT(6, cJSON_GetArraySize(out));
+    /* Root: type, _meta, data only. */
+    TEST_ASSERT_EQUAL_INT(3, cJSON_GetArraySize(out));
     TEST_ASSERT_NULL(cJSON_GetObjectItem(out, "_uploading"));
 
     cJSON *meta = cJSON_GetObjectItem(out, "_meta");
@@ -282,10 +279,6 @@ void test_build_payload_meta_convention(void) {
                          strcmp(c->string, "show_reboot") == 0 ||
                          strcmp(c->string, "uploading") == 0);
     }
-
-    TEST_ASSERT_TRUE(cJSON_IsTrue(cJSON_GetObjectItem(out, "_dirty")));
-    TEST_ASSERT_TRUE(cJSON_IsTrue(cJSON_GetObjectItem(out, "_show_reset")));
-    TEST_ASSERT_FALSE(cJSON_IsTrue(cJSON_GetObjectItem(out, "_show_reboot")));
 
     cJSON *data = cJSON_GetObjectItem(out, "data");
     TEST_ASSERT_TRUE(cJSON_IsObject(data));

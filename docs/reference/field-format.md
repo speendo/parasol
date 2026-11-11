@@ -71,16 +71,12 @@ typed and must not be smuggled through `attrs`.
 ## Settings Payload
 
 Settings messages carry a top-level `_meta` object with `dirty`, `show_reset`,
-`show_reboot`, and `uploading`. The legacy `_dirty`/`_show_reset`/`_show_reboot`
-aliases mirror `_meta` in 0.8.0 and are removed in 1.0.0; `uploading` is
-device-global and has no top-level alias.
+`show_reboot`, and `uploading`. This is the only meta container; there are no
+top-level meta keys.
 
 ```json
 {
   "_meta": {"dirty": false, "show_reset": true, "show_reboot": true, "uploading": false},
-  "_dirty": false,
-  "_show_reset": true,
-  "_show_reboot": true,
   "wifi": {
     "ssid":     ["text", "SSID",     {"value": "MyNetwork", "help": "WiFi network name"}],
     "password": ["password", "Password", {"value": "", "attrs": {"maxlength": 64}}],
@@ -99,8 +95,8 @@ device-global and has no top-level alias.
 }
 ```
 
-`_meta.dirty` (and its legacy `_dirty` alias) is `true` when applied settings
-differ from stored (NVS) settings.
+`_meta.dirty` is `true` when applied settings differ from stored (NVS)
+settings.
 
 ### File field example
 

@@ -16,7 +16,7 @@ def test_get_settings_returns_nested_json():
     response = client.get("/api/settings")
     assert response.status_code == 200
     data = response.json()
-    assert "_dirty" in data
+    assert "_meta" in data
     assert "wifi" in data
     assert "gpio" in data
     # wifi.ssid should be [type, label, opts]
@@ -79,38 +79,38 @@ def test_old_endpoints_return_404():
 
 def test_dirty_false_initially():
     data = client.get("/api/settings").json()
-    assert data["_dirty"] is False
+    assert data["_meta"]["dirty"] is False
 
 
 def test_dirty_true_after_apply():
     client.post("/api/settings/apply", json={"wifi": {"ssid": ["text", "SSID", {"value": "MyNet"}]}})
     data = client.get("/api/settings").json()
-    assert data["_dirty"] is True
+    assert data["_meta"]["dirty"] is True
 
 
 def test_dirty_false_after_save():
     client.post("/api/settings/apply", json={"wifi": {"ssid": ["text", "SSID", {"value": "MyNet"}]}})
     data = client.get("/api/settings").json()
-    assert data["_dirty"] is True
+    assert data["_meta"]["dirty"] is True
     client.post("/api/settings/save", json={"wifi": {"ssid": ["text", "SSID", {"value": "MyNet"}]}})
     data = client.get("/api/settings").json()
-    assert data["_dirty"] is False
+    assert data["_meta"]["dirty"] is False
 
 
 def test_dirty_false_after_reset():
     client.post("/api/settings/apply", json={"wifi": {"ssid": ["text", "SSID", {"value": "MyNet"}]}})
     data = client.get("/api/settings").json()
-    assert data["_dirty"] is True
+    assert data["_meta"]["dirty"] is True
     client.get("/api/settings/reset")
     data = client.get("/api/settings").json()
-    assert data["_dirty"] is False
+    assert data["_meta"]["dirty"] is False
 
 
 def test_ws_connect_receives_settings():
     with client.websocket_connect("/api/events") as ws:
         ws.receive_json()  # status push
         data = ws.receive_json()  # settings push
-        assert "_dirty" in data
+        assert "_meta" in data
         assert "wifi" in data.get("data", {})
         assert "gpio" in data.get("data", {})
 
@@ -130,7 +130,7 @@ def test_ws_apply_makes_dirty():
         ws.receive_json()  # initial settings
         ws.send_json({"action": "apply", "data": {"wifi": {"ssid": ["text", "SSID", {"value": "DirtyMaker"}]}}})
         pushed = ws.receive_json()
-        assert pushed["_dirty"] is True
+        assert pushed["_meta"]["dirty"] is True
 
 
 def test_external_change_broadcasts_to_all_clients():
@@ -150,11 +150,11 @@ def test_external_change_broadcasts_to_all_clients():
 def test_set_dirty_endpoint():
     client.post("/api/settings/set-dirty", json={"dirty": True})
     data = client.get("/api/settings").json()
-    assert data["_dirty"] is True
+    assert data["_meta"]["dirty"] is True
 
     client.post("/api/settings/set-dirty", json={"dirty": False})
     data = client.get("/api/settings").json()
-    assert data["_dirty"] is False
+    assert data["_meta"]["dirty"] is False
 
 
 

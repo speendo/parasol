@@ -189,8 +189,8 @@ def build_status():
 
 
 def settings_message():
-    # 0.8.0 starts the _meta box; legacy aliases stay for one release.
-    # _show_reset is device semantics (callback presence), so True.
+    # _meta is the only meta container; _show_reset is device semantics
+    # (callback presence), so True.
     meta = {
         "dirty": _dirty,
         "show_reset": True,
@@ -200,9 +200,6 @@ def settings_message():
     return {
         "type": "settings",
         "_meta": meta,
-        "_dirty": meta["dirty"],
-        "_show_reset": meta["show_reset"],
-        "_show_reboot": meta["show_reboot"],
         "data": build_settings(),
     }
 
@@ -688,10 +685,6 @@ async def api_get_settings():
         "show_reboot": True,
         "uploading": _uploading,
     }
-    # Legacy aliases, removed in 1.0.0.
-    payload["_dirty"] = _dirty
-    payload["_show_reset"] = True
-    payload["_show_reboot"] = True
     return payload
 
 

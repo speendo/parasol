@@ -147,14 +147,15 @@ var parasol = (function () {
     btnReset.disabled = locked;
     var nr = document.getElementById('nav-reboot');
     if (nr) {
-      nr.setAttribute('aria-disabled', locked ? 'true' : 'false');
+      if (locked) nr.setAttribute('aria-disabled', 'true');
+      else nr.removeAttribute('aria-disabled');
       nr.style.pointerEvents = locked ? 'none' : '';
     }
     var rc = document.getElementById('reboot-confirm');
     if (rc) rc.disabled = locked;
     for (var k in fileFields) {
       var e = fileFields[k];
-      e.input.disabled = locked;
+      e.input.disabled = locked || e.status;
       e.btn.disabled = locked || !e.valid;
       e.cancel.hidden = !(activeUpload && activeUpload.key === k);
       if (serverUploading && !localUploading && e.msg.textContent === '') e.msg.textContent = 'Another upload is in progress.';
@@ -367,11 +368,11 @@ var parasol = (function () {
    *
    * @param {MessageEvent} event - WS message with JSON data
    */
-  /** Read a metadata flag from `_meta` first, falling back to a legacy key. */
+  /** Read a metadata flag from `_meta` first, falling back to a legacy key in dev only. */
   function metaVal(msg, name, legacy) {
     var m = msg._meta;
-    if (m && typeof m === 'object' && m[name] !== undefined) return m[name];
-    return msg[legacy];
+    if (m && m[name] !== undefined) return m[name];
+    if (typeof __DEV__ === 'undefined' || __DEV__) return msg[legacy];
   }
   function updateMetaFlags(msg) {
     var sr = metaVal(msg, 'show_reset', '_show_reset');
@@ -385,7 +386,7 @@ var parasol = (function () {
     var msg = JSON.parse(event.data);
     if (msg.type === 'status') { processStatus(msg.data); return; }
     if (msg.type === 'error') { showError(msg.message); return; }
-    if (msg.type !== 'settings' && msg._dirty === undefined) return;
+    if (msg.type !== 'settings' && !msg._meta && msg._dirty === undefined) return;
     wsRetries = 0;
 
     var data = msg.data || msg;
@@ -648,11 +649,9 @@ var parasol = (function () {
    * @returns {(string|number|boolean|undefined)}
    */
   function readFormValue(parts) {
-    var f = findField(parts[0], parts[1]);
-    if (f && f.type === 'file') return undefined;
     var nameSel = '[name="' + parts.join('.') + '"]';
     var el = document.querySelector(nameSel);
-    if (!el) return undefined;
+    if (!el || el.type === 'file') return undefined;
     if (el.type === 'radio') {
       var checked = document.querySelector(nameSel + ':checked');
       return checked ? checked.value : undefined;
@@ -1082,7 +1081,7 @@ var parasol = (function () {
     var mime = (file.type || '').toLowerCase();
     var parts = accept.split(',');
     for (var i = 0; i < parts.length; i++) {
-      var p = parts[i].replace(/^\s+|\s+$/g, '').toLowerCase();
+      var p = parts[i].trim().toLowerCase();
       if (!p) continue;
       if (p.charAt(0) === '.') {
         if (name.length >= p.length && name.slice(name.length - p.length) === p) return true;
@@ -1184,17 +1183,12 @@ var parasol = (function () {
     fileFields[id] = {
       input: input, btn: btn, progress: progress, cancel: cancel,
       msg: msg, current: current, file: null, valid: false,
-      field: field, group: namePrefix, key: key,
+      field: field, group: namePrefix, key: key, status: isStatus,
     };
     input.addEventListener('change', function () { fileSelected(id); });
     btn.addEventListener('click', function () { startUpload(id); });
     cancel.addEventListener('click', function () { cancelUpload(); });
     return container;
-  }
-
-  /** Build the upload endpoint path for a file field, URL-encoding group and key. */
-  function uploadURL(f) {
-    return '/api/upload/' + encodeURIComponent(f.group) + '/' + encodeURIComponent(f.key);
   }
 
   /** Finish an upload: clear the lock, hide progress/Cancel, show a message. */
@@ -1216,7 +1210,7 @@ var parasol = (function () {
     xhr.open('PUT', url + '?name=' + encodeURIComponent(file.name) + '&type=' + encodeURIComponent(file.type));
     xhr.setRequestHeader('Content-Type', 'application/octet-stream');
     xhr.upload.onprogress = function (e) {
-      if (e.lengthComputable) f.progress.value = Math.round(e.loaded / e.total * 100);
+      f.progress.value = e.total ? Math.round(e.loaded / e.total * 100) : 0;
     };
     xhr.onload = function () {
       if (xhr.status >= 200 && xhr.status < 300) {
@@ -1243,16 +1237,15 @@ var parasol = (function () {
     f.cancel.hidden = false;
     f.msg.textContent = '';
     var file = f.file;
-    var url = uploadURL(f);
+    var url = '/api/upload/' + encodeURIComponent(f.group) + '/' + encodeURIComponent(f.key);
     var au = activeUpload = { key: key, xhr: null, cancelled: false };
     au.ac = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    var req = {
+    fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: file.name, size: file.size, type: file.type })
-    };
-    if (au.ac) req.signal = au.ac.signal;
-    fetch(url, req).then(function (res) {
+      body: JSON.stringify({ name: file.name, size: file.size, type: file.type }),
+      signal: au.ac ? au.ac.signal : undefined
+    }).then(function (res) {
       if (au.cancelled) return;
       if (res.ok) return putFile(f, url, file, au);
       return res.text().then(function (t) { finishUpload(f, t || 'HTTP ' + res.status); });

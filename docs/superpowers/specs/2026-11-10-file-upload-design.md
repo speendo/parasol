@@ -335,14 +335,11 @@ Every settings payload also carries a top-level `_meta` object:
 ```json
 {"type":"settings",
  "_meta":{"dirty":false,"show_reset":true,"show_reboot":true,"uploading":false},
- "_dirty":false,"_show_reset":true,"_show_reboot":true,
  "data":{...}}
 ```
 
-`_meta` holds the four meta flags. The legacy top-level
-`_dirty`/`_show_reset`/`_show_reboot` aliases mirror `_meta` for one release and
-are removed in 1.0.0; clients read `_meta` first. There is no top-level
-`_uploading` alias — `uploading` lives only inside `_meta`.
+`_meta` holds the four meta flags and is the only meta container; there are no
+top-level meta keys.
 
 **`_meta.uploading` is device-global, not per settings endpoint or namespace.**
 It is true from the moment any upload is accepted (first `META`) until that
