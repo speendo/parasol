@@ -7,6 +7,7 @@ client = TestClient(app)
 
 @pytest.fixture(autouse=True)
 def reset_before_each():
+    client.post("/api/test/reset-uploads")
     client.get("/api/settings/reset")
     yield
 
