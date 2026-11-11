@@ -36,6 +36,9 @@ SETTINGS = {
         "inverted": ["checkbox", "Inverted", {"value": False, "help": "Invert GPIO signal level"}],
         "led_color": ["color", "LED Color", {"value": "#ff9500", "help": "RGB LED color"}],
         "initial": ["select", "Initial State", {"options": [["low", "Low"], ["high", "High"]], "value": "low", "help": "Initial output state: Low or High"}],
+        "transform": ["number", "Transform", {"value": 1, "help": "Stores double the sent value"}],
+        "discard":   ["text", "Discard",   {"value": "kept", "help": "Accepts and keeps the stored value"}],
+        "reject":    ["text", "Reject",    {"value": "none", "help": "Rejects every change"}],
     },
     "mqtt": {
         "broker":      ["text", "Broker URL",   {"attrs": {"required": True, "pattern": r"^(mqtts?|tcp|ssl|ws|wss)://[a-zA-Z0-9_\-]+(:\d{1,5})?$", "placeholder": "mqtt://broker.local:1883"}, "value": "mqtt://broker-local:1883", "help": "MQTT broker URL — required, start with protocol://host"}],
@@ -291,18 +294,63 @@ async def events_ws(ws: WebSocket):
             raw = await ws.receive_text()
             msg = json.loads(raw)
             if msg.get("action") == "apply":
-                for group_key, fields in msg.get("data", {}).items():
+                i = msg.get("i")
+                # bool is an int in Python: reject it explicitly.
+                if isinstance(i, bool) or not isinstance(i, (int, float)):
+                    await ws.send_json({"type": "error", "message": "Missing apply id"})
+                    continue
+                data = msg.get("data")
+                if not isinstance(data, dict):
+                    await ws.send_json({"type": "ack", "i": i, "d": {}, "e": {}})
+                    await ws.send_json({"type": "error", "message": "Invalid data"})
+                    continue
+                ack_e, applied, rejected = {}, 0, False
+                for group_key, fields in data.items():
+                    if rejected:
+                        break
                     for field_key, field_arr in fields.items():
+                        schema_entry = SETTINGS.get(group_key, {}).get(field_key)
+                        if schema_entry is None or not isinstance(field_arr, list) or len(field_arr) < 3:
+                            continue
+                        store_key = group_key + "." + field_key
+                        value = field_arr[2].get("value")
+                        if store_key == "gpio.reject":
+                            ack_e[store_key] = "rejected"
+                            rejected = True        # abort-on-first, like prsl_apply_body
+                            break
+                        if store_key == "gpio.transform" and \
+                                isinstance(value, (int, float)) and not isinstance(value, bool):
+                            applied_store[store_key] = value * 2
+                            applied += 1
+                        elif store_key == "gpio.discard":
+                            pass                   # accepted, stored value untouched
+                        elif schema_entry[0] != "file":
+                            applied_store[store_key] = value
+                            applied += 1
+                # dense d: every requested key that exists, read AFTER the apply
+                ack_d = {}
+                for group_key, fields in data.items():
+                    for field_key in fields:
                         schema_entry = SETTINGS.get(group_key, {}).get(field_key)
                         if schema_entry is None:
                             continue
-                        _, _, opts = schema_entry
-                        if schema_entry[0] == "file":
-                            continue  # PRSL_FILE: labels only change via upload
                         store_key = group_key + "." + field_key
-                        applied_store[store_key] = field_arr[2]["value"]
-                _dirty = any(applied_store.get(k) != nvs_store.get(k) for k in applied_store)
-                await broadcast_settings()
+                        ack_d[store_key] = applied_store.get(store_key, schema_entry[2].get("value"))
+                await ws.send_json({"type": "ack", "i": i, "d": ack_d, "e": ack_e})
+                if applied:
+                    _dirty = any(applied_store.get(k) != nvs_store.get(k) for k in applied_store)
+                    await broadcast_settings()
+                continue
+
+            if msg.get("action") == "sync":
+                i = msg.get("i")
+                if isinstance(i, bool) or not isinstance(i, (int, float)):
+                    await ws.send_json({"type": "error", "message": "Missing sync id"})
+                    continue
+                payload = settings_message()
+                payload["i"] = i                 # request-scoped: requester only
+                await ws.send_json(payload)
+                continue
     except WebSocketDisconnect:
         pass
     finally:
