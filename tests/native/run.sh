@@ -19,6 +19,15 @@ for t in store json body save_body upload; do
   echo "== $t =="; "/tmp/prsl_native_$t"
 done
 
+# ws_handle: pure frame handler; the test supplies the host stub for
+# prsl_build_settings_payload (device implementation lives in prsl.cpp).
+gcc "${FLAGS[@]}" \
+  "$ROOT/src/prsl_store.c" "$ROOT/src/prsl_json.c" "$ROOT/src/prsl_body.c" \
+  "$ROOT/src/prsl_ws_handle.c" "$ROOT/src/prsl_upload.c" \
+  "$DEPS/cJSON.c" "$DEPS/unity.c" \
+  "$ROOT/tests/native/test_prsl_ws_handle.c" -o "/tmp/prsl_native_ws_handle"
+echo "== ws_handle =="; "/tmp/prsl_native_ws_handle"
+
 cat > "$ROOT/tests/native/check_store_api.cpp" <<'EOF'
 #include "prsl.h"
 #include "prsl_store.h"

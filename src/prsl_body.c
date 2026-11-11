@@ -53,9 +53,10 @@ int prsl_apply_body(cJSON *body, prsl_store_t *store, prsl_rejection_t *rejectio
                 /* Callback absent: store the native typed value. Duplicate is
                  * owned by prsl_store_set_json (which frees on error) — the
                  * caller's body node must NOT be freed here. */
-                prsl_store_set_json(store, group->string, field->string,
-                    val ? cJSON_Duplicate(val, 1) : NULL);
-                count++;
+                if (prsl_store_set_json(store, group->string, field->string,
+                        val ? cJSON_Duplicate(val, 1) : NULL) == ESP_OK) {
+                    count++;
+                }
             }
             field = field->next;
         }
