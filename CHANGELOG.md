@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.0
+- Generic file upload: `PRSL_FILE` field type + `prsl_add_file_field` / `prsl_file_opts_t` / `prsl_upload_t` / `prsl_upload_cb_t`. `prsl_add_field(PRSL_FILE, ...)` returns `ESP_ERR_INVALID_ARG`.
+- Upload lifecycle `META → CHUNK* → END/ABORT` with an exactly-once `ABORT` guarantee (META/CHUNK rejection, END error, transport drop, idle timeout, and `prsl_stop()` each deliver `ABORT` exactly once; never after a successful `END`).
+- HTTP surface: `POST /api/upload/<group>/<key>` (advisory preflight) + `PUT /api/upload/<group>/<key>?name=…&type=…` (raw body). Device-enforced guards: `max_size`, basename-only name (≤ 127 bytes, no `/`, `\`, control chars, `.`/`..`), `accept` filter, required `Content-Length` (`411`), one upload at a time (`409`).
+- Settings payloads now carry a `_meta` box (`dirty`, `show_reset`, `show_reboot`, `uploading`); `_meta.uploading` is device-global (true from first `META` until `END`/`ABORT`) and present in every settings payload. The legacy top-level `_dirty`/`_show_reset`/`_show_reboot` aliases mirror `_meta` for one release; there is no top-level `_uploading` alias. **Removing the aliases in favor of `_meta` is planned for 1.0.0.**
+- Upload lock: Save/Reset/Reboot and other uploads return `409` while an upload is active; the client disables those controls in every tab from `_meta.uploading`.
+- `prsl_stop()` aborts an in-flight upload safely from another task (stopping flag + upload mutex); full save/reset/reboot quiescing is deferred to 1.0 (`docs/BACKLOG.md`).
+- Examples: `examples/simple` (minimal JSON), `examples/ota` (respond then reboot), `examples/upload` (temp file → dirty → Save/Reset); compile-checked in CI.
+- Docs: `API_REFERENCE.md`, `WS_PROTOCOL.md`, `docs/reference/field-format.md`, and the spec now cover the field type, wire `_meta`, and the HTTP contract.
+- JS budget: `app.min.js` 20,999 raw / 7,273 gzip vs 0.7.0 baseline 15,857 / 5,522 = **+5,142 raw / +1,751 gzip**. This exceeds the +1.5 KB review threshold by 251 gzip bytes; the overage was reviewed and accepted as required for the upload lock and `_meta` behavior.
+
 ## 0.7.0
 - Responsive nav: always-present ☰ device menu; section links collapse into it on narrow screens (replaces the flex-wrap layout and the "System" dropdown); ☰ vertically centered with the nav and a hairline divider above the Reboot action.
 - BREAKING: typed value pipeline — `on_set` now receives a `prsl_val_t *`; add `prsl_set_val`, `prsl_get_int`, `prsl_get_float`, `prsl_get_bool`. No JS/wire change.

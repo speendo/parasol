@@ -13,6 +13,8 @@ all from firmware.
 - [Field Options Struct](#field-options-struct)
 - [Attrs Format](#attrs-format)
 - [Field Types](#field-types)
+- [File Upload](#file-upload)
+- [Settings Meta](#settings-meta)
 - [Dirty](#dirty)
 - [Runtime Value Access](#runtime-value-access)
 - [Push and Broadcast](#push-and-broadcast)
@@ -487,6 +489,193 @@ happens (no single quotes to replace).
 | `PRSL_TEXTAREA` | `<textarea>` | Multi-line text input |
 | `PRSL_RADIO` | Radio group in `<fieldset>` | Use `prsl_add_field_opts` |
 | `PRSL_SELECT` | `<select>` | Use `prsl_add_field_opts` |
+| `PRSL_FILE` | file input + Upload button | Use `prsl_add_file_field`, not `prsl_add_field` |
+
+## File Upload
+
+A file field streams a selected file to a developer callback in chunks. The
+library owns transport, lifecycle, limits, and the browser UI; the developer
+owns storage, content validation, commit/rollback, and dirty semantics. It is a
+settings field (never a status field), and its value is the current **file
+label** string, read-only to the browser.
+
+### Registration
+
+```c
+typedef struct {
+    prsl_get_cb_t    on_get;          /* current file label, or NULL          */
+    prsl_upload_cb_t on_upload;       /* required                              */
+    const char      *accept;          /* optional HTML accept list             */
+    size_t           max_size;        /* device limit; 0 = no limit            */
+    uint32_t         idle_timeout_ms; /* device timeout; 0 = default 30000 ms  */
+    const char      *help;            /* optional help text                    */
+    const char      *attrs;           /* optional extra HTML attributes JSON   */
+} prsl_file_opts_t;
+
+esp_err_t prsl_add_file_field(const char *group_id, const char *key,
+                              const char *label,
+                              const prsl_file_opts_t *opts);
+```
+
+- `on_upload` is required; a NULL callback returns `ESP_ERR_INVALID_ARG`.
+- `on_get` is the load hook: it returns the current **file label** (a string) or
+  `NULL`. The library loads it at init and on reset, like any other field value.
+- `max_size == 0` means no limit. Empty files (0 bytes) are always rejected.
+  This is a device-enforced limit (RAM/flash protection), not just a browser
+  hint.
+- `idle_timeout_ms == 0` uses the library default of 30000 ms. The timeout is
+  inactivity-based — time since the last received chunk, not total duration.
+  It is device-only and never sent to the browser.
+- `accept` is the HTML file-input filter: a comma-separated list of extensions
+  and/or MIME types (e.g. `.bin,application/octet-stream`, `audio/*`). It is a
+  UX/policy filter backed by declared metadata, **not** a security boundary:
+  users can bypass the picker and clients can lie. Content checks belong in
+  `on_upload`.
+- `attrs` is a JSON object of extra HTML attributes for the file input (e.g.
+  `{"title":"Firmware image"}`). It is presentation-only. Do **not** put
+  `accept`, `max_size`, or `idle_timeout_ms` in it — those stay typed so the
+  device and the browser share one source of truth, and a typo cannot silently
+  disable a safety limit.
+
+**Why a dedicated function?** All scalar widgets (text, number, checkbox,
+select, range, …) share one data contract: a single scalar value, `on_get`/
+`on_set`, and the browser's apply/save pipeline. A file field changes the
+callback shape (an `on_upload` stream instead of `on_set`), the transport
+(preflight + raw PUT), the value ownership (a server-owned read-only label),
+and the option set (`accept`, `max_size`, `idle_timeout_ms`). Rejected
+alternatives were extending `prsl_field_opts_t` with upload members (grows every
+field's footprint and admits invalid combinations such as `on_set` on a file
+field) and reusing `prsl_add_field_opts` (a file field has no `options` array).
+The dedicated function leaves `prsl_field_opts_t` and every existing field
+unchanged.
+
+`prsl_add_field(PRSL_FILE, ...)` returns `ESP_ERR_INVALID_ARG`. The header
+documents `prsl_add_file_field` as the only registration path.
+
+### The upload callback
+
+```c
+typedef enum {
+    PRSL_UPLOAD_META,   /* metadata only, exactly once, before any CHUNK */
+    PRSL_UPLOAD_CHUNK,  /* data bytes; zero or more                       */
+    PRSL_UPLOAD_END,    /* body complete; commit here; exactly once       */
+    PRSL_UPLOAD_ABORT   /* client gone / idle timeout / prsl_stop; cleanup */
+} prsl_upload_event_t;
+
+typedef struct {
+    prsl_upload_event_t event;
+    const char *group_id;   /* registered group, e.g. "audio" */
+    const char *key;        /* registered key, e.g. "clip"    */
+    const char *name;       /* basename of the uploaded file; never NULL */
+    const char *mime;       /* declared Content-Type, or NULL */
+    size_t size;            /* declared Content-Length */
+    size_t offset;          /* byte offset of data (CHUNK only) */
+    const uint8_t *data;    /* CHUNK only; valid only during this call */
+    size_t len;             /* CHUNK length; 0 for other events */
+    char *err;              /* callback writes an error message here */
+    size_t err_len;         /* size of err, including NUL */
+    int status;             /* HTTP status hint on rejection; 0 = default */
+} prsl_upload_t;
+
+typedef esp_err_t (*prsl_upload_cb_t)(prsl_upload_t *u);
+```
+
+**Lifecycle:** `META` fires exactly once before any bytes, `CHUNK` zero or more
+times, then either `END` (body complete) or `ABORT` (cleanup). `data` is valid
+only for the duration of the `CHUNK` call — write or copy it synchronously.
+`name`, `size`, and `mime` are valid on every event.
+
+- Returning anything other than `ESP_OK` from `META`, `CHUNK`, or `END` rejects
+  the upload. Write a human-readable reason to `u->err` (e.g.
+  `snprintf(u->err, u->err_len, "Not a firmware image")`); if it is empty, the
+  library supplies a generic message. `u->status` chooses the HTTP status on
+  rejection (`0` = the library default: `400` for `META`/`CHUNK`, `500` for
+  `END`; a non-zero value is used verbatim, clamped to 400–599).
+- **`ABORT` is guaranteed exactly once for every upload that reached `META`,
+  unless `END` returned `ESP_OK`.** This includes a `META`/`CHUNK` rejection, an
+  error from `END`, a transport drop, an idle timeout, and `prsl_stop()` during
+  the upload. It never fires after a successful `END` and never fires twice. On
+  `ABORT` the return value and `status` are ignored. `ABORT` is the only cleanup
+  signal — close/delete temp files and free resources there.
+- `u->mime` is `NULL` when the client omitted the MIME type; it is never `""`
+  for “absent”.
+
+**Task and blocking:** `on_upload` runs in the AsyncTCP task. It must return
+promptly and must not block; a callback that blocks forever also blocks
+`prsl_stop()` and teardown. `ABORT` must be idempotent and fast, and must not
+assume the server/WebSocket is still alive if it is called during `prsl_stop()`.
+
+### File label vs. uploaded name
+
+These are different strings with different owners:
+
+| | File label (`on_get`, `value`, `prsl_get`) | Uploaded name (`u->name`) |
+|---|---|---|
+| Origin | developer, at load/upload/save | browser's selected file |
+| Meaning | whatever the developer wants to show | client-supplied original name |
+| Examples | `firmware.bin`, `v3.11`, `beep.mp3 (pending)` | `firmware_v3.11_2026_11_10.bin` |
+| Trust | trusted device state | untrusted input |
+| Auto-updated by library | never | n/a |
+
+The developer changes the label from firmware with `prsl_set_str("grp.key",
+"firmware.bin")` (plus `prsl_push()` to update open browsers), and
+`prsl_get("grp.key")` reads it back. The library never renames and never
+auto-sets the label. `u->size` is the declared upload size and may differ from a
+stored/compressed size; structured file metadata is deferred (`docs/BACKLOG.md`).
+
+### Name rules
+
+The device rejects a filename that is not a non-empty basename: at most 127
+bytes after URL decoding, no `'/'`, no `'\\'`, no control characters, and not
+exactly `"."` or `".."`. The developer is responsible for treating `u->name` as
+untrusted if it is used to build a filesystem path.
+
+### HTTP surface
+
+Two endpoints per field (the group/key are path segments; the browser
+URL-encodes them and the `name`/`type` query values):
+
+```
+POST /api/upload/<group>/<key>                          preflight (advisory)
+PUT  /api/upload/<group>/<key>?name=<name>&type=<mime>   raw file body
+```
+
+The preflight body is `{"name":"beep.mp3","size":12345,"type":"audio/mpeg"}`.
+The PUT requires `Content-Length` (chunked transfer returns `411`) and
+`Content-Type: application/octet-stream`; the device re-checks the preflight
+guards authoritatively. The field-level checks are: known file field (`404`), no
+upload already active (`409`), valid name (`400`), `size > 0` (`400`),
+`size <= max_size` (`413`), `accept` match (`415`). One upload at a time,
+device-wide. See `WS_PROTOCOL.md` and the spec for the full wire/HTTP contract.
+
+### `prsl_stop()` during an upload
+
+`prsl_stop()` safely aborts an in-flight upload from another task: it sets a
+stopping flag and serializes against upload body callbacks with an upload mutex,
+delivering `ABORT` exactly once. It still assumes no concurrent
+save/reset/reboot/preflight handler is touching the store. Either call
+`prsl_stop()` from the AsyncTCP task or quiesce the server first; full
+in-flight-request quiescing is deferred to 1.0 (`docs/BACKLOG.md`). A developer
+`ABORT` callback must be idempotent and must not assume the server/WS is alive.
+
+A late disconnect from a previous request cannot abort a newer upload: the
+disconnect callback is bound to an upload generation, so only the request that
+owns the current upload can abort it.
+
+## Settings Meta
+
+Every settings payload carries a top-level `_meta` object:
+
+```json
+"_meta": {"dirty": false, "show_reset": true, "show_reboot": true, "uploading": false}
+```
+
+- `dirty`, `show_reset`, and `show_reboot` mirror the legacy top-level
+  `_dirty`/`_show_reset`/`_show_reboot` flags. Those legacy aliases are
+  deprecated in 0.8.0 and removed in 1.0.0; clients read `_meta` first.
+- `uploading` is device-global: `true` from an upload's first `META` until its
+  `END`/`ABORT`, and present in every settings payload even for endpoints with
+  no file fields. There is no top-level `_uploading` alias.
 
 ## Dirty
 

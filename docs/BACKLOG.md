@@ -21,41 +21,42 @@ Release sequence:
 
 ### Release 0.7.0
 
-- [~] Finish the asset-generator unification (`cmake/generate_assets.cmake` →
+- [x] Finish the asset-generator unification (`cmake/generate_assets.cmake` →
   `scripts/generate_assets.py`). Verify committed assets, ESP-IDF path, and CI
   drift checks.
-- [ ] Run the full suite (`npm test`), bump/confirm `library.json` 0.7.0,
+- [x] Run the full suite (`npm test`), bump/confirm `library.json` 0.7.0,
   update README install URLs and CHANGELOG, tag `v0.7.0`.
 
 ### 0.8.0 — Generic file upload
 
-Design: `docs/superpowers/specs/2026-11-10-file-upload-design.md` (to be written).
+Design: `docs/superpowers/specs/2026-11-10-file-upload-design.md`.
 
-- [ ] Streaming upload field inside a settings section (Pico file input +
+- [x] Streaming upload field inside a settings section (Pico file input +
   Upload button + progress + Cancel), inline; no modal.
-- [ ] Registration via dedicated `prsl_add_file_field(...)`; reject
+- [x] Registration via dedicated `prsl_add_file_field(...)`; reject
   `prsl_add_field(PRSL_FILE, ...)` with a clear error.
-- [ ] `on_upload` lifecycle: `PRSL_UPLOAD_META` → `CHUNK` → `END` / `ABORT`.
-- [ ] Per-field `max_size`, `accept`, `idle_timeout_ms`.
-- [ ] Preflight `POST` + raw `PUT`; one upload at a time (`409`); required
+- [x] `on_upload` lifecycle: `PRSL_UPLOAD_META` → `CHUNK` → `END` / `ABORT`.
+- [x] Per-field `max_size`, `accept`, `idle_timeout_ms`.
+- [x] Preflight `POST` + raw `PUT`; one upload at a time (`409`); required
   `Content-Length`; inline progress via XHR.
-- [ ] Field value is a developer-defined file label (not necessarily the
+- [x] Field value is a developer-defined file label (not necessarily the
   upload name), read-only to the browser; file fields skipped in WS apply /
   save body. `on_upload` receives the original `u->name`.
-- [ ] `attrs` for presentation-only HTML extras (e.g. `title`, `aria-*`);
+- [x] `attrs` for presentation-only HTML extras (e.g. `title`, `aria-*`);
   `accept`/`max_size`/`idle_timeout_ms` stay typed.
-- [ ] Upload lock: disable Save, Reset, Reboot and other uploads while a
+- [x] Upload lock: disable Save, Reset, Reboot and other uploads while a
   transfer is active. `_meta.uploading` is **device-global**: every settings
   payload (including future endpoints/namespaces) carries the same value, and
   every save/reset/reboot handler checks the global state. 0.8.0 adds the
   `_meta` box and keeps the legacy `_dirty`/`_show_reset`/`_show_reboot`
   aliases until 1.0.0.
-- [ ] Docs + complete examples: `examples/simple/main.c` (minimal JSON upload
+- [x] Docs + complete examples: `examples/simple/main.c` (minimal JSON upload
   with one content guard), `examples/ota/main.c` (respond, then reboot),
   `examples/upload/main.c` (temp file → dirty → `on_save` commit / `on_reset`
   discard), plus the bounded JSON pattern. Compile-check the examples in CI.
-- [ ] Native, unit, e2e, and PIO-smoke tests; measure JS min+gzip delta
-  (target ≤ +1.2 KB gzip, review at +1.5 KB).
+- [x] Native, unit, e2e, and PIO-smoke tests; measure JS min+gzip delta
+  (target ≤ +1.2 KB gzip, review at +1.5 KB). Measured +1,751 gzip — reviewed
+  and accepted (see `CHANGELOG.md` 0.8.0).
 
 Deferred from this feature (tracked separately below): auth, upload chunk size,
 filename pattern, modal/confirmation, download.

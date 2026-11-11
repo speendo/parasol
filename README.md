@@ -1,7 +1,8 @@
 # PARASOL
 
 Web-based configuration UI for ESP32 devices. Renders live settings forms,
-handles dirty tracking, and syncs changes via WebSocket.
+handles dirty tracking, syncs changes via WebSocket, and streams file uploads
+(e.g. firmware, config, or asset files) to a firmware callback in chunks.
 
 ## Requirements
 
@@ -42,10 +43,10 @@ Add to `platformio.ini`:
 
 ```ini
 ; Tarball — clean, minimal (recommended):
-lib_deps = https://github.com/speendo/parasol/releases/download/v0.7.0/parasol-v0.7.0.tar.gz
+lib_deps = https://github.com/speendo/parasol/releases/download/v0.8.0/parasol-v0.8.0.tar.gz
 
 ; Git — full repo (for development):
-lib_deps = https://github.com/speendo/parasol.git#v0.7.0
+lib_deps = https://github.com/speendo/parasol.git#v0.8.0
 ```
 
 > **Assets:** default `prsl_assets.h`/`prsl_assets.c` (gzip of the minified UI,
@@ -68,5 +69,9 @@ lib_deps = https://github.com/speendo/parasol.git#v0.7.0
 - **`_`-prefixed groups:** reserved for protocol meta-fields. `prsl_add_group` rejects IDs starting with `_` (`ESP_ERR_INVALID_ARG`) — a `_`-group has no valid interpretation. Use a non-underscore ID.
 - **Registration order matters:** all groups must be added before their fields (`prsl_add_field` on an unknown group returns `ESP_ERR_NOT_FOUND`), and ALL registration must finish before `prsl_init`.
 - **Reset button:** appears only when an `on_reset` callback is registered and the form is dirty (or `always_show_save` is set). A successful reset clears the dirty flag.
+- **Uploads — limits are device-enforced, `accept` is advisory.** `max_size` and the name/`accept` checks run on the device, not just in the browser; a raw client can bypass the picker, so content checks belong in `on_upload`. `accept` is a picker/policy hint, not a security boundary.
+- **Uploads are unauthenticated by default**, like the rest of the UI. The library adds no auth; see the 1.0 security item in `docs/BACKLOG.md` for endpoint partition and HTTP/WS auth.
+- **Uploads require `Content-Length`.** Chunked transfer is rejected (`411`); the device must know the size up front to enforce `max_size`.
+- **One upload at a time.** A second upload (or Save/Reset/Reboot) while one is in flight returns `409`. `_meta.uploading` in settings payloads is device-global and locks the UI in every tab.
 
 See [`API_REFERENCE.md`](API_REFERENCE.md) for the complete C API.

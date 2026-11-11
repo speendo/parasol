@@ -126,7 +126,7 @@ A Pico file input + Upload button inside the field, with inline progress,
 Cancel, and status. A global upload lock (disable Save, Reset, Reboot, and other
 uploads) gives the exclusivity a modal would provide without focus/scroll/ESC
 code or extra bytes. The lock is enforced twice: the client uses a local flag
-plus the `_uploading` meta flag (so other tabs lock too), and the device returns
+plus the `_meta.uploading` meta flag (so other tabs lock too), and the device returns
 `409` from save/reset/reboot while an upload is active. A confirmation modal
 for destructive uploads is deferred (`docs/BACKLOG.md`).
 
@@ -301,7 +301,7 @@ size. Structured file metadata is deferred (`docs/BACKLOG.md`).
 bool prsl_is_uploading(void);
 ```
 
-This is the source for the `_uploading` meta flag and for device-side guards.
+This is the source for the `_meta.uploading` meta flag and for device-side guards.
 It is analogous to `prsl_is_dirty()`, but global rather than per-store. Firmware
 with custom HTTP endpoints can use it to reject conflicting work.
 
@@ -330,15 +330,23 @@ A file field appears in the settings payload as a normal field with type
 - The field is included in the `data` object like any other setting, so the
   browser can render it. It is excluded from client-generated apply/save bodies.
 
-Every settings payload also carries a top-level meta flag:
+Every settings payload also carries a top-level `_meta` object:
 
 ```json
-{"type":"settings","_dirty":false,"_show_reset":true,"_show_reboot":true,"_uploading":false,"data":{...}}
+{"type":"settings",
+ "_meta":{"dirty":false,"show_reset":true,"show_reboot":true,"uploading":false},
+ "_dirty":false,"_show_reset":true,"_show_reboot":true,
+ "data":{...}}
 ```
 
-**`_uploading` is device-global, not per settings endpoint or namespace.** It is
-true from the moment any upload is accepted (first `META`) until that upload's
-`END` or `ABORT` completes. Consequences:
+`_meta` holds the four meta flags. The legacy top-level
+`_dirty`/`_show_reset`/`_show_reboot` aliases mirror `_meta` for one release and
+are removed in 1.0.0; clients read `_meta` first. There is no top-level
+`_uploading` alias — `uploading` lives only inside `_meta`.
+
+**`_meta.uploading` is device-global, not per settings endpoint or namespace.**
+It is true from the moment any upload is accepted (first `META`) until that
+upload's `END` or `ABORT` completes. Consequences:
 
 - Every settings payload from every endpoint must include the same flag, even
   if that endpoint has no file fields. If settings are later partitioned (e.g.
@@ -450,8 +458,8 @@ preflight can still upload only if the PUT checks pass.
 - The library keeps exactly one in-progress upload in a static state. This is
   intentional: the ESP32 should not run two flash/OTA writers at once, and it
   makes the abort/timeout state small and host-testable.
-- On upload start (first `META`) set `_uploading = true` and `prsl_push()`; on
-  `END`/`ABORT` completion set `_uploading = false` and `prsl_push()`.
+- On upload start (first `META`) set `_meta.uploading = true` and `prsl_push()`;
+  on `END`/`ABORT` completion set `_meta.uploading = false` and `prsl_push()`.
 - `prsl_stop()` during an upload calls `ABORT`, clears the state, then stops the
   server. The developer must make `ABORT` safe to call once.
 
@@ -521,11 +529,11 @@ advisory; the device preflight is authoritative.
 The lock is the union of two sources:
 
 ```js
-locked = localUploading || serverUploading;   // serverUploading = msg._uploading
+locked = localUploading || serverUploading;   // serverUploading = msg._meta.uploading
 ```
 
 `localUploading` is set immediately on Upload click for responsiveness;
-`serverUploading` comes from the `_uploading` meta flag and covers other tabs
+`serverUploading` comes from the `_meta.uploading` meta flag and covers other tabs
 and reconnects. `updateUI()` must derive Save/Reset/Reboot/upload enablement
 from `locked`, not from `_dirty` alone — otherwise a dirty push arriving
 mid-upload would re-enable Save.
@@ -572,7 +580,7 @@ mid-upload would re-enable Save.
 ### Multiple clients
 
 - One upload globally. A second upload (from any browser) gets `409`.
-- Every tab learns `_uploading` from the settings push and locks Save, Reset,
+- Every tab learns `_meta.uploading` from the settings push and locks Save, Reset,
   Reboot, and upload controls. A tab that connects mid-upload gets `true` in
   its initial settings payload.
 - The device guards are authoritative; the client lock is only UX.
@@ -630,7 +638,7 @@ typedef struct {
 - No heap allocation per request.
 - `active` is the **process-global** one-at-a-time lock. It is not stored in
   `prsl_store_t` and is not reset by per-store operations. It drives the
-  `_uploading` flag and every guard, regardless of endpoint/namespace.
+  `_meta.uploading` flag and every guard, regardless of endpoint/namespace.
 - `name` is the decoded basename, truncated/rejected per the length rule.
 - The core functions `prsl_upload_begin/chunk/end/abort` take the state and
   callback; the HTTP glue is thin. This lets native tests exercise the state
@@ -638,12 +646,12 @@ typedef struct {
 - `ABORT` is delivered exactly once: the `aborted` flag is set before the
   callback; subsequent disconnect/timeout/stop paths see it and do nothing.
 - `prsl_is_uploading()` returns `g_upload.active && !g_upload.finished`.
-- Every settings payload builder adds `_uploading` from
+- Every settings payload builder adds `_meta.uploading` from
   `prsl_is_uploading()` — never from the store. If multiple stores/endpoints are
   introduced, they all read the same global state.
 - `prsl.cpp` guards the save/reset/reboot handlers and public `prsl_reset()`
   on `prsl_is_uploading()` as described in "Device guards while uploading".
-- Upload start/end calls the push path(s) so `_uploading` reaches every tab on
+- Upload start/end calls the push path(s) so `_meta.uploading` reaches every tab on
   every endpoint. Today that is `prsl_push()`; future endpoints must use the
   same global value.
 
@@ -1071,7 +1079,7 @@ file is the same pattern with an in-RAM buffer:
   the `ESP_ERR_INVALID_ARG` note on `prsl_add_field`.
 - `docs/reference/field-format.md`: add the `file` type and its options. The
   full per-field-type options matrix is deferred to `docs/BACKLOG.md`.
-- `WS_PROTOCOL.md`: add `_uploading` to the settings message and note that it
+- `WS_PROTOCOL.md`: add `_meta.uploading` to the settings message and note that it
   is device-global.
 - `README.md`: add upload to the feature list and troubleshooting (limits,
   `accept` is advisory, unauthenticated by default).
@@ -1093,9 +1101,9 @@ file is the same pattern with an in-RAM buffer:
 - Error text and `status` propagation: default 400 for META/CHUNK, 500 for END;
   a non-zero callback `status` wins.
 - Actual received bytes over `Content-Length`/`max_size` → 413 and ABORT.
-- `_uploading` is true from the first META until END/ABORT, false otherwise;
+- `_meta.uploading` is true from the first META until END/ABORT, false otherwise;
   it appears in the settings payload and is pushed on start/end.
-- `prsl_is_uploading()` agrees with `_uploading` and is true across stores /
+- `prsl_is_uploading()` agrees with `_meta.uploading` and is true across stores /
   endpoints (test with a second payload builder or a host double).
 - One-at-a-time: second begin rejected while active, including across
   endpoints.
@@ -1118,16 +1126,16 @@ file is the same pattern with an in-RAM buffer:
 - Progress updates; Cancel calls `xhr.abort()`.
 - Upload lock disables Save/Reset/Reboot and other uploads; restores on
   completion/failure/cancel.
-- `_uploading: true` from the server locks Save/Reset/Reboot/upload controls in
+- `_meta.uploading: true` from the server locks Save/Reset/Reboot/upload controls in
   every tab, including a tab that connects mid-upload.
-- A dirty push arriving while `_uploading` is true does not re-enable Save.
-- `_uploading: false` restores Save (if dirty) and the device actions.
+- A dirty push arriving while `_meta.uploading` is true does not re-enable Save.
+- `_meta.uploading: false` restores Save (if dirty) and the device actions.
 - File fields excluded from `serialize()`, `getPending()`, `buildPatch()`, and
   the Save body.
 - Server-pushed label updates update the display silently (no external-change
   bar, no conflict prompt).
 - Dirty push after a deferred upload shows Save.
-- `beforeunload` while uploading or while `_uploading` is true.
+- `beforeunload` while uploading or while `_meta.uploading` is true.
 
 ### E2E (Playwright + Python test server)
 
@@ -1144,10 +1152,10 @@ GET). Cover:
 - reconnect/WS down during upload: upload still completes; the label appears on
   reconnect;
 - upload lock disables the device actions;
-- a second tab receives `_uploading: true` and locks its controls;
+- a second tab receives `_meta.uploading: true` and locks its controls;
 - direct `POST /api/settings/save`, `/api/settings/reset`, and
   `/api/system/reboot` during an upload return `409`;
-- `_uploading` returns to false after END, ABORT, cancel, and timeout.
+- `_meta.uploading` returns to false after END, ABORT, cancel, and timeout.
 
 ### PIO smoke
 
@@ -1215,14 +1223,14 @@ simplify if it exceeds **+1.5 KB**.
   the async task; public `prsl_reset()` may be called from another task. Confirm
   the flag is safely published (e.g. protected by the store mutex or an atomic),
   not a plain `bool` with a data race.
-- **PLAN REVIEW:** the Python test server must emit `_uploading` and enforce the
+- **PLAN REVIEW:** the Python test server must emit `_meta.uploading` and enforce the
   same `409` guards; otherwise e2e does not exercise the real contract.
 - **When endpoints are partitioned:** every settings payload builder must
-  include the same process-global `_uploading` value, and every save/reset/reboot
+  include the same process-global `_meta.uploading` value, and every save/reset/reboot
   handler must check `prsl_is_uploading()`. Add a test that a second
   endpoint/namespace still reports the global flag; do not copy the flag into
   per-endpoint state.
-- **Multi-endpoint message ordering:** with one socket, `_uploading` messages
+- **Multi-endpoint message ordering:** with one socket, `_meta.uploading` messages
   are ordered. If multiple settings sockets are introduced, decide how the
   client merges the global flag so a stale `false` from one socket cannot unlock
   another during an upload (e.g. a device-global epoch or an authoritative

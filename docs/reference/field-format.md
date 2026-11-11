@@ -33,18 +33,30 @@ Used for both **settings** and **status** messages over HTTP and WebSocket.
 | `checkbox` | `<input type="checkbox">` | yes | settings, status |
 | `radio` | `<input type="radio">` group | yes | settings, status |
 | `range` | `<input type="range">` | yes | settings, status |
+| `file` | file input + Upload button | no (read-only label) | settings only |
 
 **Status fields** are always rendered `disabled`. Their values update via
 WebSocket push — user interaction is blocked.
+
+**File fields** are settings-only. The browser renders them read-only and never
+sends their value in an apply or save body; the value is a developer-defined
+file label updated only server-side. The full per-field-type options matrix is
+deferred to `docs/BACKLOG.md`.
 
 ## opts Dictionary
 
 | Key | Type | Applies To | Description |
 |-----|------|-----------|-------------|
-| `value` | any | all | Current value (type-coerced by the client) |
+| `value` | any | all | Current value (type-coerced by the client). For `file`: the read-only label. |
 | `options` | `[["key","Label"],...]` | select, radio | Allowed options as `[value, label]` pairs |
+| `accept` | string | file | HTML file-input filter (extensions and/or MIME types). A UI/policy hint, not security. Omitted when unset. |
+| `max_size` | number | file | Device-enforced byte limit. `0` = no limit. Omitted when unset. |
 | `attrs` | object | all | HTML attributes e.g. `{min, max, step, maxlength, placeholder}` |
 | `help` | string | all | Helper text shown below the field |
+
+`idle_timeout_ms` is a device-only option: it is never sent on the wire and has
+no `opts` key here. `accept` and `max_size` are emitted only when set; they are
+typed and must not be smuggled through `attrs`.
 
 ### value Coercion
 
@@ -58,11 +70,17 @@ WebSocket push — user interaction is blocked.
 
 ## Settings Payload
 
-Settings messages include the `_dirty` meta field:
+Settings messages carry a top-level `_meta` object with `dirty`, `show_reset`,
+`show_reboot`, and `uploading`. The legacy `_dirty`/`_show_reset`/`_show_reboot`
+aliases mirror `_meta` in 0.8.0 and are removed in 1.0.0; `uploading` is
+device-global and has no top-level alias.
 
 ```json
 {
+  "_meta": {"dirty": false, "show_reset": true, "show_reboot": true, "uploading": false},
   "_dirty": false,
+  "_show_reset": true,
+  "_show_reboot": true,
   "wifi": {
     "ssid":     ["text", "SSID",     {"value": "MyNetwork", "help": "WiFi network name"}],
     "password": ["password", "Password", {"value": "", "attrs": {"maxlength": 64}}],
@@ -81,7 +99,24 @@ Settings messages include the `_dirty` meta field:
 }
 ```
 
-`_dirty` is `true` when applied settings differ from stored (NVS) settings.
+`_meta.dirty` (and its legacy `_dirty` alias) is `true` when applied settings
+differ from stored (NVS) settings.
+
+### File field example
+
+```json
+{
+  "audio": {
+    "label": "Audio",
+    "clip": ["file", "Clip", {
+      "value": "beep.mp3",
+      "accept": ".mp3,audio/*",
+      "max_size": 1048576,
+      "help": "MP3, up to 1 MiB"
+    }]
+  }
+}
+```
 
 ## Status Payload
 

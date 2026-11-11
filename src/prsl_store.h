@@ -89,9 +89,9 @@ esp_err_t prsl_store_load_values(prsl_store_t *store);
 /** @brief Re-call on_get on every field (for reset). */
 esp_err_t prsl_store_reset_values(prsl_store_t *store);
 
-/** @brief Build the full settings WS payload ({type, _dirty, _show_reset,
- *  _show_reboot, data}). Returns a caller-owned cJSON * (internal helper;
- *  not part of the public API). */
+/** @brief Build the full settings WS payload ({type, _meta, legacy
+ *  _dirty/_show_reset/_show_reboot aliases, data}). Returns a caller-owned
+ *  cJSON * (internal helper; not part of the public API). */
 cJSON *prsl_build_settings_payload(prsl_store_t *store);
 
 #ifdef __cplusplus
