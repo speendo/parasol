@@ -393,7 +393,12 @@ literals (→ Decision 4 example rewrite), doc warnings 11/12/13 (→ Decisions
 
 ## Deferred — Reset button visibility vs. `on_reset` (Issue 15 follow-up)
 
-**Status: deferred, no code change in 0.7.0.** Recorded for a future decision.
+**Status: resolved in v0.6.4 (`989b6e7`) — kept for history.** The client now
+gates on `_show_reset` as well as dirty; see the note below.
+
+> **Resolved:** `app.js` now uses
+> `btnReset.hidden = !(showReset && (dirty || alwaysShow))`, and the README
+> wording was corrected. The analysis below is the pre-fix record.
 
 Mismatch: README states Reset "appears when an `on_reset` callback is
 registered," but the client shows it whenever the form is dirty — even with no

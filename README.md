@@ -33,6 +33,7 @@ npm run build
 |---|---|---|
 | [`API_REFERENCE.md`](API_REFERENCE.md) | ESP32 firmware developers | C API reference with doxygen examples — group registration, field types, save callbacks, dirty check, runtime value access |
 | [`WS_PROTOCOL.md`](WS_PROTOCOL.md) | Developers debugging WebSocket traffic | Message format reference — status, settings, apply, error payloads, state machine summary |
+| [`docs/BACKLOG.md`](docs/BACKLOG.md) | Contributors | Living list of open work before/after 1.0, deferred items, and resolved/superseded decisions |
 | [`docs/superpowers/specs/2026-06-18-unified-settings-design.md`](docs/superpowers/specs/2026-06-18-unified-settings-design.md) | Contributors | Full architecture spec, API contract, JSON wire format, state machine *(internal design artifact — may reference superseded APIs)* |
 
 ## Installing on ESP32
