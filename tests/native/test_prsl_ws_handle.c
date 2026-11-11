@@ -173,6 +173,28 @@ void test_unknown_action_is_ignored(void) {
     TEST_ASSERT_NULL(r.error);
 }
 
+void test_sync_returns_payload_with_id(void) {
+    add_text("wifi", "ssid", "old", NULL);
+    prsl_ws_reply_t r = run("{\"action\":\"sync\",\"i\":9}");
+    cJSON *p = parse(r.to_sender);
+    TEST_ASSERT_EQUAL_STRING("settings", cJSON_GetStringValue(cJSON_GetObjectItem(p, "type")));
+    TEST_ASSERT_EQUAL(9, cJSON_GetNumberValue(cJSON_GetObjectItem(p, "i")));
+    TEST_ASSERT_NOT_NULL(cJSON_GetObjectItem(p, "_meta"));
+    TEST_ASSERT_NOT_NULL(cJSON_GetObjectItem(cJSON_GetObjectItem(p, "data"), "wifi"));
+    TEST_ASSERT_NULL(r.to_all);
+    TEST_ASSERT_NULL(r.error);
+    cJSON_Delete(p); free_reply(&r);
+}
+
+void test_sync_without_id_is_protocol_error(void) {
+    prsl_ws_reply_t r = run("{\"action\":\"sync\"}");
+    TEST_ASSERT_NULL(r.to_sender);
+    TEST_ASSERT_NOT_NULL(r.error);
+    cJSON *e = parse(r.error);
+    TEST_ASSERT_EQUAL_STRING("Missing sync id", cJSON_GetStringValue(cJSON_GetObjectItem(e, "message")));
+    cJSON_Delete(e); free_reply(&r);
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_ack_for_same_value_apply);
@@ -186,5 +208,7 @@ int main(void) {
     RUN_TEST(test_non_object_data_acks_and_errors);
     RUN_TEST(test_invalid_json_error_only);
     RUN_TEST(test_unknown_action_is_ignored);
+    RUN_TEST(test_sync_returns_payload_with_id);
+    RUN_TEST(test_sync_without_id_is_protocol_error);
     return UNITY_END();
 }

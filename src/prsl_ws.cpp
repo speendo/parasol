@@ -2,16 +2,18 @@
 #include "prsl.h"
 #include "prsl_store.h"
 #include "prsl_json.h"
-#include "prsl_body.h"
+#include "prsl_ws_handle.h"
 #include "ESPAsyncWebServer.h"
-#include <string.h>
-#include <stdio.h>
+#include "esp_log.h"
+#include <stdlib.h>
 
 static prsl_store_t *g_store = NULL;
 
 static void on_event(AsyncWebSocket *server, AsyncWebSocketClient *client,
                      AwsEventType type, void *arg, uint8_t *data, size_t len) {
     if (type == WS_EVT_CONNECT) {
+        client->setCloseClientOnQueueFull(true);
+
         xSemaphoreTakeRecursive(g_store->mutex, portMAX_DELAY);
 
         cJSON *status = cJSON_CreateObject();
@@ -31,34 +33,15 @@ static void on_event(AsyncWebSocket *server, AsyncWebSocketClient *client,
         AwsFrameInfo *info = (AwsFrameInfo *)arg;
         if (info->final && info->index == 0 && info->len == len
             && info->opcode == WS_TEXT && len > 0) {
-            cJSON *msg = cJSON_ParseWithLength((const char *)data, len);
-            if (!msg) return;
-
-            cJSON *action = cJSON_GetObjectItem(msg, "action");
-            if (action && cJSON_IsString(action) && strcmp(action->valuestring, "apply") == 0) {
-                cJSON *body = cJSON_GetObjectItem(msg, "data");
-                if (!body || !cJSON_IsObject(body)) { cJSON_Delete(msg); return; }
-
-                prsl_rejection_t rej;
-                int applied = prsl_apply_body(body, g_store, &rej);
-
-                if (rej.group_id) {
-                    char err[128];
-                    snprintf(err, sizeof(err),
-                             "{\"type\":\"error\",\"message\":\"on_set rejected %s.%s\"}",
-                             rej.group_id, rej.key);
-                    client->text(err);
-                }
-
-                /* Batch: broadcast once after processing all fields */
-                if (applied > 0) {
-                    cJSON *resp = prsl_build_settings_payload(g_store);
-                    char *out = cJSON_PrintUnformatted(resp);
-                    cJSON_Delete(resp);
-                    if (out) { server->textAll(out); free(out); }
-                }
+            prsl_ws_reply_t out = {0};
+            prsl_ws_handle((const char *)data, len, g_store, &out);
+            if (out.to_sender) {
+                if (!client->text(out.to_sender))
+                    ESP_LOGW("prsl_ws", "reply not queued; closing on overflow");
+                free(out.to_sender);
             }
-            cJSON_Delete(msg);
+            if (out.error) { client->text(out.error); free(out.error); }
+            if (out.to_all) { server->textAll(out.to_all); free(out.to_all); }
         }
     }
 }

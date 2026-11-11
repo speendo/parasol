@@ -53,13 +53,32 @@ int prsl_ws_handle(const char *json, size_t len, prsl_store_t *store,
     }
 
     cJSON *action = cJSON_GetObjectItem(msg, "action");
-    if (!action || !cJSON_IsString(action)
-        || strcmp(action->valuestring, "apply") != 0) {
+    if (!action || !cJSON_IsString(action)) {
         cJSON_Delete(msg);
         return 0;
     }
 
     cJSON *id = cJSON_GetObjectItem(msg, "i");
+
+    /* Sync: reply to the requester only; no store mutation, no broadcast. */
+    if (strcmp(action->valuestring, "sync") == 0) {
+        if (!cJSON_IsNumber(id)) {
+            out->error = strdup("{\"type\":\"error\",\"message\":\"Missing sync id\"}");
+            cJSON_Delete(msg);
+            return 0;
+        }
+        cJSON *root = prsl_build_settings_payload(store);
+        cJSON_AddItemToObject(root, "i", cJSON_Duplicate(id, 1));
+        out->to_sender = print_and_delete(root);
+        cJSON_Delete(msg);
+        return 0;
+    }
+
+    if (strcmp(action->valuestring, "apply") != 0) {
+        cJSON_Delete(msg);
+        return 0;
+    }
+
     if (!cJSON_IsNumber(id)) {
         out->error = strdup("{\"type\":\"error\",\"message\":\"Missing apply id\"}");
         cJSON_Delete(msg);
