@@ -37,6 +37,13 @@ esp_err_t prsl_upload_validate(const prsl_field_t *field, const char *name,
 bool prsl_upload_accept_match(const char *accept, const char *name, const char *mime);
 bool prsl_upload_is_active(const prsl_upload_state_t *st);
 
+esp_err_t prsl_upload_begin(prsl_upload_state_t *st, prsl_field_t *field,
+                            const char *name, const char *mime, size_t size);
+esp_err_t prsl_upload_chunk(prsl_upload_state_t *st, const uint8_t *data,
+                            size_t len, size_t offset);
+esp_err_t prsl_upload_end(prsl_upload_state_t *st);
+void prsl_upload_abort(prsl_upload_state_t *st);
+
 #ifdef __cplusplus
 }
 #endif
