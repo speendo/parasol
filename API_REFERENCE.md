@@ -678,7 +678,7 @@ Every settings payload carries a top-level `_meta` object:
 
 ## Dirty
 
-The `_dirty` flag is exclusively developer-driven. Set it true when applied values
+The `_meta.dirty` flag is exclusively developer-driven. Set it true when applied values
 diverge from saved values. Parasol clears it to `false` after a successful `on_save`.
 
 ```c
@@ -697,7 +697,7 @@ bool prsl_is_dirty(void);
 - Once after loading NVS at startup (to always show Save)
 - From a hardware event or timer that detects external changes
 
-> **Sharp consequence:** `_dirty` is only ever *cleared* by parasol. If firmware never calls `prsl_set_dirty(true)`, the browser never shows the Save button (unless `always_show_save` is on), and a Save click is a silent no-op — no POST is sent and nothing persists. Call `prsl_set_dirty(true)` inside `on_set` (or wherever external state changes).
+> **Sharp consequence:** `_meta.dirty` is only ever *cleared* by parasol. If firmware never calls `prsl_set_dirty(true)`, the browser never shows the Save button (unless `always_show_save` is on), and a Save click is a silent no-op — no POST is sent and nothing persists. Call `prsl_set_dirty(true)` inside `on_set` (or wherever external state changes).
 
 Alternatively, set `"always_show_save": true` in `parasol_config.json` to force
 the Save button visible always.

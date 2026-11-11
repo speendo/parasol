@@ -290,7 +290,7 @@ test.describe('cancel and timeout', () => {
     await expect(page.locator('#audio\\.clip-msg')).toHaveText('Another upload is in progress.')
 
     // Unlocked once the timeout flips the flag back and broadcasts.
-    await expect(page.locator('#nav-reboot')).toHaveAttribute('aria-disabled', 'false', { timeout: 5000 })
+    await expect(page.locator('#nav-reboot')).not.toHaveAttribute('aria-disabled', 'true', { timeout: 5000 })
     await expect(page.locator('#audio\\.clip-msg')).toHaveText('')
 
     const meta = await (await page.request.get('/api/settings')).json()

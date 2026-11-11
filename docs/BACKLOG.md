@@ -92,9 +92,9 @@ filename pattern, modal/confirmation, download.
   deprecation policy, and the 0.8 → 1.0 migration.
 - [ ] **Release checklist/docs.** README, `API_REFERENCE.md`, `WS_PROTOCOL.md`,
   `docs/reference/field-format.md` (upload), CHANGELOG, examples, tags.
-- [ ] **Test-server fidelity.** `_show_reset` was sent as `_dirty`; the device
-  sends `prsl_has_reset()`. The 0.8.0 plan changes the test server to `True`;
-  verify the existing Reset e2e tests after implementation and close this.
+- [x] **Test-server fidelity.** `_show_reset` was sent as `_dirty`; the device
+  sends `prsl_has_reset()`. Aligned in 0.8.0: the test server sends
+  `_meta.show_reset: True` and the existing Reset e2e tests pass.
 - [ ] **Multi-client/reconnect review.** Verify multiple tabs and reconnect
   during an upload / dirty state before declaring 1.0.
 

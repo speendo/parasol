@@ -532,7 +532,7 @@ locked = localUploading || serverUploading;   // serverUploading = msg._meta.upl
 `localUploading` is set immediately on Upload click for responsiveness;
 `serverUploading` comes from the `_meta.uploading` meta flag and covers other tabs
 and reconnects. `updateUI()` must derive Save/Reset/Reboot/upload enablement
-from `locked`, not from `_dirty` alone — otherwise a dirty push arriving
+from `locked`, not from `_meta.dirty` alone — otherwise a dirty push arriving
 mid-upload would re-enable Save.
 
 1. User picks a file; Upload becomes enabled.
@@ -550,7 +550,7 @@ mid-upload would re-enable Save.
    `upload.onprogress`. Update `<progress>` as bytes are sent.
 5. On `load`:
    - `2xx`: show "Uploaded" (and "Save to apply" if the device later pushes
-     `_dirty`); clear `localUploading`; run `updateUI()`.
+     `_meta.dirty`); clear `localUploading`; run `updateUI()`.
    - non-2xx: show the response text; clear `localUploading`; run `updateUI()`.
 6. On `error`/`abort`: show "Upload failed" / "Upload cancelled"; clear
    `localUploading`; run `updateUI()`.

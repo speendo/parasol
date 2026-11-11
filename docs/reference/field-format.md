@@ -116,7 +116,7 @@ settings.
 
 ## Status Payload
 
-Status messages have **no** `_dirty` field. All fields render as disabled.
+Status messages have **no** `_meta` object. All fields render as disabled.
 
 ```json
 {

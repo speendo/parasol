@@ -9,7 +9,7 @@
 - `prsl_stop()` aborts an in-flight upload safely from another task (stopping flag + upload mutex); full save/reset/reboot quiescing is deferred to 1.0 (`docs/BACKLOG.md`).
 - Examples: `examples/simple` (minimal JSON), `examples/ota` (respond then reboot), `examples/upload` (temp file → dirty → Save/Reset); compile-checked in CI.
 - Docs: `API_REFERENCE.md`, `WS_PROTOCOL.md`, `docs/reference/field-format.md`, and the spec now cover the field type, wire `_meta`, and the HTTP contract.
-- JS budget: `app.min.js` 20,896 raw / 7,226 gzip vs 0.7.0 baseline 15,857 / 5,522 = **+5,039 raw / +1,704 gzip**. This exceeds the +1.5 KB review threshold by 168 gzip bytes; the overage was reviewed and accepted as required for the upload lock and `_meta` behavior.
+- JS budget: `app.min.js` 20,877 raw / 7,218 gzip vs 0.7.0 baseline 15,857 / 5,522 = **+5,020 raw / +1,696 gzip**. This is 396 gzip above the original +1.3 KB target and 196 above the +1.5 KB review threshold; the remaining overage is the required upload lock, `_meta`, and local file-field UI.
 
 ## 0.7.0
 - Responsive nav: always-present ☰ device menu; section links collapse into it on narrow screens (replaces the flex-wrap layout and the "System" dropdown); ☰ vertically centered with the nav and a hairline divider above the Reboot action.

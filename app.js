@@ -386,7 +386,7 @@ var parasol = (function () {
     var msg = JSON.parse(event.data);
     if (msg.type === 'status') { processStatus(msg.data); return; }
     if (msg.type === 'error') { showError(msg.message); return; }
-    if (msg.type !== 'settings' && !msg._meta && msg._dirty === undefined) return;
+    if (msg.type !== 'settings' && !msg._meta && !(typeof __DEV__ === 'undefined' || __DEV__)) return;
     wsRetries = 0;
 
     var data = msg.data || msg;
