@@ -30,6 +30,9 @@ var parasol = (function () {
   var pendingConflicts = [];
   var resetInProgress = false;
   var rebooting = false;
+  var localUploading = false;
+  var serverUploading = false;
+  var activeUpload = null;
 
   /** Show an error message in the status bar. @param {string} msg */
   function showError(msg) {
@@ -55,6 +58,7 @@ var parasol = (function () {
       if (!grp.fields) continue;
       for (var fi = 0; fi < grp.fields.length; fi++) {
         var field = grp.fields[fi];
+        if (field.type === 'file') continue;
         var val = readFormValue([grp.id, field.key]);
         data[grp.id + '.' + field.key] = val === undefined
           ? (field.type === 'radio' ? null : '')
@@ -114,6 +118,9 @@ var parasol = (function () {
           for (var ri = 0; ri < radios.length; ri++) {
             radios[ri].checked = fopts.value !== undefined && String(radios[ri].value) === String(fopts.value);
           }
+        } else if (field.type === 'file') {
+          var cur = document.getElementById(pfx + grp.id + '.' + field.key + '-current');
+          if (cur) setFileLabel(cur, fopts.value);
         } else {
           el.value = fopts.value !== undefined ? fopts.value : '';
         }
@@ -121,18 +128,39 @@ var parasol = (function () {
     }
   }
 
+  /** True while a local or server-side upload is active. */
+  function isLocked() { return localUploading || serverUploading; }
+
   /**
    * Determine whether the Save button should be visible.
    * Gated by formInteracted — validity only checked after first user interaction.
    */
   function updateUI() {
+    var locked = isLocked();
     var formOk = formInteracted ? configForm.checkValidity() : true;
     var alwaysShow = document.querySelector('meta[name="parasol-always-show-save"]');
     alwaysShow = alwaysShow && alwaysShow.content === '1';
-    var showBtn = (dirty || alwaysShow) && formOk;
+    var showBtn = !locked && (dirty || alwaysShow) && formOk;
     btnSaveApply.hidden = !showBtn;
     btnSaveApply.disabled = !showBtn;
-    btnReset.hidden = !(showReset && (dirty || alwaysShow));
+    btnReset.hidden = !(!locked && showReset && (dirty || alwaysShow));
+    btnReset.disabled = locked;
+    var nr = document.getElementById('nav-reboot');
+    if (nr) {
+      if (locked) nr.setAttribute('aria-disabled', 'true');
+      else nr.removeAttribute('aria-disabled');
+      nr.style.pointerEvents = locked ? 'none' : '';
+    }
+    var rc = document.getElementById('reboot-confirm');
+    if (rc) rc.disabled = locked;
+    for (var k in fileFields) {
+      var e = fileFields[k];
+      e.input.disabled = locked || e.status;
+      e.btn.disabled = locked || !e.valid;
+      e.cancel.hidden = !(activeUpload && activeUpload.key === k);
+      if (serverUploading && !localUploading && e.msg.textContent === '') e.msg.textContent = 'Another upload is in progress.';
+      else if (!locked && e.msg.textContent === 'Another upload is in progress.') e.msg.textContent = '';
+    }
   }
 
   /**
@@ -169,7 +197,7 @@ var parasol = (function () {
       var fieldKey = name.slice(dot + 1);
       if (!data[grpId]) data[grpId] = {};
       var field = findField(grpId, fieldKey);
-      if (field) data[grpId][fieldKey] = [field.type, field.label, { value: changes[name] }];
+      if (field && field.type !== 'file') data[grpId][fieldKey] = [field.type, field.label, { value: changes[name] }];
     }
     return data;
   }
@@ -340,22 +368,29 @@ var parasol = (function () {
    *
    * @param {MessageEvent} event - WS message with JSON data
    */
+  /** Read a metadata flag from `_meta` first, falling back to a legacy key in dev only. */
+  function metaVal(msg, name, legacy) {
+    var m = msg._meta;
+    if (m && m[name] !== undefined) return m[name];
+    if (typeof __DEV__ === 'undefined' || __DEV__) return msg[legacy];
+  }
   function updateMetaFlags(msg) {
-    if (msg._show_reset !== undefined) {
-      showReset = msg._show_reset;
-    }
-    if (msg._show_reboot !== undefined) {
-      showReboot = msg._show_reboot;
-    }
+    var sr = metaVal(msg, 'show_reset', '_show_reset');
+    var sb = metaVal(msg, 'show_reboot', '_show_reboot');
+    var up = metaVal(msg, 'uploading', '_uploading');
+    if (sr !== undefined) showReset = sr === true;
+    if (sb !== undefined) showReboot = sb === true;
+    if (up !== undefined) serverUploading = up === true;
   }
   function onWSMessage(event) {
     var msg = JSON.parse(event.data);
     if (msg.type === 'status') { processStatus(msg.data); return; }
     if (msg.type === 'error') { showError(msg.message); return; }
-    if (msg.type !== 'settings' && msg._dirty === undefined) return;
+    if (msg.type !== 'settings' && !msg._meta && !(typeof __DEV__ === 'undefined' || __DEV__)) return;
     wsRetries = 0;
 
     var data = msg.data || msg;
+    var dirtyFlag = metaVal(msg, 'dirty', '_dirty') === true;
 
     // ── Echo resolution ──
     var echoMatched = false;
@@ -373,7 +408,7 @@ var parasol = (function () {
     }
 
     if (echoMatched) {
-      dirty = msg._dirty;
+      dirty = dirtyFlag;
       updateMetaFlags(msg);
       var queuedKeys = [];
       for (var key in inFlight) {
@@ -400,7 +435,7 @@ var parasol = (function () {
     for (var k in inFlight) { if (inFlight[k]) { hasInFlight = true; break; } }
     if (hasInFlight && configForm.getAttribute('aria-busy') !== 'true') return;
     if (hasInFlight) {
-      dirty = msg._dirty;
+      dirty = dirtyFlag;
       updateMetaFlags(msg);
       updateAV(data);
       for (var sk in inFlight) { inFlight[sk] = false; }
@@ -423,15 +458,17 @@ var parasol = (function () {
       return;
     }
 
-    dirty = msg._dirty;
+    dirty = dirtyFlag;
     updateMetaFlags(msg);
     updateUI();
 
     // Initial load — no groups yet, process settings directly
     if (groups.length === 0) {
-      processSettings(data, msg._dirty);
+      processSettings(data, dirtyFlag);
       return;
     }
+
+    syncFileLabels(data);
 
     var changedFields = {};
     for (var ci = 0; ci < groups.length; ci++) {
@@ -440,6 +477,7 @@ var parasol = (function () {
       if (!sGroup) continue;
       for (var fi = 0; fi < grp.fields.length; fi++) {
         var field = grp.fields[fi];
+        if (field.type === 'file') continue;
         var sField = sGroup[field.key];
         if (!sField) continue;
         var newAV = sField[2].value;
@@ -515,6 +553,31 @@ var parasol = (function () {
   }
 
   /**
+   * Update file field AVs and their "Current" labels from a server settings
+   * payload, without treating them as editable form changes.
+   * @param {Object} data - settings payload keyed by group ID
+   */
+  function syncFileLabels(data) {
+    for (var ci = 0; ci < groups.length; ci++) {
+      var grp = groups[ci];
+      if (!grp.fields) continue;
+      var sGroup = data[grp.id];
+      if (!sGroup) continue;
+      for (var fi = 0; fi < grp.fields.length; fi++) {
+        var field = grp.fields[fi];
+        if (field.type !== 'file') continue;
+        var sField = sGroup[field.key];
+        if (!sField) continue;
+        field.opts.value = sField[2].value;
+        var key = grp.id + '.' + field.key;
+        var el = fileFields[key] && fileFields[key].current;
+        if (!el) el = document.getElementById(key + '-current');
+        if (el) setFileLabel(el, field.opts.value);
+      }
+    }
+  }
+
+  /**
    * Sync the lastSent tracking map with current AV values
    * (so subsequent user changes are detected as new).
    */
@@ -523,6 +586,7 @@ var parasol = (function () {
       var fs = groups[ci].fields;
       if (!fs) continue;
       for (var fi = 0; fi < fs.length; fi++) {
+        if (fs[fi].type === 'file') continue;
         var key = groups[ci].id + '.' + groups[ci].fields[fi].key;
         lastSent[key] = groups[ci].fields[fi].opts.value;
       }
@@ -587,7 +651,7 @@ var parasol = (function () {
   function readFormValue(parts) {
     var nameSel = '[name="' + parts.join('.') + '"]';
     var el = document.querySelector(nameSel);
-    if (!el) return undefined;
+    if (!el || el.type === 'file') return undefined;
     if (el.type === 'radio') {
       var checked = document.querySelector(nameSel + ':checked');
       return checked ? checked.value : undefined;
@@ -712,6 +776,7 @@ var parasol = (function () {
     a.textContent = 'Reboot';
     a.addEventListener('click', function (e) {
       e.preventDefault();
+      if (isLocked()) return;
       if (navActions) navActions.open = false;
       var dd = document.getElementById('reboot-dialog');
       if (dd) dd.showModal();
@@ -820,6 +885,7 @@ var parasol = (function () {
   }
 
   function renderForm() {
+    fileFields = {};
     configForm.innerHTML = '';
     var seen = {};
     for (var si = 0; si < statusGroups.length; si++) {
@@ -888,6 +954,7 @@ var parasol = (function () {
     var els = configForm.querySelectorAll('input, select, textarea');
     for (var ei = 0; ei < els.length; ei++) {
       var el = els[ei];
+      if (el.type === 'file') continue;
       var key = el.name;
       if (!key) continue;
       (function (el, key) {
@@ -931,6 +998,7 @@ var parasol = (function () {
     var rebootConfirm = document.getElementById('reboot-confirm');
     if (rebootConfirm) {
       rebootConfirm.addEventListener('click', function () {
+        if (isLocked()) return;
         document.getElementById('reboot-dialog').close();
         rebooting = true;
         postJSON('/api/system/reboot', {}).then(function () {
@@ -986,7 +1054,214 @@ var parasol = (function () {
     if (!configForm || !navList || !statusBar || !footer || !btnSaveApply || !btnReset) return;
     wireButtons();
     connectWS();
-    window.addEventListener('beforeunload', disconnectWS);
+    window.addEventListener('beforeunload', onBeforeUnload);
+  }
+
+  /** Warn before unloading while an upload is active; otherwise close the socket. */
+  function onBeforeUnload(e) {
+    if (localUploading || serverUploading) {
+      e.preventDefault();
+      e.returnValue = '';
+      return;
+    }
+    disconnectWS();
+  }
+
+  var fileFields = {};
+
+  /** Set the read-only current-file line for a file field. */
+  function setFileLabel(el, value) {
+    el.textContent = value ? 'Current: ' + value : 'No file';
+  }
+
+  /** Return true when a file's name or MIME type matches an accept list. */
+  function acceptsFile(file, accept) {
+    if (!accept || accept === '*/*') return true;
+    var name = file.name.toLowerCase();
+    var mime = (file.type || '').toLowerCase();
+    var parts = accept.split(',');
+    for (var i = 0; i < parts.length; i++) {
+      var p = parts[i].trim().toLowerCase();
+      if (!p) continue;
+      if (p.charAt(0) === '.') {
+        if (name.length >= p.length && name.slice(name.length - p.length) === p) return true;
+      } else if (p.indexOf('/') >= 0) {
+        if (p === '*/*') return true;
+        if (mime && (mime === p || (p.slice(-2) === '/*' && mime.indexOf(p.slice(0, -1)) === 0))) return true;
+      }
+    }
+    return false;
+  }
+
+  /** Return an inline error for a selected file, or '' when it passes the local checks. */
+  function checkFile(file, opts) {
+    if (!file.size) return 'Empty file';
+    if (opts.max_size && file.size > opts.max_size) return 'File too large';
+    if (!acceptsFile(file, opts.accept)) return 'File type not allowed';
+    return '';
+  }
+
+  /** Read input.files[0] and update a file field's validity, message, and Upload button. */
+  function fileSelected(id) {
+    var f = fileFields[id];
+    if (!f) return;
+    var file = f.input.files && f.input.files[0];
+    if (!file) {
+      f.file = null;
+      f.valid = false;
+      f.msg.textContent = '';
+      f.btn.disabled = true;
+      return;
+    }
+    var err = checkFile(file, f.field.opts || {});
+    f.file = file;
+    f.valid = err === '';
+    f.msg.textContent = err;
+    f.btn.disabled = !f.valid;
+  }
+
+  /** Build the file input, Upload button, current label, progress, Cancel, and status line. */
+  function createFileField(namePrefix, field, isStatus) {
+    var key = field.key;
+    var opts = field.opts || {};
+    var id = (isStatus ? 'st-' + namePrefix : namePrefix) + '.' + key;
+    var required = opts.attrs && opts.attrs.required;
+    var container = document.createElement('div');
+
+    var label = document.createElement('label');
+    label.setAttribute('for', id);
+    label.textContent = field.label + (required ? '*' : '');
+    container.appendChild(label);
+
+    var row = document.createElement('div');
+    row.setAttribute('role', 'group');
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.name = input.id = id;
+    if (opts.accept) input.setAttribute('accept', opts.accept);
+    applyAttrs(input, opts.attrs);
+    if (isStatus) input.disabled = true;
+    row.appendChild(input);
+
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = id + '-upload';
+    btn.textContent = 'Upload';
+    btn.disabled = true;
+    row.appendChild(btn);
+    container.appendChild(row);
+
+    var current = document.createElement('small');
+    current.id = id + '-current';
+    current.className = 'file-status';
+    setFileLabel(current, opts.value);
+    container.appendChild(current);
+
+    addHelperText(container, id, opts.help, input);
+
+    var progress = document.createElement('progress');
+    progress.id = id + '-progress';
+    progress.max = 100;
+    progress.value = 0;
+    progress.hidden = true;
+    container.appendChild(progress);
+
+    var cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.id = id + '-cancel';
+    cancel.className = 'secondary';
+    cancel.textContent = 'Cancel';
+    cancel.hidden = true;
+    container.appendChild(cancel);
+
+    var msg = document.createElement('small');
+    msg.id = id + '-msg';
+    msg.className = 'file-msg';
+    msg.setAttribute('role', 'status');
+    container.appendChild(msg);
+
+    fileFields[id] = {
+      input: input, btn: btn, progress: progress, cancel: cancel,
+      msg: msg, current: current, file: null, valid: false,
+      field: field, group: namePrefix, key: key, status: isStatus,
+    };
+    input.addEventListener('change', function () { fileSelected(id); });
+    btn.addEventListener('click', function () { startUpload(id); });
+    cancel.addEventListener('click', function () { cancelUpload(); });
+    return container;
+  }
+
+  /** Finish an upload: clear the lock, hide progress/Cancel, show a message. */
+  function finishUpload(f, msg) {
+    localUploading = false;
+    if (f) {
+      f.progress.hidden = true;
+      f.cancel.hidden = true;
+      f.msg.textContent = msg;
+    }
+    activeUpload = null;
+    updateUI();
+  }
+
+  /** Stream the file with XHR so upload.onprogress is available. */
+  function putFile(f, url, file, au) {
+    if (au.cancelled) return;
+    var xhr = au.xhr = new XMLHttpRequest();
+    xhr.open('PUT', url + '?name=' + encodeURIComponent(file.name) + '&type=' + encodeURIComponent(file.type));
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+    xhr.upload.onprogress = function (e) {
+      f.progress.value = e.total ? Math.round(e.loaded / e.total * 100) : 0;
+    };
+    xhr.onload = function () {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        finishUpload(f, 'Uploaded');
+      } else {
+        finishUpload(f, xhr.responseText || 'HTTP ' + xhr.status);
+      }
+    };
+    xhr.onerror = function () {
+      finishUpload(f, f.progress.value >= 100 ? 'Device restarting...' : 'Upload failed');
+    };
+    xhr.onabort = function () { finishUpload(f, 'Upload cancelled'); };
+    xhr.send(file);
+  }
+
+  /** POST the preflight metadata, then PUT the raw file on success. */
+  function startUpload(key) {
+    var f = fileFields[key];
+    if (!f || !f.valid || localUploading || serverUploading) return;
+    localUploading = true;
+    updateUI();
+    f.progress.hidden = false;
+    f.progress.value = 0;
+    f.cancel.hidden = false;
+    f.msg.textContent = '';
+    var file = f.file;
+    var url = '/api/upload/' + encodeURIComponent(f.group) + '/' + encodeURIComponent(f.key);
+    var au = activeUpload = { key: key, xhr: null, cancelled: false };
+    au.ac = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: file.name, size: file.size, type: file.type }),
+      signal: au.ac ? au.ac.signal : undefined
+    }).then(function (res) {
+      if (au.cancelled) return;
+      if (res.ok) return putFile(f, url, file, au);
+      return res.text().then(function (t) { finishUpload(f, t || 'HTTP ' + res.status); });
+    }).catch(function () {
+      if (!au.cancelled) finishUpload(f, 'Upload failed');
+    });
+  }
+
+  /** Abort the active upload (preflight or PUT) and report it as cancelled. */
+  function cancelUpload() {
+    var au = activeUpload;
+    if (!au) return;
+    au.cancelled = true;
+    if (au.ac) au.ac.abort();
+    if (au.xhr) { au.xhr.abort(); return; }
+    finishUpload(fileFields[au.key], 'Upload cancelled');
   }
 
   /**
@@ -1004,6 +1279,8 @@ var parasol = (function () {
     var required = opts.attrs && opts.attrs.required;
     var inputTypes = ['text', 'email', 'number', 'password', 'tel', 'url', 'color'];
     var effectivePrefix = isStatus ? 'st-' + namePrefix : namePrefix;
+
+    if (type === 'file') return createFileField(namePrefix, field, isStatus);
 
     if (type === 'checkbox' || type === 'switch') {
       var input = document.createElement('input');
@@ -1150,6 +1427,13 @@ var parasol = (function () {
     Object.defineProperty(window.__test, 'receiveWSMessage', { get: function () { return onWSMessage; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'wsReady', { get: function () { return function () { if (ws) ws.readyState = 1; }; }, enumerable: true, configurable: true });
     Object.defineProperty(window.__test, 'setNavMode', { value: function (v) { applyNavMode(!!v); }, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'acceptsFile', { value: acceptsFile, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'checkFile', { value: checkFile, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'localUploading', { get: function () { return localUploading; }, set: function (v) { localUploading = v; }, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'serverUploading', { get: function () { return serverUploading; }, set: function (v) { serverUploading = v; }, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'fileFields', { get: function () { return fileFields; }, set: function (v) { fileFields = v; }, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'onBeforeUnload', { value: onBeforeUnload, enumerable: true, configurable: true });
+    Object.defineProperty(window.__test, 'startUpload', { value: startUpload, enumerable: true, configurable: true });
   }
 
   return {

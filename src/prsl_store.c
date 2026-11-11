@@ -41,6 +41,7 @@ void prsl_store_deinit(prsl_store_t *store) {
 
 esp_err_t prsl_store_add_field(prsl_store_t *store, const prsl_field_t *field) {
     if (!store || !field) return ESP_ERR_INVALID_ARG;
+    if (field->type == PRSL_FILE && !field->on_upload) return ESP_ERR_INVALID_ARG;
     if (!prsl_store_has_group(store, field->group_id)) return ESP_ERR_NOT_FOUND;
     xSemaphoreTakeRecursive(store->mutex, portMAX_DELAY);
     if (store->count >= store->capacity) {
@@ -72,6 +73,28 @@ esp_err_t prsl_store_add_field(prsl_store_t *store, const prsl_field_t *field) {
     store->count++;
     xSemaphoreGiveRecursive(store->mutex);
     return ESP_OK;
+}
+
+esp_err_t prsl_store_add_file_field(prsl_store_t *store, const char *group_id,
+                                    const char *key, const char *label,
+                                    const prsl_file_opts_t *opts) {
+    if (!store || !group_id || !key || !label || !opts || !opts->on_upload)
+        return ESP_ERR_INVALID_ARG;
+    if (!prsl_store_has_group(store, group_id)) return ESP_ERR_NOT_FOUND;
+    if (prsl_store_find(store, group_id, key)) return ESP_ERR_INVALID_STATE;
+    prsl_field_t f = {0};
+    f.group_id = group_id;
+    f.key = key;
+    f.label = label;
+    f.type = PRSL_FILE;
+    f.on_upload = opts->on_upload;
+    f.on_get = opts->on_get;
+    f.accept = opts->accept ? opts->accept : "";
+    f.max_size = opts->max_size;
+    f.idle_timeout_ms = opts->idle_timeout_ms;
+    f.help = opts->help ? opts->help : "";
+    f.attrs = opts->attrs ? opts->attrs : "";
+    return prsl_store_add_field(store, &f);
 }
 
 prsl_field_t *prsl_store_find(prsl_store_t *store, const char *group_id, const char *key) {

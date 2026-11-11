@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 describe('serialize', () => {
   beforeEach(() => {
@@ -424,6 +424,435 @@ describe('createField', () => {
     expect(small.textContent).toBe('Make a choice')
     expect(small.id).toBe('gpio.confirm-helper')
     expect(field.querySelector('input').getAttribute('aria-describedby')).toBe('gpio.confirm-helper')
+  })
+})
+
+function fakeFile(name, type, size) {
+  var f = new File(['x'], name, { type: type })
+  Object.defineProperty(f, 'size', { value: size })
+  return f
+}
+
+function selectFile(input, file) {
+  Object.defineProperty(input, 'files', { value: [file], configurable: true })
+  input.dispatchEvent(new Event('change'))
+}
+
+describe('createField: file', () => {
+  it('renders a file input, Upload button, current label, help, accept, attrs', () => {
+    var field = window.createField('audio', {
+      key: 'clip', type: 'file', label: 'Clip',
+      opts: { value: 'beep.mp3', accept: '.mp3,audio/*', max_size: 1024,
+              help: 'MP3, up to 1 KiB', attrs: { title: 'Clip' } },
+    })
+    var input = field.querySelector('input[type=file]')
+    expect(input.name).toBe('audio.clip')
+    expect(input.id).toBe('audio.clip')
+    expect(input.getAttribute('accept')).toBe('.mp3,audio/*')
+    expect(input.title).toBe('Clip')
+    expect(field.querySelector('#audio\\.clip-upload').textContent).toBe('Upload')
+    expect(field.querySelector('#audio\\.clip-upload').disabled).toBe(true)
+    expect(field.querySelector('#audio\\.clip-current').textContent).toContain('beep.mp3')
+    expect(field.querySelector('#audio\\.clip-helper').textContent).toContain('MP3')
+    expect(field.querySelector('progress').hidden).toBe(true)
+    expect(field.querySelector('#audio\\.clip-cancel').hidden).toBe(true)
+  })
+
+  it('shows "No file" when value is missing', function () {
+    var field = window.createField('audio', {
+      key: 'clip', type: 'file', label: 'Clip', opts: {},
+    })
+    expect(field.querySelector('#audio\\.clip-current').textContent).toBe('No file')
+  })
+
+  it('renders the progress element at zero and hidden by default', function () {
+    var field = window.createField('audio', {
+      key: 'clip', type: 'file', label: 'Clip', opts: {},
+    })
+    var progress = field.querySelector('#audio\\.clip-progress')
+    expect(progress.max).toBe(100)
+    expect(progress.value).toBe(0)
+    expect(progress.hidden).toBe(true)
+  })
+
+  it('enables Upload for a valid selected file', function () {
+    var field = window.createField('audio', {
+      key: 'clip', type: 'file', label: 'Clip',
+      opts: { accept: '.bin', max_size: 100 },
+    })
+    var input = field.querySelector('input[type=file]')
+    selectFile(input, fakeFile('fw.bin', 'application/octet-stream', 10))
+    expect(field.querySelector('#audio\\.clip-upload').disabled).toBe(false)
+    expect(field.querySelector('#audio\\.clip-msg').textContent).toBe('')
+  })
+
+  it('shows the reason inline and keeps Upload disabled for an invalid file', function () {
+    var field = window.createField('audio', {
+      key: 'clip', type: 'file', label: 'Clip',
+      opts: { accept: '.bin', max_size: 100 },
+    })
+    var input = field.querySelector('input[type=file]')
+    selectFile(input, fakeFile('fw.bin', 'application/octet-stream', 200))
+    expect(field.querySelector('#audio\\.clip-upload').disabled).toBe(true)
+    expect(field.querySelector('#audio\\.clip-msg').textContent).toContain('too large')
+  })
+
+  it('disables Upload and clears the message when the selection is cleared', function () {
+    var field = window.createField('audio', {
+      key: 'clip', type: 'file', label: 'Clip',
+      opts: { accept: '.bin', max_size: 100 },
+    })
+    var input = field.querySelector('input[type=file]')
+    selectFile(input, fakeFile('fw.bin', 'application/octet-stream', 10))
+    Object.defineProperty(input, 'files', { value: [], configurable: true })
+    input.dispatchEvent(new Event('change'))
+    expect(field.querySelector('#audio\\.clip-upload').disabled).toBe(true)
+    expect(field.querySelector('#audio\\.clip-msg').textContent).toBe('')
+  })
+
+  it('follows existing field conventions and adds no new class names', function () {
+    var field = window.createField('audio', {
+      key: 'clip', type: 'file', label: 'Clip',
+      opts: { value: 'beep.mp3', accept: '.mp3', help: 'MP3' },
+    })
+    expect(field.tagName).toBe('DIV')
+    var input = field.querySelector('input[type=file]')
+    expect(field.querySelector('label').getAttribute('for')).toBe(input.id)
+    var row = field.querySelector('[role="group"]')
+    expect(row).not.toBeNull()
+    expect(row.contains(input)).toBe(true)
+    expect(row.contains(field.querySelector('#audio\\.clip-upload'))).toBe(true)
+    expect(field.querySelector('#audio\\.clip-msg').getAttribute('role')).toBe('status')
+    expect(field.querySelector('#audio\\.clip-helper').id).toBe('audio.clip-helper')
+
+    var custom = []
+    var els = field.querySelectorAll('[class]')
+    for (var i = 0; i < els.length; i++) {
+      var names = els[i].className.split(/\s+/)
+      for (var j = 0; j < names.length; j++) {
+        if (names[j].indexOf('file-') === 0) custom.push(names[j])
+      }
+    }
+    expect(custom.sort()).toEqual(['file-msg', 'file-status'])
+    expect(field.querySelectorAll('style, link').length).toBe(0)
+  })
+})
+
+describe('acceptsFile', function () {
+  it('matches extensions case-insensitively', function () {
+    expect(window.__test.acceptsFile(fakeFile('FW.BIN', '', 10), '.bin')).toBe(true)
+  })
+
+  it('matches a MIME wildcard', function () {
+    expect(window.__test.acceptsFile(fakeFile('beep.mp3', 'audio/mpeg', 10), 'audio/*')).toBe(true)
+  })
+
+  it('matches an exact MIME type', function () {
+    expect(window.__test.acceptsFile(fakeFile('a.png', 'image/png', 10), 'image/png')).toBe(true)
+  })
+
+  it('accepts any file when accept is empty or */*', function () {
+    expect(window.__test.acceptsFile(fakeFile('a.txt', 'text/plain', 10), '')).toBe(true)
+    expect(window.__test.acceptsFile(fakeFile('a.txt', 'text/plain', 10), '*/*')).toBe(true)
+  })
+
+  it('rejects a wrong extension', function () {
+    expect(window.__test.acceptsFile(fakeFile('a.txt', 'text/plain', 10), '.bin')).toBe(false)
+  })
+
+  it('rejects a wrong MIME type', function () {
+    expect(window.__test.acceptsFile(fakeFile('a.png', 'image/png', 10), 'audio/*,image/jpeg')).toBe(false)
+  })
+
+  it('matches any entry in a comma-separated list', function () {
+    expect(window.__test.acceptsFile(fakeFile('a.mp3', 'audio/mpeg', 10), '.bin, audio/*')).toBe(true)
+  })
+})
+
+describe('checkFile', function () {
+  var opts = { accept: '.bin', max_size: 100 }
+
+  it('rejects an empty file', function () {
+    expect(window.__test.checkFile(fakeFile('a.bin', 'application/octet-stream', 0), opts)).toBe('Empty file')
+  })
+
+  it('rejects a file over max_size', function () {
+    expect(window.__test.checkFile(fakeFile('a.bin', 'application/octet-stream', 101), opts)).toBe('File too large')
+  })
+
+  it('rejects a file of the wrong type', function () {
+    expect(window.__test.checkFile(fakeFile('a.txt', 'text/plain', 10), opts)).toBe('File type not allowed')
+  })
+
+  it('returns an empty string for a valid file', function () {
+    expect(window.__test.checkFile(fakeFile('a.bin', 'application/octet-stream', 100), opts)).toBe('')
+  })
+
+  it('allows any size when max_size is unset', function () {
+    expect(window.__test.checkFile(fakeFile('a.bin', 'application/octet-stream', 999999), { accept: '.bin' })).toBe('')
+  })
+})
+
+describe('populateFromGroups: file', function () {
+  beforeEach(function () {
+    document.querySelector('#config-form').innerHTML = ''
+  })
+
+  it('updates the current label instead of assigning input.value', function () {
+    var field = window.createField('audio', {
+      key: 'clip', type: 'file', label: 'Clip', opts: { value: 'old.mp3' },
+    })
+    document.querySelector('#config-form').appendChild(field)
+    expect(function () {
+      window.populateFromGroups([{
+        id: 'audio',
+        fields: [{ key: 'clip', type: 'file', label: 'Clip', opts: { value: 'new.mp3' } }],
+      }])
+    }).not.toThrow()
+    expect(document.getElementById('audio.clip-current').textContent).toContain('new.mp3')
+    expect(field.querySelector('input[type=file]').value).toBe('')
+  })
+
+  it('renders "No file" when the pushed value is null', function () {
+    var field = window.createField('audio', {
+      key: 'clip', type: 'file', label: 'Clip', opts: { value: 'old.mp3' },
+    })
+    document.querySelector('#config-form').appendChild(field)
+    window.populateFromGroups([{
+      id: 'audio',
+      fields: [{ key: 'clip', type: 'file', label: 'Clip', opts: { value: null } }],
+    }])
+    expect(document.getElementById('audio.clip-current').textContent).toBe('No file')
+  })
+})
+
+describe('file field change handling', function () {
+  beforeEach(function () {
+    document.querySelector('#config-form').innerHTML = ''
+    window.__test.formInteracted = false
+  })
+
+  it('does not treat a file change as a form value edit', function () {
+    var field = window.createField('audio', {
+      key: 'clip', type: 'file', label: 'Clip', opts: { accept: '.bin' },
+    })
+    document.querySelector('#config-form').appendChild(field)
+    window.bindChangeListeners()
+    selectFile(field.querySelector('input[type=file]'), fakeFile('a.bin', 'application/octet-stream', 10))
+    expect(window.__test.formInteracted).toBe(false)
+    expect(field.querySelector('#audio\\.clip-upload').disabled).toBe(false)
+  })
+})
+
+describe('upload flow', function () {
+  var xhr, xhrs, file, field
+  var realFetch = window.fetch
+  var realXHR = window.XMLHttpRequest
+
+  function makeField() {
+    document.querySelector('#config-form').innerHTML = ''
+    window.__test.fileFields = {}
+    field = window.createField('audio', {
+      key: 'clip', type: 'file', label: 'Clip',
+      opts: { accept: '.mp3,audio/*', max_size: 1000 },
+    })
+    document.querySelector('#config-form').appendChild(field)
+    file = fakeFile('beep.mp3', 'audio/mpeg', 100)
+    selectFile(field.querySelector('input[type=file]'), file)
+  }
+
+  function upload() {
+    field.querySelector('#audio\\.clip-upload').click()
+  }
+
+  function msg() {
+    return field.querySelector('#audio\\.clip-msg').textContent
+  }
+
+  function progress() {
+    return field.querySelector('#audio\\.clip-progress')
+  }
+
+  function cancelBtn() {
+    return field.querySelector('#audio\\.clip-cancel')
+  }
+
+  async function flush() {
+    for (var i = 0; i < 5; i++) await Promise.resolve()
+  }
+
+  beforeEach(function () {
+    window.__test.localUploading = false
+    window.__test.serverUploading = false
+    window.__test.fileFields = {}
+    document.querySelector('#config-form').innerHTML = ''
+    xhr = undefined
+    xhrs = 0
+    window.XMLHttpRequest = function () {
+      xhrs++
+      xhr = this
+      this.upload = {}
+      this.open = vi.fn()
+      this.setRequestHeader = vi.fn()
+      this.send = vi.fn()
+      this.abort = vi.fn(function () { if (xhr.onabort) xhr.onabort() })
+    }
+    window.fetch = vi.fn(function () {
+      return Promise.resolve({ ok: true, text: function () { return Promise.resolve('OK') } })
+    })
+  })
+
+  afterEach(function () {
+    window.fetch = realFetch
+    window.XMLHttpRequest = realXHR
+    window.__test.localUploading = false
+    window.__test.serverUploading = false
+  })
+
+  it('posts preflight metadata, then PUTs the file', async function () {
+    makeField()
+    upload()
+    await flush()
+    expect(window.fetch).toHaveBeenCalledTimes(1)
+    var args = window.fetch.mock.calls[0]
+    expect(args[0]).toBe('/api/upload/audio/clip')
+    expect(args[1].method).toBe('POST')
+    expect(JSON.parse(args[1].body)).toEqual({ name: 'beep.mp3', size: 100, type: 'audio/mpeg' })
+    expect(xhr.open).toHaveBeenCalledWith('PUT', '/api/upload/audio/clip?name=beep.mp3&type=audio%2Fmpeg')
+    expect(xhr.setRequestHeader).toHaveBeenCalledWith('Content-Type', 'application/octet-stream')
+    expect(xhr.send).toHaveBeenCalledWith(file)
+    expect(window.__test.localUploading).toBe(true)
+  })
+
+  it('shows the preflight response text and skips the PUT on failure', async function () {
+    window.fetch = vi.fn(function () {
+      return Promise.resolve({ ok: false, status: 413, text: function () { return Promise.resolve('File too large') } })
+    })
+    makeField()
+    upload()
+    await flush()
+    expect(msg()).toBe('File too large')
+    expect(xhrs).toBe(0)
+    expect(window.__test.localUploading).toBe(false)
+    expect(progress().hidden).toBe(true)
+  })
+
+  it('shows Upload failed when the preflight request rejects', async function () {
+    window.fetch = vi.fn(function () { return Promise.reject(new Error('Network error')) })
+    makeField()
+    upload()
+    await flush()
+    expect(msg()).toBe('Upload failed')
+    expect(window.__test.localUploading).toBe(false)
+  })
+
+  it('updates progress from upload.onprogress while visible', async function () {
+    makeField()
+    upload()
+    await flush()
+    expect(progress().hidden).toBe(false)
+    expect(cancelBtn().hidden).toBe(false)
+    xhr.upload.onprogress({ lengthComputable: true, loaded: 50, total: 100 })
+    expect(progress().value).toBe(50)
+  })
+
+  it('shows Uploaded and clears the upload state on 2xx', async function () {
+    makeField()
+    upload()
+    await flush()
+    xhr.status = 200
+    xhr.onload()
+    expect(msg()).toBe('Uploaded')
+    expect(window.__test.localUploading).toBe(false)
+    expect(progress().hidden).toBe(true)
+    expect(cancelBtn().hidden).toBe(true)
+  })
+
+  it('shows the response text and clears the lock on a non-2xx', async function () {
+    makeField()
+    upload()
+    await flush()
+    xhr.status = 415
+    xhr.responseText = 'File type not allowed'
+    xhr.onload()
+    expect(msg()).toBe('File type not allowed')
+    expect(window.__test.localUploading).toBe(false)
+  })
+
+  it('shows Upload failed on a transport error', async function () {
+    makeField()
+    upload()
+    await flush()
+    xhr.onerror()
+    expect(msg()).toBe('Upload failed')
+    expect(window.__test.localUploading).toBe(false)
+  })
+
+  it('shows Device restarting... when the device vanishes at 100%', async function () {
+    makeField()
+    upload()
+    await flush()
+    progress().value = 100
+    xhr.onerror()
+    expect(msg()).toBe('Device restarting...')
+    expect(window.__test.localUploading).toBe(false)
+  })
+
+  it('aborts and shows Upload cancelled when Cancel is clicked', async function () {
+    makeField()
+    upload()
+    await flush()
+    cancelBtn().click()
+    expect(xhr.abort).toHaveBeenCalled()
+    expect(msg()).toBe('Upload cancelled')
+    expect(window.__test.localUploading).toBe(false)
+    expect(progress().hidden).toBe(true)
+    expect(cancelBtn().hidden).toBe(true)
+  })
+})
+
+describe('beforeunload during upload', function () {
+  var sock
+  var realWS = window.WebSocket
+
+  beforeEach(function () {
+    window.__test.localUploading = false
+    window.__test.serverUploading = false
+    sock = { readyState: 1, close: vi.fn() }
+    window.WebSocket = function () { return sock }
+  })
+
+  afterEach(function () {
+    window.WebSocket = realWS
+    window.__test.localUploading = false
+    window.__test.serverUploading = false
+  })
+
+  it('warns while a local upload is active', function () {
+    window.__test.localUploading = true
+    window.connectWS()
+    var e = { preventDefault: vi.fn(), returnValue: '' }
+    window.__test.onBeforeUnload(e)
+    expect(e.preventDefault).toHaveBeenCalled()
+    expect(e.returnValue).toBe('')
+    expect(sock.close).not.toHaveBeenCalled()
+  })
+
+  it('warns while the server reports an upload', function () {
+    window.__test.serverUploading = true
+    window.connectWS()
+    var e = { preventDefault: vi.fn(), returnValue: '' }
+    window.__test.onBeforeUnload(e)
+    expect(e.preventDefault).toHaveBeenCalled()
+    expect(sock.close).not.toHaveBeenCalled()
+  })
+
+  it('disconnects the WebSocket when idle', function () {
+    window.connectWS()
+    var e = { preventDefault: vi.fn(), returnValue: '' }
+    window.__test.onBeforeUnload(e)
+    expect(e.preventDefault).not.toHaveBeenCalled()
+    expect(sock.close).toHaveBeenCalled()
   })
 })
 
@@ -2641,4 +3070,240 @@ describe('nav collapse/expand', function () {
       function (a) { return a.textContent; });
     expect(labels).toEqual(['Wifi', 'Gpio']);
   });
+})
+
+describe('upload lock and file-value exclusion', function () {
+  function setupWifi() {
+    document.querySelector('#config-form').innerHTML = '<input name="wifi.ssid" value="" />'
+    window.__test.groups = [{ id: 'wifi', fields: [{ key: 'ssid', type: 'text', label: 'SSID', opts: { value: '' } }] }]
+  }
+
+  function renderFileField() {
+    document.querySelector('#config-form').innerHTML = ''
+    window.__test.fileFields = {}
+    var field = window.createField('audio', {
+      key: 'clip', type: 'file', label: 'Clip',
+      opts: { value: 'beep.mp3', accept: '.bin' },
+    })
+    document.querySelector('#config-form').appendChild(field)
+    return field
+  }
+
+  function renderRebootLink() {
+    document.getElementById('nav-list').innerHTML = ''
+    window.__test.groups = []
+    window.__test.statusGroups = []
+    window.__test.showReboot = true
+    window.renderNav()
+  }
+
+  beforeEach(function () {
+    window.__test.dirty = false
+    window.__test.showReset = false
+    window.__test.showReboot = false
+    window.__test.localUploading = false
+    window.__test.serverUploading = false
+    window.__test.fileFields = {}
+    window.__test.inFlight = {}
+    window.__test.lastSent = {}
+    document.querySelector('#config-form').innerHTML = ''
+    document.getElementById('nav-list').innerHTML = ''
+    document.getElementById('server-changed').hidden = true
+    document.getElementById('notif-load').hidden = true
+    document.getElementById('notif-keep').hidden = true
+    document.getElementById('notif-keep-local').hidden = true
+    document.getElementById('notif-accept-server').hidden = true
+  })
+
+  afterEach(function () {
+    window.__test.localUploading = false
+    window.__test.serverUploading = false
+  })
+
+  it('locks Save, Reset, Reboot and Upload when serverUploading', function () {
+    renderRebootLink()
+    var field = renderFileField()
+    selectFile(field.querySelector('input[type=file]'), fakeFile('a.bin', 'application/octet-stream', 10))
+    window.__test.dirty = true
+    window.__test.showReset = true
+    window.__test.serverUploading = true
+    window.updateUI()
+    expect(document.getElementById('btn-save-apply').hidden).toBe(true)
+    expect(document.getElementById('btn-save-apply').disabled).toBe(true)
+    expect(document.getElementById('btn-reset').hidden).toBe(true)
+    expect(document.getElementById('btn-reset').disabled).toBe(true)
+    expect(document.getElementById('nav-reboot').getAttribute('aria-disabled')).toBe('true')
+    expect(document.getElementById('reboot-confirm').disabled).toBe(true)
+    expect(field.querySelector('#audio\\.clip-upload').disabled).toBe(true)
+  })
+
+  it('does not show Save on a _meta.uploading push even when dirty', function () {
+    setupWifi()
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      type: 'settings',
+      _meta: { dirty: true, uploading: true },
+      data: { wifi: { ssid: ['text', 'SSID', { value: '' }] } },
+    })})
+    expect(window.__test.serverUploading).toBe(true)
+    expect(document.getElementById('btn-save-apply').hidden).toBe(true)
+    expect(document.getElementById('btn-save-apply').disabled).toBe(true)
+  })
+
+  it('restores Save on a _meta.uploading:false push when dirty', function () {
+    setupWifi()
+    window.__test.serverUploading = true
+    window.updateUI()
+    expect(document.getElementById('btn-save-apply').hidden).toBe(true)
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      type: 'settings',
+      _meta: { dirty: true, uploading: false },
+      data: { wifi: { ssid: ['text', 'SSID', { value: '' }] } },
+    })})
+    expect(window.__test.serverUploading).toBe(false)
+    expect(document.getElementById('btn-save-apply').hidden).toBe(false)
+  })
+
+  it('serialize and getPending omit file fields', function () {
+    document.querySelector('#config-form').innerHTML =
+      '<input name="audio.clip" type="file" /><input name="audio.volume" type="range" value="50" />'
+    window.__test.groups = [{ id: 'audio', fields: [
+      { key: 'clip', type: 'file', label: 'Clip', opts: {} },
+      { key: 'volume', type: 'range', label: 'Volume', opts: {} },
+    ]}]
+    var data = window.serialize()
+    expect(data['audio.clip']).toBeUndefined()
+    expect(data['audio.volume']).toBe(50)
+    window.setBaseline()
+    expect(window.getPending()).toEqual({})
+  })
+
+  it('buildPatch omits file fields', function () {
+    window.__test.groups = [{ id: 'audio', fields: [
+      { key: 'clip', type: 'file', label: 'Clip', opts: {} },
+      { key: 'volume', type: 'range', label: 'Volume', opts: {} },
+    ]}]
+    var patch = window.buildPatch({ 'audio.clip': 'evil.mp3', 'audio.volume': 50 })
+    expect(patch).toEqual({ audio: { volume: ['range', 'Volume', { value: 50 }] } })
+  })
+
+  it('readFormValue returns undefined for a file field', function () {
+    document.querySelector('#config-form').innerHTML = '<input name="audio.clip" type="file" />'
+    window.__test.groups = [{ id: 'audio', fields: [
+      { key: 'clip', type: 'file', label: 'Clip', opts: {} },
+    ]}]
+    expect(window.readFormValue(['audio', 'clip'])).toBeUndefined()
+  })
+
+  it('silently updates the file label without a conflict bar', function () {
+    var field = renderFileField()
+    window.__test.groups = [{ id: 'audio', fields: [
+      { key: 'clip', type: 'file', label: 'Clip', opts: { value: 'old.mp3', accept: '.bin' } },
+    ]}]
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      _dirty: false,
+      audio: { clip: ['file', 'Clip', { value: 'new.mp3' }] },
+    })})
+    expect(document.getElementById('audio.clip-current').textContent).toContain('new.mp3')
+    expect(document.getElementById('server-changed').hidden).toBe(true)
+  })
+
+  it('restores controls on _meta.uploading:false when no local upload', function () {
+    setupWifi()
+    window.__test.showReset = true
+    window.__test.serverUploading = true
+    window.updateUI()
+    expect(document.getElementById('btn-save-apply').hidden).toBe(true)
+    expect(document.getElementById('btn-reset').disabled).toBe(true)
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      type: 'settings',
+      _meta: { dirty: true, uploading: false },
+      data: { wifi: { ssid: ['text', 'SSID', { value: '' }] } },
+    })})
+    expect(window.__test.serverUploading).toBe(false)
+    expect(document.getElementById('btn-save-apply').hidden).toBe(false)
+    expect(document.getElementById('btn-reset').hidden).toBe(false)
+    expect(document.getElementById('btn-reset').disabled).toBe(false)
+  })
+
+  it('keeps controls locked on _meta.uploading:false while a local upload runs', function () {
+    setupWifi()
+    window.__test.localUploading = true
+    window.__test.serverUploading = true
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      type: 'settings',
+      _meta: { dirty: true, uploading: false },
+      data: { wifi: { ssid: ['text', 'SSID', { value: '' }] } },
+    })})
+    expect(window.__test.serverUploading).toBe(false)
+    expect(document.getElementById('btn-save-apply').hidden).toBe(true)
+  })
+
+  it('prefers _meta.uploading over legacy _uploading', function () {
+    setupWifi()
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      type: 'settings',
+      _meta: { uploading: false },
+      _uploading: true,
+      _dirty: false,
+      data: { wifi: { ssid: ['text', 'SSID', { value: '' }] } },
+    })})
+    expect(window.__test.serverUploading).toBe(false)
+  })
+
+  it('falls back to legacy _uploading when _meta is absent', function () {
+    setupWifi()
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      type: 'settings',
+      _uploading: true,
+      _dirty: false,
+      data: { wifi: { ssid: ['text', 'SSID', { value: '' }] } },
+    })})
+    expect(window.__test.serverUploading).toBe(true)
+  })
+
+  it('shows Save after a deferred dirty push once the local upload ends', function () {
+    setupWifi()
+    window.__test.localUploading = true
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      type: 'settings',
+      _meta: { dirty: true, uploading: false },
+      data: { wifi: { ssid: ['text', 'SSID', { value: '' }] } },
+    })})
+    expect(document.getElementById('btn-save-apply').hidden).toBe(true)
+    window.__test.localUploading = false
+    window.updateUI()
+    expect(document.getElementById('btn-save-apply').hidden).toBe(false)
+  })
+
+  it('warns on beforeunload when _meta.uploading is true', function () {
+    setupWifi()
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      type: 'settings',
+      _meta: { uploading: true },
+      _dirty: false,
+      data: { wifi: { ssid: ['text', 'SSID', { value: '' }] } },
+    })})
+    expect(window.__test.serverUploading).toBe(true)
+    var e = { preventDefault: vi.fn(), returnValue: '' }
+    window.__test.onBeforeUnload(e)
+    expect(e.preventDefault).toHaveBeenCalled()
+  })
+
+  it('locks controls immediately when a local upload starts', function () {
+    renderRebootLink()
+    var field = renderFileField()
+    selectFile(field.querySelector('input[type=file]'), fakeFile('a.bin', 'application/octet-stream', 10))
+    window.__test.dirty = true
+    window.__test.showReset = true
+    var realFetch = window.fetch
+    window.fetch = function () { return new Promise(function () {}) }
+    window.__test.startUpload('audio.clip')
+    expect(window.__test.localUploading).toBe(true)
+    expect(document.getElementById('btn-save-apply').hidden).toBe(true)
+    expect(document.getElementById('btn-save-apply').disabled).toBe(true)
+    expect(document.getElementById('btn-reset').disabled).toBe(true)
+    expect(document.getElementById('nav-reboot').getAttribute('aria-disabled')).toBe('true')
+    expect(document.getElementById('reboot-confirm').disabled).toBe(true)
+    window.fetch = realFetch
+  })
 })

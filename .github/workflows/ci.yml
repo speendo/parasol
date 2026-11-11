@@ -35,6 +35,10 @@ jobs:
         run: |
           . .venv/bin/activate
           npm test
+      - name: Run test server tests
+        run: |
+          . .venv/bin/activate
+          pytest test_server -q
       - name: Check committed assets are in sync
         # The job runs inside a container, so the checkout is owned by a
         # different uid than the step. Without safe.directory Git refuses the

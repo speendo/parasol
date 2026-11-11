@@ -51,7 +51,8 @@ static cJSON *build_group(prsl_store_t *store, bool is_status) {
             f->type == PRSL_CHECKBOX ? "checkbox" :
             f->type == PRSL_RANGE ? "range" :
             f->type == PRSL_TEXTAREA ? "textarea" :
-            f->type == PRSL_RADIO ? "radio" : "select"
+            f->type == PRSL_RADIO ? "radio" :
+            f->type == PRSL_FILE ? "file" : "select"
         ));
         cJSON_AddItemToArray(field_arr, cJSON_CreateString(f->label));
 
@@ -61,6 +62,16 @@ static cJSON *build_group(prsl_store_t *store, bool is_status) {
             cJSON_AddItemToObject(opts, "value", cJSON_Duplicate(f->value, 1));
         } else {
             cJSON_AddNullToObject(opts, "value");
+        }
+
+        if (f->type == PRSL_FILE) {
+            if (f->accept && f->accept[0]) {
+                cJSON_AddStringToObject(opts, "accept", f->accept);
+            }
+            if (f->max_size != 0) {
+                cJSON_AddNumberToObject(opts, "max_size", (double)f->max_size);
+            }
+            /* idle_timeout_ms is device policy, never sent to clients. */
         }
 
         if (f->help && f->help[0]) {
@@ -95,6 +106,22 @@ cJSON *prsl_json_build_settings(prsl_store_t *store) {
 
 cJSON *prsl_json_build_status(prsl_store_t *store) {
     return build_group(store, true);
+}
+
+cJSON *prsl_json_build_settings_payload(prsl_store_t *store, bool dirty,
+                                        bool show_reset, bool show_reboot,
+                                        bool uploading) {
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "type", "settings");
+
+    cJSON *meta = cJSON_AddObjectToObject(root, "_meta");
+    cJSON_AddBoolToObject(meta, "dirty", dirty);
+    cJSON_AddBoolToObject(meta, "show_reset", show_reset);
+    cJSON_AddBoolToObject(meta, "show_reboot", show_reboot);
+    cJSON_AddBoolToObject(meta, "uploading", uploading);
+
+    cJSON_AddItemToObject(root, "data", prsl_json_build_settings(store));
+    return root;
 }
 
 

@@ -23,6 +23,10 @@ typedef struct {
     const char *attrs;         /* points to flash string literal, or "" */
     prsl_set_cb_t on_set;
     prsl_get_cb_t on_get;
+    prsl_upload_cb_t on_upload;   /* PRSL_FILE only */
+    const char *accept;           /* PRSL_FILE only, or "" (registration defaults NULL to "") */
+    size_t max_size;              /* PRSL_FILE only; 0 = no limit */
+    uint32_t idle_timeout_ms;     /* PRSL_FILE only; 0 = default */
     const char *(*options)[2]; /* points to static array of [value,label] pairs */
     int option_count;
     cJSON *parsed_attrs;       /* pre-parsed attrs JSON (RAM), NULL if none */
@@ -54,6 +58,10 @@ void prsl_store_deinit(prsl_store_t *store);
 esp_err_t prsl_store_add_group(prsl_store_t *store, const char *group_id, const char *label);
 bool prsl_store_has_group(prsl_store_t *store, const char *group_id);
 esp_err_t prsl_store_add_field(prsl_store_t *store, const prsl_field_t *field);
+/** @brief Register a PRSL_FILE field. opts and opts->on_upload are required. */
+esp_err_t prsl_store_add_file_field(prsl_store_t *store, const char *group_id,
+                                    const char *key, const char *label,
+                                    const prsl_file_opts_t *opts);
 const char *prsl_store_get_label(prsl_store_t *store, const char *group_id);
 prsl_field_t *prsl_store_find(prsl_store_t *store, const char *group_id, const char *key);
 /** @brief Store a cJSON value. Takes ownership of @p value (caller must NOT free). */
@@ -81,9 +89,9 @@ esp_err_t prsl_store_load_values(prsl_store_t *store);
 /** @brief Re-call on_get on every field (for reset). */
 esp_err_t prsl_store_reset_values(prsl_store_t *store);
 
-/** @brief Build the full settings WS payload ({type, _dirty, _show_reset,
- *  _show_reboot, data}). Returns a caller-owned cJSON * (internal helper;
- *  not part of the public API). */
+/** @brief Build the full settings WS payload ({type, _meta, data}).
+ *  Returns a caller-owned cJSON * (internal helper; not part of the public
+ *  API). */
 cJSON *prsl_build_settings_payload(prsl_store_t *store);
 
 #ifdef __cplusplus

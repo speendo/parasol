@@ -1,9 +1,10 @@
 import json
 import time
 import asyncio
+import threading
 from pathlib import Path
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Response
 
 app = FastAPI()
 
@@ -53,6 +54,20 @@ SETTINGS = {
         "enabled":      ["switch", "Alerts Enabled", {"value": False, "help": "Enable email notifications"}],
         "confirm":      ["checkbox", "Confirm Alerts", {"value": None, "help": "Explicitly enable or disable alerts"}],
     },
+    "audio": {
+        "label": "Audio",
+        "clip": ["file", "Clip", {
+            "value": "none", "accept": ".mp3,audio/*",
+            "max_size": 1024 * 1024, "help": "MP3, up to 1 MiB",
+        }],
+    },
+    "config": {
+        "label": "Config",
+        "file": ["file", "Config file", {
+            "value": "none", "accept": ".json,application/json",
+            "max_size": 8 * 1024, "help": "JSON config, up to 8 KiB",
+        }],
+    },
 }
 
 STATUS = {
@@ -77,6 +92,30 @@ status_store: dict[str, object] = {}
 start_time = time.time()
 connected: set[WebSocket] = set()
 _dirty: bool = False
+
+# ── Upload state (mirrors the device's PRSL_FILE upload contract) ──────────
+UPLOAD_DIR = BASE / "test-results" / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+# group.key -> committed bytes path
+FINAL_PATHS = {
+    "audio.clip": UPLOAD_DIR / "audio" / "clip",
+    "config.file": UPLOAD_DIR / "config" / "file",
+}
+for p in FINAL_PATHS.values():
+    p.parent.mkdir(parents=True, exist_ok=True)
+COMMITTED = {k: (p if p.exists() else None) for k, p in FINAL_PATHS.items()}
+
+# Fixed on-disk label once a file field has committed bytes (mirrors the
+# device's on_get returning the stored filename).
+COMMITTED_LABELS = {"audio.clip": "clip.mp3", "config.file": "config.json"}
+
+_uploading = False
+_upload_put_count = 0
+_upload_aborted = set()
+_pending = {}  # group.key -> temp Path
+_upload_delay_ms = 0
+_upload_timeout_ms = 0
 
 
 @app.on_event("startup")
@@ -149,6 +188,31 @@ def build_status():
     return result
 
 
+def settings_message():
+    # _meta is the only meta container; _show_reset is device semantics
+    # (callback presence), so True.
+    meta = {
+        "dirty": _dirty,
+        "show_reset": True,
+        "show_reboot": True,
+        "uploading": _uploading,
+    }
+    return {
+        "type": "settings",
+        "_meta": meta,
+        "data": build_settings(),
+    }
+
+
+async def broadcast_settings():
+    payload = settings_message()
+    for client in list(connected):
+        try:
+            await client.send_json(payload)
+        except Exception:
+            connected.discard(client)
+
+
 async def status_broadcaster():
     while True:
         await asyncio.sleep(3)
@@ -166,6 +230,8 @@ async def status_broadcaster():
 
 @app.post("/api/settings/save")
 async def api_settings_save(request: Request):
+    if _uploading:
+        return PlainTextResponse("Upload in progress", status_code=409)
     try:
         data = await request.json()
     except Exception:
@@ -175,22 +241,40 @@ async def api_settings_save(request: Request):
     for group_id, fields in data.items():
         if group_id.startswith("_"):
             continue
+        schema = SETTINGS.get(group_id)
+        if not schema:
+            continue
         for key, field_def in fields.items():
             if not isinstance(field_def, list) or len(field_def) < 3:
                 continue
+            s_entry = schema.get(key)
+            if s_entry is not None and s_entry[0] == "file":
+                continue  # PRSL_FILE: labels only change via the upload path
             opts = field_def[2]
             if "value" in opts:
                 store_key = group_id + "." + key
                 nvs_store[store_key] = opts["value"]
                 applied_store[store_key] = opts["value"]
     global _dirty
-    _dirty = False
-    payload = build_settings()
-    for client in list(connected):
+    # Promote deferred uploads to their committed path before clearing dirty.
+    for store_key, tmp in list(_pending.items()):
+        final = FINAL_PATHS[store_key]
         try:
-            await client.send_json({"type": "settings", "_dirty": _dirty, "_show_reset": _dirty, "_show_reboot": True, "data": payload})
-        except Exception:
-            connected.discard(client)
+            final.write_bytes(tmp.read_bytes())
+        except OSError:
+            pass
+        COMMITTED[store_key] = final
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        label = COMMITTED_LABELS.get(store_key)
+        if label is not None:
+            nvs_store[store_key] = label
+            applied_store[store_key] = label
+    _pending.clear()
+    _dirty = False
+    await broadcast_settings()
     return {}
 
 
@@ -202,7 +286,7 @@ async def events_ws(ws: WebSocket):
     global _dirty
     try:
         await ws.send_json({"type": "status", "data": build_status()})
-        await ws.send_json({"type": "settings", "_dirty": _dirty, "_show_reset": _dirty, "_show_reboot": True, "data": build_settings()})
+        await ws.send_json(settings_message())
         while True:
             raw = await ws.receive_text()
             msg = json.loads(raw)
@@ -213,15 +297,12 @@ async def events_ws(ws: WebSocket):
                         if schema_entry is None:
                             continue
                         _, _, opts = schema_entry
+                        if schema_entry[0] == "file":
+                            continue  # PRSL_FILE: labels only change via upload
                         store_key = group_key + "." + field_key
                         applied_store[store_key] = field_arr[2]["value"]
                 _dirty = any(applied_store.get(k) != nvs_store.get(k) for k in applied_store)
-                payload = build_settings()
-                for client in list(connected):
-                    try:
-                        await client.send_json({"type": "settings", "_dirty": _dirty, "_show_reset": _dirty, "_show_reboot": True, "data": payload})
-                    except Exception:
-                        connected.discard(client)
+                await broadcast_settings()
     except WebSocketDisconnect:
         pass
     finally:
@@ -230,6 +311,8 @@ async def events_ws(ws: WebSocket):
 
 @app.post("/api/system/reboot")
 async def api_system_reboot():
+    if _uploading:
+        return PlainTextResponse("Upload in progress", status_code=409)
     for client in list(connected):
         try:
             await client.close()
@@ -250,12 +333,7 @@ async def external_change(body: dict):
             if store_key in applied_store:
                 nvs_store[store_key] = field_arr[2]["value"]
                 applied_store[store_key] = field_arr[2]["value"]
-    payload = build_settings()
-    for client in list(connected):
-        try:
-            await client.send_json({"type": "settings", "_dirty": _dirty, "_show_reset": _dirty, "_show_reboot": True, "data": payload})
-        except Exception:
-            connected.discard(client)
+    await broadcast_settings()
     return {"ok": True}
 
 
@@ -297,6 +375,9 @@ async def api_settings_apply(request: Request):
         for field_key, field_arr in fields.items():
             if not isinstance(field_arr, list) or len(field_arr) < 3:
                 continue
+            s_entry = schema_entry.get(field_key)
+            if s_entry is not None and s_entry[0] == "file":
+                continue  # PRSL_FILE: labels only change via the upload path
             store_key = group_key + "." + field_key
             applied_store[store_key] = field_arr[2].get("value", "")
     global _dirty
@@ -307,8 +388,17 @@ async def api_settings_apply(request: Request):
 @app.api_route("/api/settings/reset", methods=["GET", "POST"])
 async def api_settings_reset():
     global _dirty
+    if _uploading:
+        return PlainTextResponse("Upload in progress", status_code=409)
     nvs_store.clear()
     applied_store.clear()
+    # Discard any deferred (pending) uploads.
+    for p in _pending.values():
+        try:
+            p.unlink()
+        except OSError:
+            pass
+    _pending.clear()
     for group_id, fields in SETTINGS.items():
         for key, field_def in fields.items():
             if key == "label":
@@ -316,16 +406,286 @@ async def api_settings_reset():
             opts = field_def[2]
             val = opts.get("value", "")
             store_key = group_id + "." + key
+            if field_def[0] == "file":
+                # A committed file keeps its label; otherwise restore "none".
+                if COMMITTED.get(store_key) is not None:
+                    val = COMMITTED_LABELS.get(store_key, "none")
+                else:
+                    val = "none"
             nvs_store[store_key] = val
             applied_store[store_key] = val
     _dirty = False
-    payload = build_settings()
-    for client in list(connected):
-        try:
-            await client.send_json({"type": "settings", "_dirty": _dirty, "_show_reset": _dirty, "_show_reboot": True, "data": payload})
-        except Exception:
-            connected.discard(client)
+    await broadcast_settings()
     return {}
+
+
+# ── Upload validation (mirrors prsl_upload.c rules) ─────────────────────────
+
+def _valid_name(name):
+    if not name:
+        return False
+    if len(name) >= 128:
+        return False
+    if name in (".", ".."):
+        return False
+    for ch in name:
+        if ch == "/" or ch == "\\":
+            return False
+        o = ord(ch)
+        if o < 0x20 or o == 0x7F:
+            return False
+    return True
+
+
+def _entry_match(entry, name, mime):
+    if not entry:
+        return False
+    if entry[0] == ".":
+        return name.lower().endswith(entry.lower())
+    if entry == "*/*":
+        return True
+    if not mime:
+        return False
+    if "/" not in entry:
+        return False
+    if entry.endswith("*"):
+        prefix = entry[:-2]  # drop trailing '*' and '/'
+        if not prefix:
+            return False
+        return mime.lower().startswith(prefix.lower()) and len(mime) > len(prefix) and mime[len(prefix)] == "/"
+    return mime.lower() == entry.lower()
+
+
+def _accept_match(accept, name, mime):
+    if not accept:
+        return True
+    if not name:
+        return False
+    for entry in accept.split(","):
+        if _entry_match(entry.strip(), name, mime):
+            return True
+    return False
+
+
+def _validate_upload(field_def, name, mime, size):
+    ftype, _, opts = field_def
+    accept = opts.get("accept", "")
+    max_size = opts.get("max_size", 0)
+    if ftype != "file":
+        return (False, 400, "Invalid field")
+    if not _valid_name(name):
+        return (False, 400, "Invalid name")
+    if size == 0:
+        return (False, 400, "Empty file")
+    if max_size and size > max_size:
+        return (False, 413, "File too large")
+    if not _accept_match(accept, name, mime):
+        return (False, 415, "File type not allowed")
+    return (True, 200, "OK")
+
+
+@app.post("/api/upload/{group}/{key}")
+async def api_upload_preflight(group: str, key: str, request: Request):
+    field_def = SETTINGS.get(group, {}).get(key)
+    if field_def is None or field_def[0] != "file":
+        return PlainTextResponse("Unknown field", status_code=404)
+    if _uploading:
+        return PlainTextResponse("Upload in progress", status_code=409)
+    try:
+        meta = await request.json()
+    except Exception:
+        return PlainTextResponse("Invalid metadata", status_code=400)
+    if not isinstance(meta, dict):
+        return PlainTextResponse("Invalid metadata", status_code=400)
+    name = meta.get("name")
+    size = meta.get("size")
+    mime = meta.get("type")
+    if not isinstance(name, str):
+        return PlainTextResponse("Invalid metadata", status_code=400)
+    if isinstance(size, bool) or not isinstance(size, int) or size <= 0 or size >= 4294967296:
+        return PlainTextResponse("Invalid metadata", status_code=400)
+    if mime is not None:
+        if not isinstance(mime, str):
+            return PlainTextResponse("Invalid metadata", status_code=400)
+        if mime == "":
+            mime = None
+    ok, status, msg = _validate_upload(field_def, name, mime, size)
+    if not ok:
+        return PlainTextResponse(msg, status_code=status)
+    return PlainTextResponse("OK", status_code=200)
+
+
+@app.put("/api/upload/{group}/{key}")
+async def api_upload_put(group: str, key: str, request: Request,
+                         name: str = "upload", type: str = ""):
+    global _uploading, _upload_put_count, _dirty
+    store_key = group + "." + key
+
+    if "content-length" not in request.headers:
+        return PlainTextResponse("Content-Length required", status_code=411)
+    if request.headers.get("content-type", "") != "application/octet-stream":
+        return PlainTextResponse("Expected application/octet-stream", status_code=415)
+
+    field_def = SETTINGS.get(group, {}).get(key)
+    if field_def is None or field_def[0] != "file":
+        return PlainTextResponse("Unknown field", status_code=404)
+
+    if _uploading:
+        return PlainTextResponse("Upload in progress", status_code=409)
+
+    mime = type if type else None
+    try:
+        size = int(request.headers["content-length"])
+    except (KeyError, ValueError):
+        return PlainTextResponse("Content-Length required", status_code=411)
+    ok, status, msg = _validate_upload(field_def, name, mime, size)
+    if not ok:
+        return PlainTextResponse(msg, status_code=status)
+
+    _uploading = True
+    _upload_put_count += 1
+    _upload_aborted.discard(store_key)
+    await broadcast_settings()
+
+    try:
+        if _upload_delay_ms:
+            await asyncio.sleep(_upload_delay_ms / 1000)
+        body = await request.body()
+        # A browser XHR abort closes the connection only after the buffered
+        # body has been consumed, and uvicorn surfaces that asynchronously.
+        # Poll the disconnect flag briefly (mirrors the device's recv() loop,
+        # which observes the client hang-up during the transfer) so a cancel
+        # is recorded as an abort before we decide whether to commit.
+        for _ in range(10):
+            if await request.is_disconnected():
+                _upload_aborted.add(store_key)
+                return PlainTextResponse("Upload aborted", status_code=499)
+            await asyncio.sleep(0.05)
+    except Exception:
+        _upload_aborted.add(store_key)
+        return PlainTextResponse("Upload failed", status_code=499)
+    finally:
+        _uploading = False
+        await broadcast_settings()
+
+    if store_key == "config.file":
+        # Immediate commit.
+        final = FINAL_PATHS[store_key]
+        final.parent.mkdir(parents=True, exist_ok=True)
+        final.write_bytes(body)
+        COMMITTED[store_key] = final
+        nvs_store[store_key] = name
+        applied_store[store_key] = name
+    else:
+        # Deferred: hold a temp until Save promotes it.
+        tmp = UPLOAD_DIR / group / (key + ".tmp")
+        tmp.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_bytes(body)
+        _pending[store_key] = tmp
+        applied_store[store_key] = name + " (pending)"
+        _dirty = True
+    await broadcast_settings()
+    return PlainTextResponse("OK", status_code=200)
+
+
+@app.post("/api/test/reset-uploads")
+async def api_test_reset_uploads():
+    global _uploading, _upload_put_count, _upload_aborted, _pending, _upload_delay_ms, _upload_timeout_ms, _dirty
+    _uploading = False
+    _upload_put_count = 0
+    _upload_aborted = set()
+    for p in _pending.values():
+        try:
+            p.unlink()
+        except OSError:
+            pass
+    _pending = {}
+    _upload_delay_ms = 0
+    _upload_timeout_ms = 0
+    _dirty = False
+    for p in UPLOAD_DIR.glob("**/*"):
+        if p.is_file():
+            p.unlink()
+    # Playwright clears its test-results output dir between runs, which can
+    # remove the upload directory tree; recreate the committed dirs so the
+    # next immediate upload can write its final path.
+    for p in FINAL_PATHS.values():
+        p.parent.mkdir(parents=True, exist_ok=True)
+    for k in FINAL_PATHS:
+        COMMITTED[k] = None
+    await broadcast_settings()
+    return {"ok": True}
+
+
+@app.post("/api/test/uploading")
+async def api_test_uploading(body: dict):
+    global _uploading
+    _uploading = bool(body.get("uploading", False))
+    await broadcast_settings()
+    return {"ok": True}
+
+
+@app.post("/api/test/upload-delay")
+async def api_test_upload_delay(body: dict):
+    global _upload_delay_ms
+    _upload_delay_ms = int(body.get("ms", 0))
+    return {"ok": True}
+
+
+@app.post("/api/test/upload-timeout")
+async def api_test_upload_timeout(body: dict):
+    global _uploading
+    ms = int(body.get("ms", 500))
+    # The flag flips back on a background thread: a raw asyncio.ensure_future
+    # task never resumes under the sync TestClient portal, so a plain timer
+    # thread is the deterministic way to make the flag observable true-then-false.
+    _uploading = True
+    await broadcast_settings()
+
+    loop = asyncio.get_running_loop()
+
+    def _flip():
+        global _uploading
+        time.sleep(ms / 1000)
+        _uploading = False
+        # Broadcast the unlock so connected clients see _meta.uploading -> false.
+        if not loop.is_closed():
+            try:
+                asyncio.run_coroutine_threadsafe(broadcast_settings(), loop)
+            except RuntimeError:
+                pass  # loop torn down (e.g. TestClient portal) before the flip
+
+    threading.Thread(target=_flip, daemon=True).start()
+    return {"ok": True}
+
+
+@app.get("/api/test/upload-state")
+async def api_test_upload_state():
+    return {
+        "uploading": _uploading,
+        "put_count": _upload_put_count,
+        "aborted": sorted(_upload_aborted),
+    }
+
+
+@app.get("/api/test/uploads/{group}/{key}")
+async def api_test_get_upload(group: str, key: str):
+    p = COMMITTED.get(group + "." + key)
+    if not p or not p.exists():
+        return PlainTextResponse("Not Found", status_code=404)
+    return Response(content=p.read_bytes(), media_type="application/octet-stream")
+
+
+@app.get("/api/settings")
+async def api_get_settings():
+    payload = build_settings()
+    payload["_meta"] = {
+        "dirty": _dirty,
+        "show_reset": True,
+        "show_reboot": True,
+        "uploading": _uploading,
+    }
+    return payload
 
 
 @app.get("/")

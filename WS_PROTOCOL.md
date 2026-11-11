@@ -61,9 +61,7 @@ apply). Contains the full settings state.
 ```json
 {
   "type": "settings",
-  "_dirty": true,
-  "_show_reset": true,
-  "_show_reboot": true,
+  "_meta": {"dirty": true, "show_reset": true, "show_reboot": true, "uploading": false},
   "data": {
     "wifi": {
       "label": "Wi-Fi Setup",
@@ -88,16 +86,25 @@ apply). Contains the full settings state.
 }
 ```
 
-**`_dirty`:** Boolean owned by the server. `true` when at least one applied
-value differs from the stored (NVS) value. Drives the Save button: enabled
-only when `_dirty` is true AND all form fields pass validation.
+**`_meta`:** Object carrying the current meta state: `dirty`, `show_reset`,
+`show_reboot`, and `uploading`. This is the only meta container; there are no
+top-level meta keys.
 
-**`_show_reset`:** Boolean owned by the server. `true` when an `on_reset`
+**`uploading` (inside `_meta`):** Boolean owned by the server, device-global.
+`true` from an upload's first `META` until its `END`/`ABORT`, and present in
+**every** settings payload even for endpoints with no file fields. A tab that
+connects mid-upload receives `true` in its initial settings push.
+
+**`dirty`:** Boolean owned by the server. `true` when at least one applied
+value differs from the stored (NVS) value. Drives the Save button: enabled
+only when dirty is true AND all form fields pass validation.
+
+**`show_reset`:** Boolean owned by the server. `true` when an `on_reset`
 callback was registered at `prsl_init()`. Drives the Reset button visibility
-in the footer. Independent of `_dirty` — the button is always visible when
+in the footer. Independent of `dirty` — the button is always visible when
 a reset callback exists.
 
-**`_show_reboot`:** Boolean owned by the server. `true` when an `on_reboot`
+**`show_reboot`:** Boolean owned by the server. `true` when an `on_reboot`
 callback was registered at `prsl_init()`. Adds a "Reboot" action to the header
 device menu (the ☰ button) with a confirmation dialog. When no actions exist
 and the nav is not collapsed, the ☰ is hidden.
@@ -189,5 +196,7 @@ falls back to HTTP:
 | `POST` | `/api/settings/save` | Persist settings to NVS | Partial settings JSON |
 | `POST` | `/api/settings/reset` | Reload saved values | — |
 | `POST` | `/api/system/reboot` | Restart device | — |
+| `POST` | `/api/upload/<group>/<key>` | Preflight a file upload (advisory) | `{"name","size","type"}` JSON |
+| `PUT` | `/api/upload/<group>/<key>?name=…&type=…` | Stream a raw file body | binary, `Content-Type: application/octet-stream` |
 
 
