@@ -2,6 +2,7 @@
 #include <string.h>
 #include "unity.h"
 #include "prsl_store.h"
+#include "prsl_upload.h"
 #include "prsl.h"
 
 static prsl_store_t store;
@@ -133,6 +134,228 @@ void test_scalar_field_defaults_unaffected(void) {
     TEST_ASSERT_EQUAL_UINT32(0, got->idle_timeout_ms);
 }
 
+static void test_validate_name_rules(void) {
+    prsl_field_t f = {0};
+    f.type = PRSL_FILE;
+    f.on_upload = on_upload_spy;
+    char err[PRSL_UPLOAD_ERR_MAX];
+    int status = 0;
+
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG,
+        prsl_upload_validate(&f, "", NULL, 1, err, sizeof(err), &status));
+    TEST_ASSERT_EQUAL_INT(400, status);
+    TEST_ASSERT_EQUAL_STRING("Invalid name", err);
+
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG,
+        prsl_upload_validate(&f, NULL, NULL, 1, err, sizeof(err), &status));
+    TEST_ASSERT_EQUAL_INT(400, status);
+
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG,
+        prsl_upload_validate(&f, "../x.bin", NULL, 1, err, sizeof(err), &status));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG,
+        prsl_upload_validate(&f, "a\\b.bin", NULL, 1, err, sizeof(err), &status));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG,
+        prsl_upload_validate(&f, "a\nb.bin", NULL, 1, err, sizeof(err), &status));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG,
+        prsl_upload_validate(&f, ".", NULL, 1, err, sizeof(err), &status));
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG,
+        prsl_upload_validate(&f, "..", NULL, 1, err, sizeof(err), &status));
+
+    char long_name[PRSL_UPLOAD_NAME_MAX + 1];
+    memset(long_name, 'a', sizeof(long_name) - 1);
+    long_name[sizeof(long_name) - 1] = '\0';
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG,
+        prsl_upload_validate(&f, long_name, NULL, 1, err, sizeof(err), &status));
+
+    char max_name[PRSL_UPLOAD_NAME_MAX];
+    memset(max_name, 'a', sizeof(max_name) - 1);
+    max_name[sizeof(max_name) - 1] = '\0';
+    TEST_ASSERT_EQUAL(ESP_OK,
+        prsl_upload_validate(&f, max_name, "application/octet-stream",
+                             1024, err, sizeof(err), &status));
+
+    TEST_ASSERT_EQUAL(ESP_OK,
+        prsl_upload_validate(&f, "firmware.bin", "application/octet-stream",
+                             1024, err, sizeof(err), &status));
+    TEST_ASSERT_EQUAL_INT(0, status);
+    TEST_ASSERT_EQUAL_STRING("", err);
+}
+
+static void test_validate_empty_file(void) {
+    prsl_field_t f = {0};
+    f.type = PRSL_FILE;
+    f.on_upload = on_upload_spy;
+    char err[PRSL_UPLOAD_ERR_MAX];
+    int status = 0;
+
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG,
+        prsl_upload_validate(&f, "a.bin", NULL, 0, err, sizeof(err), &status));
+    TEST_ASSERT_EQUAL_INT(400, status);
+    TEST_ASSERT_EQUAL_STRING("Empty file", err);
+}
+
+static void test_validate_size_limit(void) {
+    prsl_field_t f = {0};
+    f.type = PRSL_FILE;
+    f.on_upload = on_upload_spy;
+    f.max_size = 8;
+    char err[PRSL_UPLOAD_ERR_MAX];
+    int status = 0;
+
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG,
+        prsl_upload_validate(&f, "a.bin", NULL, 9, err, sizeof(err), &status));
+    TEST_ASSERT_EQUAL_INT(413, status);
+    TEST_ASSERT_EQUAL_STRING("File too large", err);
+
+    TEST_ASSERT_EQUAL(ESP_OK,
+        prsl_upload_validate(&f, "a.bin", NULL, 8, err, sizeof(err), &status));
+    TEST_ASSERT_EQUAL_INT(0, status);
+    TEST_ASSERT_EQUAL_STRING("", err);
+}
+
+static void test_validate_no_size_limit(void) {
+    prsl_field_t f = {0};
+    f.type = PRSL_FILE;
+    f.on_upload = on_upload_spy;
+    char err[PRSL_UPLOAD_ERR_MAX];
+    int status = 0;
+
+    TEST_ASSERT_EQUAL(ESP_OK,
+        prsl_upload_validate(&f, "a.bin", NULL, (size_t)-1, err, sizeof(err), &status));
+    TEST_ASSERT_EQUAL_INT(0, status);
+}
+
+static void test_validate_accept_extension(void) {
+    prsl_field_t f = {0};
+    f.type = PRSL_FILE;
+    f.on_upload = on_upload_spy;
+    f.accept = ".bin";
+    char err[PRSL_UPLOAD_ERR_MAX];
+    int status = 0;
+
+    TEST_ASSERT_EQUAL(ESP_OK,
+        prsl_upload_validate(&f, "firmware.BIN", NULL, 1, err, sizeof(err), &status));
+    TEST_ASSERT_EQUAL_INT(0, status);
+
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG,
+        prsl_upload_validate(&f, "firmware.txt", NULL, 1, err, sizeof(err), &status));
+    TEST_ASSERT_EQUAL_INT(415, status);
+    TEST_ASSERT_EQUAL_STRING("File type not allowed", err);
+}
+
+static void test_validate_accept_mixed(void) {
+    prsl_field_t f = {0};
+    f.type = PRSL_FILE;
+    f.on_upload = on_upload_spy;
+    f.accept = ".mp3, audio/*";
+    char err[PRSL_UPLOAD_ERR_MAX];
+    int status = 0;
+
+    TEST_ASSERT_EQUAL(ESP_OK,
+        prsl_upload_validate(&f, "clip.mp3", "video/mp4", 1, err, sizeof(err), &status));
+    TEST_ASSERT_EQUAL_INT(0, status);
+
+    TEST_ASSERT_EQUAL(ESP_OK,
+        prsl_upload_validate(&f, "clip.dat", "audio/mpeg", 1, err, sizeof(err), &status));
+    TEST_ASSERT_EQUAL_INT(0, status);
+
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG,
+        prsl_upload_validate(&f, "clip.dat", "video/mp4", 1, err, sizeof(err), &status));
+    TEST_ASSERT_EQUAL_INT(415, status);
+}
+
+static void test_validate_accept_mime_without_mime(void) {
+    prsl_field_t f = {0};
+    f.type = PRSL_FILE;
+    f.on_upload = on_upload_spy;
+    f.accept = "audio/*";
+    char err[PRSL_UPLOAD_ERR_MAX];
+    int status = 0;
+
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG,
+        prsl_upload_validate(&f, "clip.mp3", NULL, 1, err, sizeof(err), &status));
+    TEST_ASSERT_EQUAL_INT(415, status);
+    TEST_ASSERT_EQUAL_STRING("File type not allowed", err);
+}
+
+static void test_validate_accept_null(void) {
+    prsl_field_t f = {0};
+    f.type = PRSL_FILE;
+    f.on_upload = on_upload_spy;
+    char err[PRSL_UPLOAD_ERR_MAX];
+    int status = 0;
+
+    TEST_ASSERT_EQUAL(ESP_OK,
+        prsl_upload_validate(&f, "anything.dat", NULL, 1, err, sizeof(err), &status));
+    TEST_ASSERT_EQUAL_INT(0, status);
+}
+
+static void test_validate_accept_all(void) {
+    prsl_field_t f = {0};
+    f.type = PRSL_FILE;
+    f.on_upload = on_upload_spy;
+    f.accept = "*/*";
+    char err[PRSL_UPLOAD_ERR_MAX];
+    int status = 0;
+
+    TEST_ASSERT_EQUAL(ESP_OK,
+        prsl_upload_validate(&f, "anything.dat", NULL, 1, err, sizeof(err), &status));
+    TEST_ASSERT_EQUAL_INT(0, status);
+}
+
+static void test_validate_field_guard(void) {
+    prsl_field_t f = {0};
+    char err[PRSL_UPLOAD_ERR_MAX];
+    int status = 0;
+
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG,
+        prsl_upload_validate(NULL, "a.bin", NULL, 1, err, sizeof(err), &status));
+    TEST_ASSERT_EQUAL_INT(400, status);
+
+    f.type = PRSL_TEXT;
+    f.on_upload = on_upload_spy;
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG,
+        prsl_upload_validate(&f, "a.bin", NULL, 1, err, sizeof(err), &status));
+    TEST_ASSERT_EQUAL_INT(400, status);
+
+    f.type = PRSL_FILE;
+    f.on_upload = NULL;
+    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG,
+        prsl_upload_validate(&f, "a.bin", NULL, 1, err, sizeof(err), &status));
+    TEST_ASSERT_EQUAL_INT(400, status);
+}
+
+static void test_accept_match_direct(void) {
+    TEST_ASSERT_TRUE(prsl_upload_accept_match(NULL, "a.bin", NULL));
+    TEST_ASSERT_TRUE(prsl_upload_accept_match("", "a.bin", NULL));
+    TEST_ASSERT_TRUE(prsl_upload_accept_match(".bin", "a.BIN", NULL));
+    TEST_ASSERT_FALSE(prsl_upload_accept_match(".binary", "a.bin", NULL));
+    TEST_ASSERT_FALSE(prsl_upload_accept_match(".bin", NULL, NULL));
+    TEST_ASSERT_TRUE(prsl_upload_accept_match("application/octet-stream", "a.bin",
+                                             "Application/Octet-Stream"));
+    TEST_ASSERT_FALSE(prsl_upload_accept_match("application/octet-stream", "a.bin", NULL));
+    TEST_ASSERT_TRUE(prsl_upload_accept_match(" image/* , .bin ", "a.bin", NULL));
+    TEST_ASSERT_FALSE(prsl_upload_accept_match("image/*", "a.bin", "text/plain"));
+    TEST_ASSERT_TRUE(prsl_upload_accept_match("*/*", "a.bin", NULL));
+}
+
+static void test_upload_is_active(void) {
+    prsl_upload_state_t st = {0};
+
+    TEST_ASSERT_FALSE(prsl_upload_is_active(NULL));
+    TEST_ASSERT_FALSE(prsl_upload_is_active(&st));
+
+    st.active = true;
+    TEST_ASSERT_TRUE(prsl_upload_is_active(&st));
+
+    st.finished = true;
+    TEST_ASSERT_FALSE(prsl_upload_is_active(&st));
+
+    st.finished = false;
+    st.active = false;
+    TEST_ASSERT_FALSE(prsl_upload_is_active(&st));
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_file_field_registration);
@@ -145,5 +368,17 @@ int main(void) {
     RUN_TEST(test_add_field_rejects_file_without_on_upload);
     RUN_TEST(test_add_field_accepts_file_with_on_upload);
     RUN_TEST(test_scalar_field_defaults_unaffected);
+    RUN_TEST(test_validate_name_rules);
+    RUN_TEST(test_validate_empty_file);
+    RUN_TEST(test_validate_size_limit);
+    RUN_TEST(test_validate_no_size_limit);
+    RUN_TEST(test_validate_accept_extension);
+    RUN_TEST(test_validate_accept_mixed);
+    RUN_TEST(test_validate_accept_mime_without_mime);
+    RUN_TEST(test_validate_accept_null);
+    RUN_TEST(test_validate_accept_all);
+    RUN_TEST(test_validate_field_guard);
+    RUN_TEST(test_accept_match_direct);
+    RUN_TEST(test_upload_is_active);
     return UNITY_END();
 }
