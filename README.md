@@ -43,10 +43,10 @@ Add to `platformio.ini`:
 
 ```ini
 ; Tarball — clean, minimal (recommended):
-lib_deps = https://github.com/speendo/parasol/releases/download/v0.8.0/parasol-v0.8.0.tar.gz
+lib_deps = https://github.com/speendo/parasol/releases/download/v0.9.0/parasol-v0.9.0.tar.gz
 
 ; Git — full repo (for development):
-lib_deps = https://github.com/speendo/parasol.git#v0.8.0
+lib_deps = https://github.com/speendo/parasol.git#v0.9.0
 ```
 
 > **Assets:** default `prsl_assets.h`/`prsl_assets.c` (gzip of the minified UI,
