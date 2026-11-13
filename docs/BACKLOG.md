@@ -6,166 +6,173 @@ outstanding. Add items here instead of leaving them buried in prose.
 
 Legend: `[ ]` open · `[~]` in progress · `[x]` done · `[-]` dropped/superseded
 
-Last updated: 2026-11-11
+Last updated: 2026-11-13
 
-## Before 1.0
+## 1.0 scope
+
+Design: `docs/superpowers/specs/2026-11-13-1.0-scope-design.md`.
 
 Release sequence:
 
-1. **0.7.0** — already-implemented architectural decisions + asset generator
-   fix.
+1. **0.7.0** — architectural decisions + asset generator fix.
 2. **0.8.0** — generic file upload.
-3. **0.9.0** — client echo-correlation fix (wire change; shipped).
-4. **1.0.0** — after the contract/security/hardware/distribution items below.
+3. **0.9.0** — client echo-correlation fix (wire change). Merged to `main`,
+   tagged `v0.9.0`, README install URLs updated.
+4. **1.0.0** — after the correctness, message, secure-example, hardware,
+   and release items below.
 
-### Release 0.7.0
+The 1.0 code work is split into branches. Each branch carries its own
+sub-spec; the docs branch is the integration point.
 
-- [x] Finish the asset-generator unification (`cmake/generate_assets.cmake` →
-  `scripts/generate_assets.py`). Verify committed assets, ESP-IDF path, and CI
-  drift checks.
-- [x] Run the full suite (`npm test`), bump/confirm `library.json` 0.7.0,
-  update README install URLs and CHANGELOG, tag `v0.7.0`.
+| Branch | Sub-spec | Status |
+|---|---|---|
+| `feature/1.0-correctness` | `2026-11-13-1.0-correctness-design.md` | [ ] |
+| `feature/1.0-message-api` | `2026-11-13-prsl-message-design.md` | [ ] |
+| `feature/1.0-secure-example` | `2026-11-13-secure-example-design.md` | [ ] |
+| `docs/2.0-endpoints-actions` | `2026-11-13-2.0-endpoints-actions-design.md` | [ ] design only |
 
-### 0.8.0 — Generic file upload
+### 1.0 code work
 
-Design: `docs/superpowers/specs/2026-11-10-file-upload-design.md`.
+- [ ] **Save-handler `err` initialization.** On the unreachable-in-practice
+  `buf == NULL` fallback, the 400 response currently sends an uninitialized
+  buffer. Initialize a real message. Branch: `feature/1.0-correctness`.
+- [ ] **Bound sync recovery when a reply omits a key.** If a sync reply lacks
+  a key the client is recovering, drop that key instead of re-arming another
+  sync. Measured +11 gzip bytes. Unit test. Branch: `feature/1.0-correctness`.
+- [ ] **`prsl_stop()` contract + stopping guard.** Document that it is a
+  shutdown call, not a reboot step:
+  - call from the main task (`setup()`/`loop()`) at a quiet moment,
+  - never from `on_save` / `on_reset` / `on_reboot` / `on_upload`,
+  - a reboot uses `esp_restart()` and does not need `prsl_stop()`,
+  - an orderly shutdown may set a flag in `on_reboot` and stop+restart from
+    the main loop.
+  Add a stopping flag so new requests are rejected once teardown begins.
+  Branch: `feature/1.0-correctness`.
+- [ ] **`prsl_message(level, message)`.** Broadcast a transient user message
+  with INFO / WARNING / ERROR levels. Wire:
+  `{"type":"message","level":"info|warning|error","message":"..."}`. The
+  client adds `ℹ` / `⚠` / `✖` and colors warning/error. Protocol failures
+  keep using `type:"error"`. Branch: `feature/1.0-message-api`.
+- [ ] **`examples/secure` cookie lock.** Login/logout, shared password,
+  in-RAM session token, `HttpOnly; SameSite=Strict` cookie, server-wide
+  middleware covering HTTP and the WS handshake, `Origin` check, HTTPS
+  caveat. Compile-check in CI. Branch: `feature/1.0-secure-example`.
+- [ ] **Reconnect-while-dirty e2e test.** Verify a reconnect with unsaved
+  edits re-sends only values that differ from the device and keeps the rest.
+  Add to `feature/1.0-correctness` if it fits naturally.
+- [ ] **Busy-state failure test.** Cover that `aria-busy` clears when Save
+  fails, not only when it succeeds. Add opportunistically; the behavior is
+  already correct in `handleSaveApply()`.
 
-- [x] Streaming upload field inside a settings section (Pico file input +
-  Upload button + progress + Cancel), inline; no modal.
-- [x] Registration via dedicated `prsl_add_file_field(...)`; reject
-  `prsl_add_field(PRSL_FILE, ...)` with a clear error.
-- [x] `on_upload` lifecycle: `PRSL_UPLOAD_META` → `CHUNK` → `END` / `ABORT`.
-- [x] Per-field `max_size`, `accept`, `idle_timeout_ms`.
-- [x] Preflight `POST` + raw `PUT`; one upload at a time (`409`); required
-  `Content-Length`; inline progress via XHR.
-- [x] Field value is a developer-defined file label (not necessarily the
-  upload name), read-only to the browser; file fields skipped in WS apply /
-  save body. `on_upload` receives the original `u->name`.
-- [x] `attrs` for presentation-only HTML extras (e.g. `title`, `aria-*`);
-  `accept`/`max_size`/`idle_timeout_ms` stay typed.
-- [x] Upload lock: disable Save, Reset, Reboot and other uploads while a
-  transfer is active. `_meta.uploading` is **device-global**: every settings
-  payload (including future endpoints/namespaces) carries the same value, and
-  every save/reset/reboot handler checks the global state. 0.8.0 adds the
-  `_meta` box as the only meta container (no legacy aliases).
-- [x] Docs + complete examples: `examples/simple/main.c` (minimal JSON upload
-  with one content guard), `examples/ota/main.c` (respond, then reboot),
-  `examples/upload/main.c` (temp file → dirty → `on_save` commit / `on_reset`
-  discard), plus the bounded JSON pattern. Compile-check the examples in CI.
-- [x] Native, unit, e2e, and PIO-smoke tests; measure JS min+gzip delta
-  (target ≤ +1.2 KB gzip, review at +1.5 KB). Measured +1,704 gzip — reviewed
-  and accepted (see `CHANGELOG.md` 0.8.0).
+### 1.0 release gates
 
-Deferred from this feature (tracked separately below): auth, upload chunk size,
-filename pattern, modal/confirmation, download.
+These are not code branches. They run after the code is feature-complete.
 
-### Deferred from 0.9.0 (client ack correlation)
-
-Design: `docs/superpowers/specs/2026-11-11-client-ack-correlation-design.md` §12.
-
-- [ ] **Continue past a rejection on the WS apply path.** The first rejection
-  aborts the batch and leaves the tail fields unattempted. Reporting every
-  failing key is a good fix, but it is independent of the wire change and does
-  not block 0.9.0 (the ack's dense `d` already keeps the tail coherent).
-- [ ] **"Server adjusted this" notice.** Client-derived from `d` vs `sent`; no
-  wire change. Deliberately not in 0.9.0 — silent acceptance was chosen.
-- [ ] **Fire-and-forget action field type**, so one-shot actions stop wearing a
-  value field's clothes.
-- [ ] **`_meta.v` device-wide version**, only if the in-flight guard proves to
-  drop pushes in practice.
-- [ ] **Per-field timeout**, only if someone asks. It would ride in every
-  field's `opts` forever for a rare need.
-- [ ] **Server-side last-processed-ticket memory.** Would make automatic resend
-  provably safe; rejected for 0.9.0 to keep the device stateless.
-- [ ] **Bound consecutive syncs when the store omits a recovering key.** A sync
-  reply that resolves nothing re-arms `maybeSync()`, so a store that never
-  reports a recovering key can keep the client syncing until the sync timeout.
-  Cap the consecutive recovery rounds (found in the 0.9.0 budget review).
-
-### 1.0 contract and release
-
-- [x] **Client echo-correlation gap** — fixed in 0.9.0 (ack correlation; see
-  `docs/superpowers/specs/2026-11-11-client-ack-correlation-design.md`).
-- [ ] **Security posture.**
-  - [ ] Protect the API with HTTP Basic/Digest + middleware, and partition
-    fields by access level (e.g. `/user` vs `/admin`). The ESPAsyncWebServer
-    fork supports `setAuthentication()` and `AsyncAuthenticationMiddleware`;
-    "classic htaccess" maps to this.
-  - [ ] Solve WebSocket authentication (browsers cannot set `Authorization` on
-    a WS handshake): cookie/session or token handshake.
-  - [ ] Document that uploads and settings are unauthenticated by default.
-  - [ ] Treat filenames as untrusted (basename only, length cap, path-traversal
-    warning); consider CSRF/DoS guidance.
 - [ ] **Real-hardware verification.** OTA end-to-end, LittleFS/SD writes,
-  disconnect → `ABORT`, idle timeout, `prsl_stop()` mid-upload, real save/reset.
-  Consider hardware/QEMU coverage in CI.
-- [ ] **`prsl_stop()` request quiescing.** `prsl_stop()` deinitializes the store
-  and stops the server while save/reset/reboot/preflight handlers may still be
-  running in the AsyncTCP task. This is a pre-existing race; 0.8.0 only
-  serializes upload body callbacks with an upload mutex. Add an in-flight
-  request counter (or equivalent stopping barrier) that waits for all handlers
-  before deinit, or make the AsyncTCP-task-only contract explicit and enforce
-  it. Cover with a host test and the 1.0 hardware check.
+  disconnect → `ABORT`, idle timeout, `prsl_stop()` mid-upload, real
+  save/reset. Consider hardware/QEMU coverage in CI.
+- [ ] **Release checklist/docs.** README, `API_REFERENCE.md`,
+  `WS_PROTOCOL.md`, `docs/reference/field-format.md` (upload + per-field-type
+  options matrix), CHANGELOG, examples, tags. README install URLs must point
+  at the real `v1.0.0` tag.
+- [ ] **Stability promise.** Freeze public API and wire format; document
+  semver, deprecation policy, and the 0.9 → 1.0 migration.
 - [ ] **Distribution.** Publish to the PlatformIO Registry (`pio pkg pack`,
-  account). Document the Arduino IDE limitation (dependency graph).
-- [ ] **Stability promise.** Freeze public API and wire format; document semver,
-  deprecation policy, and the 0.8 → 1.0 migration.
-- [ ] **Release checklist/docs.** README, `API_REFERENCE.md`, `WS_PROTOCOL.md`,
-  `docs/reference/field-format.md` (upload), CHANGELOG, examples, tags.
-  README install URLs must point at the real `v0.9.0` tag (tagged on merge), not
-  a placeholder.
-- [x] **Test-server fidelity.** `_show_reset` was sent as `_dirty`; the device
-  sends `prsl_has_reset()`. Aligned in 0.8.0: the test server sends
-  `_meta.show_reset: True` and the existing Reset e2e tests pass.
-- [ ] **Multi-client/reconnect review.** Verify multiple tabs and reconnect
-  during an upload / dirty state before declaring 1.0.
+  account). Verify packaging excludes `tests/`, `.pio/`, and the venv.
+  Document the Arduino IDE limitation (dependency graph).
+- [ ] **Presentation pass.** Nav divider, any remaining visual polish. Do
+  this with the docs pass, not as code work.
 
-## After 1.0
+## 2.0
 
-- [ ] Export/import settings (download JSON, restore by upload). Old backlog
-  item 10; intentionally after 1.0.
-- [ ] File download (counterpart to upload).
-- [ ] Structured file metadata (size/checksum) instead of a plain string label.
-- [ ] Built-in file-size display (use the label or a status field for now).
-- [ ] Upload chunk-size option (device-side coalescing / alignment).
-- [ ] Filename pattern validation (custom glob/regex) beyond `accept`.
-- [ ] Optional upload confirmation (modal or `confirm` field option) for
-  destructive uploads.
+Design: `docs/superpowers/specs/2026-11-13-2.0-endpoints-actions-design.md`.
+
+- [ ] **Independent `/user` and `/admin` endpoints.** Per-endpoint store,
+  dirty flag, callbacks, WebSocket, upload state, runtime API, and auth at the
+  endpoint boundary. Use the “two separate rooms” model (model C), not a
+  filtered view of one global store.
+- [ ] **`prsl_add_action()`.** One-shot actions (factory reset, calibrate,
+  format) as actions, not settings fields. Needs its own confirmation
+  semantics.
+- [ ] **Endpoint-level auth.** Cookie/session gate per endpoint; app owns
+  credentials, Parasol owns the gate. Revisit after the endpoints refactor.
+
+## Dropped / YAGNI (do not re-open without new evidence)
+
+These were reviewed on 2026-11-13 and deliberately dropped for the current
+product: one ESP32, one settings store, trusted LAN, usually one tab.
+
+- [-] **Continue past a rejection on the WS apply path.** The shipped client
+  sends one field per apply; Save is deliberately transactional. Abort-on-first
+  is the contract.
+- [-] **“Server adjusted this” notice.** Replaced by the general
+  `prsl_message` channel. Silent transform acceptance stays.
+- [-] **Fire-and-forget action field type.** Replaced by the 2.0
+  `prsl_add_action` idea.
+- [-] **`_meta.v` device-wide version.** Ack correlation + sync recovery already
+  cover missed pushes. Revisit only with observed missed pushes.
+- [-] **Per-field timeout.** Use the global `ack_timeout_ms`; keep `on_set`
+  fast.
+- [-] **Server-side last-processed-ticket memory.** Keep the device stateless;
+  require idempotent `on_set`.
+- [-] **Multi-client review / conflict resolution.** Last-write-wins is the
+  model. Keep the reconnect-while-dirty test; do not build merging.
+- [-] **Field-level admin-only fields.** Security theater unless the whole UI
+  is gated; use the secure example instead.
+- [-] **Library-owned auth hooks.** Authentication policy belongs to the
+  application. Use the secure example and, later, endpoint-level auth.
+- [-] **Upload chunk-size option.** Firmware can buffer in `on_upload`.
+- [-] **Filename pattern validation beyond `accept`.** Content checks belong
+  in `on_upload`; `accept` is a UX/policy hint.
+- [-] **Structured file metadata.** Encode size/checksum in the file label if
+  needed.
+- [-] **Built-in file-size display.** Use the label or a status field.
+- [-] **mDNS discovery.** Application-level feature.
+- [-] **Status sub-topics.** Status payloads are small; not worth the protocol.
+- [-] **Status history/graphs.** Application-level feature.
+- [-] **Client-side accordion merge for settings + status.** Presentation.
+- [-] **Client auto-prefixing of status component IDs.** Already implemented
+  (`createField` uses the `st-` prefix).
+- [-] **Render status fields without destroying settings DOM.** Mostly already
+  true: status updates after the first payload only set values. The remaining
+  first-payload re-render race is too narrow to justify more code.
+- [-] **Native test for the `val_str == NULL` branch.** Stale: that branch no
+  longer exists in the code.
+
+## Application-level / examples (not library roadmap)
+
+Useful, but not library features:
+
+- [ ] Export/import settings. Buildable from the existing save/upload paths.
+- [ ] File download. Counterpart to upload; application-specific.
+- [ ] Optional upload confirmation. UI/UX for destructive uploads.
+- [ ] Additional device actions in `#nav-actions`. Covered conceptually by
+        2.0 `prsl_add_action`.
 - [ ] mDNS discovery.
-- [ ] Additional device actions in `#nav-actions` (the responsive-nav design
-  anticipates future rows).
-- [ ] Status sub-topics (subscribe to `status.system.heap` only).
-- [ ] Status history/graph for numeric values (client-side accumulation).
-- [ ] Client-side accordion merge for settings + status.
-- [ ] Client auto-prefixing of status component IDs.
-- [ ] Render status fields without destroying settings DOM (future
-  optimization noted in
-  `docs/superpowers/specs/2026-06-24-code-issues.md`).
-
-## Docs / reference
-
-- [ ] Per-field-type options matrix in `docs/reference/field-format.md`
-  (scalar widgets vs. file; callbacks, wire keys, editability, device-enforced
-  options). Wanted, but not part of 0.8.0.
 
 ## Minor / test hygiene
 
-- [ ] `.gitignore` has unanchored duplicate patterns (harmless).
+Low priority. Do these opportunistically, not as release blockers.
+
+- [ ] `.gitignore` has unanchored duplicate patterns (harmless). Leave.
 - [ ] `tests/native/check_headers.sh` lacks a trailing newline and is not
-  executable (invoked via `bash`).
-- [ ] Native test for the `val_str == NULL → cJSON_CreateNull()` branch.
-- [ ] Save-handler `err` is uninitialized on the unreachable `buf == NULL`
-  fallback.
+  executable (invoked via `bash`). Leave or fix in a chore commit.
 - [ ] `alwaysShow` unit test restores its meta tag without `try/finally`;
-  `tests/setup.js` clobbers `document.head` (test-only).
-- [ ] Busy-state test covers success but not failure-clearing.
-- [ ] Nav divider between logo row and links (was deferred under the
-  superseded flex-wrap approach; re-check against the current menu design).
+  `tests/setup.js` clobbers `document.head` (test-only). Leave.
+- [ ] Busy-state test covers success but not failure-clearing. Add if touching
+  that area; behavior is already correct.
+- [ ] Nav divider between logo row and links. Presentation pass.
 
 ## Resolved / superseded (do not re-open)
 
+- [x] **0.9.0 release.** Merged to `main` and tagged `v0.9.0`; README install
+  URLs updated.
+- [x] **Client echo-correlation gap** — fixed in 0.9.0 (ack correlation; see
+  `docs/superpowers/specs/2026-11-11-client-ack-correlation-design.md`).
+- [x] **Test-server fidelity.** The test server sends `_meta.show_reset`; the
+  Reset e2e tests pass.
 - [x] **Reset button visibility** — fixed in v0.6.4 (`989b6e7`): hidden unless
-  `on_reset` is registered; the "Deferred" section in
+  `on_reset` is registered. The “Deferred” section in
   `2026-09-02-architectural-decisions-design.md` is stale and kept only for
   history.
 - [x] Responsive nav Approach A (flex-wrap) — superseded by
@@ -175,5 +182,5 @@ Design: `docs/superpowers/specs/2026-11-11-client-ack-correlation-design.md` §1
 - [-] `/api/firmware/upload` — generalized into the 0.8.0 file-upload field.
 - [-] `GET /api/settings`, `POST /api/settings/apply` — removed in 0.6.0;
   re-verify the test server.
-- [-] Library-owned auth hooks (per-field) — rejected; use endpoint partition +
-  Basic/Digest middleware as part of the 1.0 security item.
+- [-] Library-owned auth hooks (per-field) — rejected; see the 1.0 secure
+  example and the 2.0 endpoint-auth plan.
