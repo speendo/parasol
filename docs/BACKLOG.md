@@ -33,9 +33,10 @@ sub-spec; the docs branch is the integration point.
 
 ### 1.0 code work
 
-- [ ] **Save-handler `err` initialization.** On the unreachable-in-practice
-  `buf == NULL` fallback, the 400 response currently sends an uninitialized
-  buffer. Initialize a real message. Branch: `feature/1.0-correctness`.
+- [ ] **Save-handler `err` initialization.** On the rare `buf == NULL`
+  (out-of-memory) fallback, the 400 response currently sends an uninitialized
+  buffer. Initialize a real message and return 500. Branch:
+  `feature/1.0-correctness`.
 - [ ] **Bound sync recovery when a reply omits a key.** If a sync reply lacks
   a key the client is recovering, drop that key instead of re-arming another
   sync. Measured +11 gzip bytes. Unit test. Branch: `feature/1.0-correctness`.
