@@ -8,9 +8,9 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done · `[-]` dropped/supersede
 
 Last updated: 2026-11-13
 
-## 1.0 scope
+## 0.10 scope
 
-Design: `docs/superpowers/specs/2026-11-13-1.0-scope-design.md`.
+Design: `docs/superpowers/specs/2026-11-13-0.10-scope-design.md`.
 
 Release sequence:
 
@@ -18,28 +18,28 @@ Release sequence:
 2. **0.8.0** — generic file upload.
 3. **0.9.0** — client echo-correlation fix (wire change). Merged to `main`,
    tagged `v0.9.0`, README install URLs updated.
-4. **1.0.0** — after the correctness, message, secure-example, hardware,
+4. **0.10.0** — after the correctness, message, secure-example, hardware,
    and release items below.
 
-The 1.0 code work is split into branches. Each branch carries its own
-sub-spec; the docs branch is the integration point.
+The 0.10 code work is split into branches. Each branch carries its own
+sub-spec and is based on `main` after the scope docs landed.
 
 | Branch | Sub-spec | Status |
 |---|---|---|
-| `feature/1.0-correctness` | `2026-11-13-1.0-correctness-design.md` | [ ] |
-| `feature/1.0-message-api` | `2026-11-13-prsl-message-design.md` | [ ] |
-| `feature/1.0-secure-example` | `2026-11-13-secure-example-design.md` | [ ] |
+| `feature/0.10-correctness` | `2026-11-13-0.10-correctness-design.md` | [ ] |
+| `feature/0.10-message-api` | `2026-11-13-prsl-message-design.md` | [ ] |
+| `feature/0.10-secure-example` | `2026-11-13-secure-example-design.md` | [ ] |
 | `docs/2.0-endpoints-actions` | `2026-11-13-2.0-endpoints-actions-design.md` | [ ] design only |
 
-### 1.0 code work
+### 0.10 code work
 
 - [ ] **Save-handler `err` initialization.** On the rare `buf == NULL`
   (out-of-memory) fallback, the 400 response currently sends an uninitialized
   buffer. Initialize a real message and return 500. Branch:
-  `feature/1.0-correctness`.
+  `feature/0.10-correctness`.
 - [ ] **Bound sync recovery when a reply omits a key.** If a sync reply lacks
   a key the client is recovering, drop that key instead of re-arming another
-  sync. Measured +11 gzip bytes. Unit test. Branch: `feature/1.0-correctness`.
+  sync. Measured +11 gzip bytes. Unit test. Branch: `feature/0.10-correctness`.
 - [ ] **`prsl_stop()` contract + stopping guard.** Document that it is a
   shutdown call, not a reboot step:
   - call from the main task (`setup()`/`loop()`) at a quiet moment,
@@ -48,24 +48,24 @@ sub-spec; the docs branch is the integration point.
   - an orderly shutdown may set a flag in `on_reboot` and stop+restart from
     the main loop.
   Add a stopping flag so new requests are rejected once teardown begins.
-  Branch: `feature/1.0-correctness`.
+  Branch: `feature/0.10-correctness`.
 - [ ] **`prsl_message(level, message)`.** Broadcast a transient user message
   with INFO / WARNING / ERROR levels. Wire:
   `{"type":"message","level":"info|warning|error","message":"..."}`. The
   client adds `ℹ` / `⚠` / `✖` and colors warning/error. Protocol failures
-  keep using `type:"error"`. Branch: `feature/1.0-message-api`.
+  keep using `type:"error"`. Branch: `feature/0.10-message-api`.
 - [ ] **`examples/secure` cookie lock.** Login/logout, shared password,
   in-RAM session token, `HttpOnly; SameSite=Strict` cookie, server-wide
   middleware covering HTTP and the WS handshake, `Origin` check, HTTPS
-  caveat. Compile-check in CI. Branch: `feature/1.0-secure-example`.
+  caveat. Compile-check in CI. Branch: `feature/0.10-secure-example`.
 - [ ] **Reconnect-while-dirty e2e test.** Verify a reconnect with unsaved
   edits re-sends only values that differ from the device and keeps the rest.
-  Add to `feature/1.0-correctness` if it fits naturally.
+  Add to `feature/0.10-correctness` if it fits naturally.
 - [ ] **Busy-state failure test.** Cover that `aria-busy` clears when Save
   fails, not only when it succeeds. Add opportunistically; the behavior is
   already correct in `handleSaveApply()`.
 
-### 1.0 release gates
+### 0.10 release gates
 
 These are not code branches. They run after the code is feature-complete.
 
@@ -75,9 +75,9 @@ These are not code branches. They run after the code is feature-complete.
 - [ ] **Release checklist/docs.** README, `API_REFERENCE.md`,
   `WS_PROTOCOL.md`, `docs/reference/field-format.md` (upload + per-field-type
   options matrix), CHANGELOG, examples, tags. README install URLs must point
-  at the real `v1.0.0` tag.
+  at the real `v0.10.0` tag.
 - [ ] **Stability promise.** Freeze public API and wire format; document
-  semver, deprecation policy, and the 0.9 → 1.0 migration.
+  semver, deprecation policy, and the 0.9 → 0.10 migration.
 - [ ] **Distribution.** Publish to the PlatformIO Registry (`pio pkg pack`,
   account). Verify packaging excludes `tests/`, `.pio/`, and the venv.
   Document the Arduino IDE limitation (dependency graph).
@@ -183,5 +183,5 @@ Low priority. Do these opportunistically, not as release blockers.
 - [-] `/api/firmware/upload` — generalized into the 0.8.0 file-upload field.
 - [-] `GET /api/settings`, `POST /api/settings/apply` — removed in 0.6.0;
   re-verify the test server.
-- [-] Library-owned auth hooks (per-field) — rejected; see the 1.0 secure
+- [-] Library-owned auth hooks (per-field) — rejected; see the 0.10 secure
   example and the 2.0 endpoint-auth plan.
