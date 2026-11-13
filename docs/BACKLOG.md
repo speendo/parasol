@@ -16,8 +16,9 @@ Release sequence:
 
 1. **0.7.0** — architectural decisions + asset generator fix.
 2. **0.8.0** — generic file upload.
-3. **0.9.0** — client echo-correlation fix (wire change). Merged to `main`,
-   tagged `v0.9.0`, README install URLs updated.
+3. **0.9.0** — client echo-correlation fix (wire change). Merged to `main`
+   and tagged `v0.9.0` locally, README install URLs updated. The tag and
+   `main` are not pushed yet; the README URLs resolve only after the push.
 4. **0.10.0** — after the correctness, message, secure-example, hardware,
    and release items below.
 
