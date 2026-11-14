@@ -6,7 +6,7 @@ outstanding. Add items here instead of leaving them buried in prose.
 
 Legend: `[ ]` open · `[~]` in progress · `[x]` done · `[-]` dropped/superseded
 
-Last updated: 2026-11-13
+Last updated: 2026-11-14
 
 ## 0.10 scope
 
