@@ -30,7 +30,7 @@ sub-spec and is based on `main` after the scope docs landed.
 | `feature/0.10-correctness` | `2026-11-13-0.10-correctness-design.md` | [ ] |
 | `feature/0.10-message-api` | `2026-11-13-prsl-message-design.md` | [ ] |
 | `feature/0.10-secure-example` | `2026-11-13-secure-example-design.md` | [ ] |
-| `docs/future-endpoints-actions` | `2026-11-13-endpoints-actions-design.md` | [ ] design only |
+| `docs/future-endpoints-actions` | `2026-11-13-endpoints-actions-design.md` | [x] design only, merged |
 
 ### 0.10 code work
 
