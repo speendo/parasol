@@ -236,13 +236,33 @@ esp_err_t prsl_start(void);
 esp_err_t prsl_reset(void);
 
 /** @brief Tear down the library (symmetric with prsl_start/prsl_init).
+ *
+ *  prsl_stop() is a shutdown call, not a reboot step.
+ *  Call it from your main task (setup()/loop()) at a quiet moment, when the
+ *  web UI is not in the middle of a request.
+ *
+ *  Never call it from on_save, on_reset, on_reboot, or on_upload. Those
+ *  callbacks run inside a request; prsl_stop() frees state that the request
+ *  still needs.
+ *
+ *  Rebooting does not need it. Do pre-reboot cleanup in on_reboot, then call
+ *  esp_restart().
+ *
+ *  If you need an orderly shutdown before a reboot, set a flag in on_reboot
+ *  and return; call prsl_stop() and esp_restart() from the main loop.
+ *
+ *  A stopping guard rejects new HTTP requests with 503 "Stopping" and stops
+ *  WebSocket work once teardown begins. It reduces the race; it does not
+ *  replace the contract above.
+ *
  *  Closes WebSocket clients, removes the WS handler, stops the server
  *  (server->end()), frees the store and resets globals. Afterwards a fresh
  *  prsl_add_group -> prsl_init -> prsl_start cycle can run again.
  *  @note The AsyncWebServer object is owned by the caller and is not freed;
  *  to re-init on the SAME server object, call server->reset() first to avoid
  *  duplicate route handlers.
- *  @return ESP_ERR_INVALID_STATE if not initialized. */
+ *  @return ESP_ERR_INVALID_STATE if not initialized. A second call after a
+ *  successful stop also returns ESP_ERR_INVALID_STATE. */
 esp_err_t prsl_stop(void);
 
 /* ── Runtime value access ──────────────────────────────────── */

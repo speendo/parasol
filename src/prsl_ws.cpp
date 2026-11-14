@@ -3,6 +3,7 @@
 #include "prsl_store.h"
 #include "prsl_json.h"
 #include "prsl_ws_handle.h"
+#include "prsl_state.h"
 #include "ESPAsyncWebServer.h"
 #include "esp_log.h"
 #include <stdlib.h>
@@ -11,6 +12,7 @@ static prsl_store_t *g_store = NULL;
 
 static void on_event(AsyncWebSocket *server, AsyncWebSocketClient *client,
                      AwsEventType type, void *arg, uint8_t *data, size_t len) {
+    if (prsl_is_stopping()) return;
     if (type == WS_EVT_CONNECT) {
         client->setCloseClientOnQueueFull(true);
 

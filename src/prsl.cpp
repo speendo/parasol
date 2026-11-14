@@ -5,6 +5,7 @@
 #include "prsl_assets.h"
 #include "prsl_body.h"
 #include "prsl_upload.h"
+#include "prsl_state.h"
 #include "ESPAsyncWebServer.h"
 #include <string.h>
 #include <stdio.h>
@@ -20,6 +21,16 @@ static prsl_reset_cb_t g_on_reset = NULL;
 static prsl_reboot_cb_t g_on_reboot = NULL;
 static bool g_initialized = false;
 static char g_get_buf[PRSL_MAX_PATH];
+static volatile bool g_stopping = false;
+
+bool prsl_is_stopping(void) { return g_stopping; }
+
+/* Reject new work once teardown has begun. */
+static bool stopping_reject(AsyncWebServerRequest *req) {
+    if (!g_stopping) return false;
+    req->send(503, "text/plain", "Stopping");
+    return true;
+}
 
 /* ── Upload state ───────────────────────────────────────────── */
 
@@ -155,7 +166,7 @@ static void upload_on_disconnect(uint32_t gen) {
 static void on_upload_body(AsyncWebServerRequest *req, uint8_t *data,
                            size_t len, size_t index, size_t total) {
     xSemaphoreTakeRecursive(g_upload_mutex, portMAX_DELAY);
-    if (g_upload_stopping) {
+    if (g_stopping || g_upload_stopping) {
         xSemaphoreGiveRecursive(g_upload_mutex);
         return;
     }
@@ -271,6 +282,7 @@ static void on_upload_body(AsyncWebServerRequest *req, uint8_t *data,
 esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
                     prsl_reset_cb_t on_reset, prsl_reboot_cb_t on_reboot) {
     if (!server) return ESP_ERR_INVALID_ARG;
+    g_stopping = false;
 
     prsl_store_load_values(&g_store);
 
@@ -291,6 +303,7 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
     for (size_t i = 0; i < prsl_assets_count; i++) {
         const prsl_asset_t *a = &prsl_assets[i];
         server->on(a->path, HTTP_GET, [a](AsyncWebServerRequest *req) {
+            if (stopping_reject(req)) return;
             AsyncWebServerResponse *resp = req->beginResponse(200, a->mime,
                 a->data, a->len);
             resp->addHeader("Content-Encoding", "gzip");
@@ -300,6 +313,7 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
 
     server->on("/api/settings/save", HTTP_POST,
         [](AsyncWebServerRequest *req) {
+            if (stopping_reject(req)) return;
             if (prsl_is_uploading()) {
                 req->send(409, "text/plain", "Upload in progress");
                 return;
@@ -307,6 +321,7 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
         }, NULL,
         [](AsyncWebServerRequest *req, uint8_t *data, size_t len,
            size_t index, size_t total) {
+            if (g_stopping) return;
             /* During an upload, skip allocation and the apply/send path; the
              * final handler above reports 409 without buffering a large body.
              * If an upload began after an earlier chunk allocated _tempObject,
@@ -366,6 +381,7 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
 
     server->on("/api/settings/reset", HTTP_POST,
         [](AsyncWebServerRequest *req) {
+            if (stopping_reject(req)) return;
             if (prsl_is_uploading()) {
                 req->send(409, "text/plain", "Upload in progress");
                 return;
@@ -386,6 +402,7 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
 
     server->on("/api/system/reboot", HTTP_POST,
         [](AsyncWebServerRequest *req) {
+            if (stopping_reject(req)) return;
             if (prsl_is_uploading()) {
                 req->send(409, "text/plain", "Upload in progress");
                 return;
@@ -406,6 +423,7 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
 
     server->on("/api/upload", HTTP_POST,
         [](AsyncWebServerRequest *req) {
+            if (stopping_reject(req)) return;
             char group[PRSL_MAX_PATH];
             char key[PRSL_MAX_PATH];
 
@@ -471,6 +489,7 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
         NULL,
         [](AsyncWebServerRequest *req, uint8_t *data, size_t len,
            size_t index, size_t total) {
+            if (g_stopping) return;
             (void)total;
             if (index == 0) {
                 g_preflight_len = 0;
@@ -487,6 +506,7 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
 
     server->on("/api/upload", HTTP_PUT,
         [](AsyncWebServerRequest *req) {
+            if (stopping_reject(req)) return;
             xSemaphoreTakeRecursive(g_upload_mutex, portMAX_DELAY);
             if (g_upload_stopping) {
                 xSemaphoreGiveRecursive(g_upload_mutex);
@@ -629,6 +649,7 @@ esp_err_t prsl_reset(void) {
 
 esp_err_t prsl_stop(void) {
     if (!g_initialized) return ESP_ERR_INVALID_STATE;
+    g_stopping = true;
 
     /* Abort any in-flight upload without racing a body callback. The mutex
      * serializes us against on_upload_body; the generation bump makes late
