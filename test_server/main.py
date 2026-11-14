@@ -95,6 +95,8 @@ status_store: dict[str, object] = {}
 start_time = time.time()
 connected: set[WebSocket] = set()
 _dirty: bool = False
+_drop_next_apply = False
+_apply_log = []      # store keys applied since the last reset
 
 # ── Upload state (mirrors the device's PRSL_FILE upload contract) ──────────
 UPLOAD_DIR = BASE / "test-results" / "uploads"
@@ -286,7 +288,7 @@ async def api_settings_save(request: Request):
 async def events_ws(ws: WebSocket):
     await ws.accept()
     connected.add(ws)
-    global _dirty
+    global _dirty, _drop_next_apply
     try:
         await ws.send_json({"type": "status", "data": build_status()})
         await ws.send_json(settings_message())
@@ -304,6 +306,10 @@ async def events_ws(ws: WebSocket):
                     await ws.send_json({"type": "ack", "i": i, "d": {}, "e": {}})
                     await ws.send_json({"type": "error", "message": "Invalid data"})
                     continue
+                if _drop_next_apply:
+                    _drop_next_apply = False
+                    await ws.close(code=1011)
+                    return
                 ack_e, applied, rejected = {}, 0, False
                 for group_key, fields in data.items():
                     if rejected:
@@ -321,11 +327,13 @@ async def events_ws(ws: WebSocket):
                         if store_key == "gpio.transform" and \
                                 isinstance(value, (int, float)) and not isinstance(value, bool):
                             applied_store[store_key] = value * 2
+                            _apply_log.append(store_key)
                             applied += 1
                         elif store_key == "gpio.discard":
                             pass                   # accepted, stored value untouched
                         elif schema_entry[0] != "file":
                             applied_store[store_key] = value
+                            _apply_log.append(store_key)
                             applied += 1
                 # dense d: every requested key that exists, read AFTER the apply
                 ack_d = {}
@@ -446,11 +454,13 @@ async def api_settings_apply(request: Request):
 
 @app.api_route("/api/settings/reset", methods=["GET", "POST"])
 async def api_settings_reset():
-    global _dirty
+    global _dirty, _drop_next_apply
     if _uploading:
         return PlainTextResponse("Upload in progress", status_code=409)
     nvs_store.clear()
     applied_store.clear()
+    _apply_log.clear()
+    _drop_next_apply = False
     # Discard any deferred (pending) uploads.
     for p in _pending.values():
         try:
@@ -674,6 +684,18 @@ async def api_test_reset_uploads():
         COMMITTED[k] = None
     await broadcast_settings()
     return {"ok": True}
+
+
+@app.post("/api/test/drop-next-apply")
+async def api_test_drop_next_apply():
+    global _drop_next_apply
+    _drop_next_apply = True
+    return {"ok": True}
+
+
+@app.get("/api/test/apply-log")
+async def api_test_apply_log():
+    return {"keys": list(_apply_log)}
 
 
 @app.post("/api/test/uploading")

@@ -339,6 +339,24 @@ test.describe('WebSocket notifications', () => {
     await page.locator('#notif-keep').click()
     await expect(page.locator('[name="wifi.ssid"]')).toHaveValue('LocalVal')
   })
+
+  test('reconnect with a pending edit resends only the edited field', async ({ page, request }) => {
+    await page.goto('/')
+    await page.waitForSelector('#config-form:not([aria-busy])')
+    await request.post('/api/test/drop-next-apply')
+
+    await page.locator('[name="wifi.ssid"]').fill('ReconnectKeep')
+    await page.locator('[name="wifi.ssid"]').blur()
+    // The server drops the apply and closes the socket; the client reconnects.
+    await page.waitForSelector('#config-form[aria-busy="true"]', { timeout: 5000 })
+    await page.waitForSelector('#config-form:not([aria-busy])', { timeout: 15000 })
+
+    await expect(page.locator('[name="wifi.ssid"]')).toHaveValue('ReconnectKeep')
+    await expect.poll(async () => {
+      const res = await request.get('/api/test/apply-log')
+      return (await res.json()).keys
+    }).toEqual(['wifi.ssid'])
+  })
 })
 
 test.describe('Status variables', () => {
