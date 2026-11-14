@@ -30,7 +30,7 @@ sub-spec and is based on `main` after the scope docs landed.
 | `feature/0.10-correctness` | `2026-11-13-0.10-correctness-design.md` | [ ] |
 | `feature/0.10-message-api` | `2026-11-13-prsl-message-design.md` | [ ] |
 | `feature/0.10-secure-example` | `2026-11-13-secure-example-design.md` | [ ] |
-| `docs/2.0-endpoints-actions` | `2026-11-13-2.0-endpoints-actions-design.md` | [ ] design only |
+| `docs/future-endpoints-actions` | `2026-11-13-endpoints-actions-design.md` | [ ] design only |
 
 ### 0.10 code work
 
@@ -85,9 +85,9 @@ These are not code branches. They run after the code is feature-complete.
 - [ ] **Presentation pass.** Nav divider, any remaining visual polish. Do
   this with the docs pass, not as code work.
 
-## 2.0
+## Later (not scheduled)
 
-Design: `docs/superpowers/specs/2026-11-13-2.0-endpoints-actions-design.md`.
+Design: `docs/superpowers/specs/2026-11-13-endpoints-actions-design.md`.
 
 - [ ] **Independent `/user` and `/admin` endpoints.** Per-endpoint store,
   dirty flag, callbacks, WebSocket, upload state, runtime API, and auth at the
@@ -109,7 +109,7 @@ product: one ESP32, one settings store, trusted LAN, usually one tab.
   is the contract.
 - [-] **“Server adjusted this” notice.** Replaced by the general
   `prsl_message` channel. Silent transform acceptance stays.
-- [-] **Fire-and-forget action field type.** Replaced by the 2.0
+- [-] **Fire-and-forget action field type.** Replaced by the later
   `prsl_add_action` idea.
 - [-] **`_meta.v` device-wide version.** Ack correlation + sync recovery already
   cover missed pushes. Revisit only with observed missed pushes.
@@ -149,7 +149,7 @@ Useful, but not library features:
 - [ ] File download. Counterpart to upload; application-specific.
 - [ ] Optional upload confirmation. UI/UX for destructive uploads.
 - [ ] Additional device actions in `#nav-actions`. Covered conceptually by
-        2.0 `prsl_add_action`.
+        the future `prsl_add_action`.
 - [ ] mDNS discovery.
 
 ## Minor / test hygiene
@@ -185,4 +185,4 @@ Low priority. Do these opportunistically, not as release blockers.
 - [-] `GET /api/settings`, `POST /api/settings/apply` — removed in 0.6.0;
   re-verify the test server.
 - [-] Library-owned auth hooks (per-field) — rejected; see the 0.10 secure
-  example and the 2.0 endpoint-auth plan.
+  example and the future endpoint-auth plan.
