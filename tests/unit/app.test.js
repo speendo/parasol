@@ -1668,6 +1668,27 @@ describe('handleSaveApply', () => {
     await new Promise((r) => setTimeout(r, 0))
     expect(document.getElementById('btn-save-apply').getAttribute('aria-busy')).toBe(null)
   })
+
+  it('clears aria-busy and shows the error when the POST rejects', async () => {
+    window.__test.dirty = true
+    window.fetch = function () { return Promise.reject(new Error('boom')) }
+    window.handleSaveApply()
+    expect(document.getElementById('btn-save-apply').getAttribute('aria-busy')).toBe('true')
+    await new Promise(function (r) { return setTimeout(r, 0) })
+    expect(document.getElementById('btn-save-apply').getAttribute('aria-busy')).toBe(null)
+    expect(document.getElementById('status-bar').textContent).toContain('Request failed')
+  })
+
+  it('clears aria-busy and shows the error on a non-OK POST', async () => {
+    window.__test.dirty = true
+    window.fetch = function () {
+      return Promise.resolve({ ok: false, status: 500, text: function () { return Promise.resolve('Save failed') } })
+    }
+    window.handleSaveApply()
+    await new Promise(function (r) { return setTimeout(r, 0) })
+    expect(document.getElementById('btn-save-apply').getAttribute('aria-busy')).toBe(null)
+    expect(document.getElementById('status-bar').textContent).toContain('Save failed')
+  })
 })
 
 describe('onUserInput', () => {
