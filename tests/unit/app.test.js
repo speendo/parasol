@@ -3412,6 +3412,25 @@ describe('ack timeout and recovery', () => {
     expect(document.querySelector('[name="wifi.ssid"]').value).toBe('sent')
   })
 
+  it('a sync reply that omits a recovering key drops it and sends no second sync', () => {
+    type('wifi.ssid', 'sent')
+    vi.advanceTimersByTime(5000)              // sync i:2
+    window.__test.sent = []
+    recv({ type: 'settings', i: 2, _meta: {}, data: { wifi: {
+      pass: ['text', 'Pass', { value: '' }] }}})
+    expect(window.__test.recovering).toEqual({})
+    expect(window.__test.syncId).toBe(0)
+    expect(window.__test.sent).toEqual([])
+  })
+
+  it('an ordinary push that omits a recovering key keeps recovery armed', () => {
+    type('wifi.ssid', 'sent')
+    vi.advanceTimersByTime(5000)              // sync i:2 is in flight
+    recv({ type: 'settings', _meta: {}, data: { wifi: {
+      pass: ['text', 'Pass', { value: '' }] }}})
+    expect(window.__test.recovering['wifi.ssid']).toBeDefined()
+  })
+
   it('ack_timeout_ms comes from the meta tag with a fallback', () => {
     var m = document.querySelector('meta[name="parasol-ack-timeout"]')
     m.content = '2500'
