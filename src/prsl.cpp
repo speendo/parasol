@@ -321,11 +321,8 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
 
             if (index == 0) {
                 req->_tempObject = malloc(total + 1);
-                if (!req->_tempObject) {
-                    req->send(500, "text/plain", "Out of memory");
-                    return;
-                }
-                ((char *)req->_tempObject)[0] = '\0';
+                if (req->_tempObject) ((char *)req->_tempObject)[0] = '\0';
+                /* On failure, fall through: the final chunk answers 500 below. */
             }
             char *buf = (char *)req->_tempObject;
             if (buf) {
@@ -334,11 +331,15 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
             }
             if (index + len < total) return;
 
+            if (!buf) {
+                req->send(500, "text/plain", "Out of memory");
+                return;
+            }
+
             xSemaphoreTakeRecursive(g_store.mutex, portMAX_DELAY);
 
-            char err[128];
-            prsl_save_status_t st = buf ? prsl_apply_save_body(buf, total, &g_store, err, sizeof(err))
-                                        : PRSL_SAVE_INVALID_JSON;
+            char err[128] = "Invalid save body";
+            prsl_save_status_t st = prsl_apply_save_body(buf, total, &g_store, err, sizeof(err));
             free(buf);
             req->_tempObject = NULL;
             if (st != PRSL_SAVE_APPLIED) {
