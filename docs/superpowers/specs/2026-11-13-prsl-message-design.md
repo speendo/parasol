@@ -139,8 +139,12 @@ Device flash cost is under 1 KB. The target is to stay at or below +100 gzip.
 
 ## Risks
 
-- `textAll()` may drop a message when a client queue is full; the existing
-  queue policy closes that client instead of silently keeping it stale.
+- `textAll()` hands the message to ESPAsyncWebServer's existing per-client send
+  queue; this feature adds no queue of its own. If a client's queue is already
+  full, the existing overflow policy (set at connect in `src/prsl_ws.cpp`)
+  closes that client rather than silently keeping it stale. That is acceptable
+  here because the message is transient: after reconnect, the normal status
+  and settings push re-syncs the page.
 - Long messages cost RAM on the device and in the browser. Document “keep
   messages short”; do not add an arbitrary cap unless a real need appears.
 - The Unicode symbols are presentation. If a font or screen reader handles
