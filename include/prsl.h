@@ -29,6 +29,13 @@ typedef enum {
     PRSL_VAL_NULL
 } prsl_val_kind_t;
 
+/** @brief Severity for prsl_message(). */
+typedef enum {
+    PRSL_MSG_INFO,
+    PRSL_MSG_WARNING,
+    PRSL_MSG_ERROR
+} prsl_msg_level_t;
+
 /** @brief Discriminated value passed to on_set callbacks and prsl_set_val.
  *  kind == PRSL_VAL_NULL means "no value". u.str points into the parsed
  *  message body and is only valid for the duration of the callback call —
@@ -300,6 +307,24 @@ esp_err_t prsl_get_bool(const char *path, bool *out);
 
 esp_err_t prsl_push(void);
 esp_err_t prsl_broadcast_status(void);
+
+/** @brief Broadcast a transient user-facing message to every connected browser.
+ *
+ *  INFO and WARNING are shown in the status bar; ERROR is highlighted.
+ *  The message is not stored and does not affect dirty state. Protocol
+ *  failures still use the library's own type:"error" path.
+ *
+ *  Safe to call from on_set, on_save, on_reset, on_reboot, on_upload, or a
+ *  normal application task after prsl_start().
+ *
+ *  @param level   PRSL_MSG_INFO, PRSL_MSG_WARNING, or PRSL_MSG_ERROR.
+ *  @param message NUL-terminated text. Keep it short; the library copies it
+ *                 into the outgoing message and frees its own copy.
+ *  @return ESP_OK on a broadcast attempt, ESP_ERR_INVALID_ARG for NULL,
+ *          ESP_ERR_INVALID_STATE when the WebSocket is not started,
+ *          ESP_ERR_NO_MEM when the outbound JSON cannot be built.
+ */
+esp_err_t prsl_message(prsl_msg_level_t level, const char *message);
 
 #ifdef __cplusplus
 }
