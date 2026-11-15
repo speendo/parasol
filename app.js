@@ -52,6 +52,16 @@ var parasol = (function () {
     statusBar.style.color = '';
   }
 
+  /** Show a transient INFO/WARNING/ERROR message in the status bar. */
+  function showMessage(level, msg) {
+    var icon = '\u2139';
+    var color = '';
+    if (level === 'warning') { icon = '\u26a0'; color = 'orange'; }
+    else if (level === 'error') { icon = '\u2716'; color = 'var(--pico-color-red)'; }
+    statusBar.textContent = icon + ' ' + msg;
+    statusBar.style.color = color;
+  }
+
   /**
    * Serialize all form field values into a flat key-value object.
    * Keys are "grpId.fieldKey", values are native types (string, boolean).
@@ -394,6 +404,7 @@ var parasol = (function () {
     var msg = JSON.parse(event.data);
     if (msg.type === 'status') { processStatus(msg.data); return; }
     if (msg.type === 'error') { showError(msg.message); return; }
+    if (msg.type === 'message') { showMessage(msg.level, msg.message); return; }
     wsRetries = 0;
     if (msg.type === 'ack') { onAck(msg); return; }
     if (msg.type !== 'settings' && !msg._meta && !(typeof __DEV__ === 'undefined' || __DEV__)) return;
@@ -1636,6 +1647,7 @@ var parasol = (function () {
     updateUI: updateUI,
     showError: showError,
     clearError: clearError,
+    showMessage: showMessage,
     postJSON: postJSON,
     syncThen: syncThen,
     handleSaveApply: handleSaveApply,
