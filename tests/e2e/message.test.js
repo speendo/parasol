@@ -19,6 +19,11 @@ test.describe('status bar messages', () => {
     expect(await page.locator('#status-bar').evaluate(function (el) {
       return el.style.color
     })).toBe('orange')
+    await expect(page.locator('#status-bar')).toHaveAttribute('role', 'status')
+    await expect(page.locator('#status-dismiss')).toBeVisible()
+    await page.locator('#status-dismiss').click()
+    await expect(page.locator('#status-bar')).toBeEmpty()
+    await expect(page.locator('#status-dismiss')).toBeHidden()
   })
 
   test('an error message shows the error glyph in red', async ({ page, request }) => {
@@ -41,14 +46,15 @@ test.describe('status bar messages', () => {
     await page.waitForSelector('#config-form:not([aria-busy])')
     await expect(page.locator('details#wifi')).toBeVisible()
 
+    await request.post('/api/settings/external-change', {
+      data: { wifi: { ssid: ['text', 'SSID', { value: 'AfterMessage' }] } },
+    })
+    await expect(page.locator('#server-changed')).not.toBeHidden()
+
     await request.post('/api/test/message', {
       data: { level: 'info', message: 'Settings restored' },
     })
     await expect(page.locator('#status-bar')).toHaveText('\u2139 Settings restored')
-
-    await request.post('/api/settings/external-change', {
-      data: { wifi: { ssid: ['text', 'SSID', { value: 'AfterMessage' }] } },
-    })
 
     await expect(page.locator('details#message')).toHaveCount(0)
     await expect(page.locator('#nav-list a[href="#message"]')).toHaveCount(0)

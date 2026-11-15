@@ -1133,6 +1133,38 @@ describe('showMessage', function () {
   })
 })
 
+describe('status dismiss', function () {
+  beforeEach(function () {
+    var sb = document.getElementById('status-bar')
+    sb.textContent = ''
+    sb.style.color = ''
+    document.getElementById('status-dismiss').hidden = true
+    window.wireButtons()
+  })
+
+  it('is revealed by a message and dismisses it on click', function () {
+    var btn = document.getElementById('status-dismiss')
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      type: 'message', level: 'warning', message: 'x',
+    }) })
+    expect(btn.hidden).toBe(false)
+
+    btn.click()
+
+    expect(document.getElementById('status-bar').textContent).toBe('')
+    expect(document.getElementById('status-bar').style.color).toBe('')
+    expect(btn.hidden).toBe(true)
+  })
+
+  it('is revealed by an error and hidden by clearStatus', function () {
+    var btn = document.getElementById('status-dismiss')
+    window.showError('boom')
+    expect(btn.hidden).toBe(false)
+    window.clearStatus()
+    expect(btn.hidden).toBe(true)
+  })
+})
+
 describe('postJSON', () => {
   beforeEach(() => {
     document.getElementById('status-bar').textContent = ''

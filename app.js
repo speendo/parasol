@@ -4,6 +4,7 @@ var parasol = (function () {
   var navList = document.getElementById('nav-list');
   var configForm = document.getElementById('config-form');
   var statusBar = document.getElementById('status-bar');
+  var statusDismiss = document.getElementById('status-dismiss');
   var footer = document.querySelector('footer');
   var btnSaveApply = document.getElementById('btn-save-apply');
   var btnReset = document.getElementById('btn-reset');
@@ -44,12 +45,14 @@ var parasol = (function () {
   function showError(msg) {
     statusBar.textContent = msg;
     statusBar.style.color = 'var(--pico-color-red)';
+    statusDismiss.hidden = false;
   }
 
   /** Clear the status bar error. */
   function clearStatus() {
     statusBar.textContent = '';
     statusBar.style.color = '';
+    statusDismiss.hidden = true;
   }
 
   /** Show a transient INFO/WARNING/ERROR message in the status bar. */
@@ -60,6 +63,7 @@ var parasol = (function () {
     else if (level === 'error') { icon = '\u2716'; color = 'var(--pico-color-red)'; }
     statusBar.textContent = icon + ' ' + (msg || '');
     statusBar.style.color = color;
+    statusDismiss.hidden = false;
   }
 
   /**
@@ -1175,6 +1179,7 @@ var parasol = (function () {
   /** Wire up button click handlers (Save, Reset, notification bar actions). */
   function wireButtons() {
     btnSaveApply.addEventListener('click', handleSaveApply);
+    statusDismiss.addEventListener('click', clearStatus);
     btnReset.addEventListener('click', function () {
       if (resetInProgress) return;
       resetInProgress = true;

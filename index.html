@@ -17,6 +17,7 @@
       #status-bar {
         margin: 0;
       }
+      #status-dismiss { padding: .25rem .6rem; }
       .sticky-bar {
         position: sticky;
         z-index: 10;
@@ -108,7 +109,8 @@
 
     <footer class="sticky-bar bottom">
       <div class="container">
-        <mark id="status-bar"></mark>
+        <mark id="status-bar" role="status"></mark>
+        <button id="status-dismiss" type="button" aria-label="Dismiss message" hidden>&times;</button>
         <div role="group">
           <button id="btn-reset" class="secondary" hidden>Reset</button>
           <button id="btn-save-apply" disabled hidden>Save</button>
