@@ -27,21 +27,21 @@ sub-spec and is based on `main` after the scope docs landed.
 
 | Branch | Sub-spec | Status |
 |---|---|---|
-| `feature/0.10-correctness` | `2026-11-13-0.10-correctness-design.md` | [~] implemented, pending merge |
+| `feature/0.10-correctness` | `2026-11-13-0.10-correctness-design.md` | [x] merged |
 | `feature/0.10-message-api` | `2026-11-13-prsl-message-design.md` | [ ] |
 | `feature/0.10-secure-example` | `2026-11-13-secure-example-design.md` | [ ] |
 | `docs/future-endpoints-actions` | `2026-11-13-endpoints-actions-design.md` | [x] design only, merged |
 
 ### 0.10 code work
 
-- [ ] **Save-handler `err` initialization.** On the rare `buf == NULL`
+- [x] **Save-handler `err` initialization.** On the rare `buf == NULL`
   (out-of-memory) fallback, the 400 response currently sends an uninitialized
   buffer. Initialize a real message and return 500. Branch:
   `feature/0.10-correctness`.
-- [ ] **Bound sync recovery when a reply omits a key.** If a sync reply lacks
+- [x] **Bound sync recovery when a reply omits a key.** If a sync reply lacks
   a key the client is recovering, drop that key instead of re-arming another
   sync. Measured +11 gzip bytes. Unit test. Branch: `feature/0.10-correctness`.
-- [ ] **`prsl_stop()` contract + stopping guard.** Document that it is a
+- [x] **`prsl_stop()` contract + stopping guard.** Document that it is a
   shutdown call, not a reboot step:
   - call from the main task (`setup()`/`loop()`) at a quiet moment,
   - never from `on_save` / `on_reset` / `on_reboot` / `on_upload`,
@@ -59,10 +59,10 @@ sub-spec and is based on `main` after the scope docs landed.
   in-RAM session token, `HttpOnly; SameSite=Strict` cookie, server-wide
   middleware covering HTTP and the WS handshake, `Origin` check, HTTPS
   caveat. Compile-check in CI. Branch: `feature/0.10-secure-example`.
-- [ ] **Reconnect-while-dirty e2e test.** Verify a reconnect with unsaved
+- [x] **Reconnect-while-dirty e2e test.** Verify a reconnect with unsaved
   edits re-sends only values that differ from the device and keeps the rest.
   Add to `feature/0.10-correctness` if it fits naturally.
-- [ ] **Busy-state failure test.** Cover that `aria-busy` clears when Save
+- [x] **Busy-state failure test.** Cover that `aria-busy` clears when Save
   fails, not only when it succeeds. Add opportunistically; the behavior is
   already correct in `handleSaveApply()`.
 
