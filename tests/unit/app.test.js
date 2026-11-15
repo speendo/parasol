@@ -1298,10 +1298,10 @@ describe('syncThen', () => {
     }
   })
 
-  it('clears error, resets baseline, updates UI', () => {
+  it('resets baseline and updates UI without touching the status bar', () => {
     window.syncThen()
     expect(window.getPending()).toEqual({})
-    expect(document.getElementById('status-bar').textContent).toBe('')
+    expect(document.getElementById('status-bar').textContent).toBe('old error')
   })
 })
 
@@ -1711,6 +1711,24 @@ describe('handleSaveApply', () => {
 
   afterEach(() => {
     window.fetch = origFetch
+  })
+
+  it('keeps a message that arrives while the save is pending', async () => {
+    var resolveFetch
+    window.fetch = function () {
+      return new Promise(function (res) { resolveFetch = res })
+    }
+    document.querySelector('[name="wifi.ssid"]').value = 'saved'
+    window.__test.dirty = true
+    window.handleSaveApply()
+
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      type: 'message', level: 'info', message: 'Settings saved',
+    }) })
+
+    resolveFetch({ ok: true })
+    await new Promise(function (r) { return setTimeout(r, 0) })
+    expect(document.getElementById('status-bar').textContent).toBe('\u2139 Settings saved')
   })
 
   it('sends pending patch to /api/settings/save', async () => {

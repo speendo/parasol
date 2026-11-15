@@ -889,9 +889,10 @@ var parasol = (function () {
     footer.classList.remove('pending');
   }
 
-  /** Reset dirty flag, set baseline, update UI - called after successful save. */
+  /** Reset dirty flag, set baseline, update UI - called after successful save.
+   *  Does not touch the status bar: postJSON cleared it when the request
+   *  started, and a prsl_message frame may have arrived while it was pending. */
   function syncThen() {
-    clearError();
     dirty = false;
     setBaseline();
     updateUI();
