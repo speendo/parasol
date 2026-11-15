@@ -47,7 +47,7 @@ var parasol = (function () {
   }
 
   /** Clear the status bar error. */
-  function clearError() {
+  function clearStatus() {
     statusBar.textContent = '';
     statusBar.style.color = '';
   }
@@ -58,7 +58,7 @@ var parasol = (function () {
     var color = '';
     if (level === 'warning') { icon = '\u26a0'; color = 'orange'; }
     else if (level === 'error') { icon = '\u2716'; color = 'var(--pico-color-red)'; }
-    statusBar.textContent = icon + ' ' + msg;
+    statusBar.textContent = icon + ' ' + (msg || '');
     statusBar.style.color = color;
   }
 
@@ -227,7 +227,7 @@ var parasol = (function () {
    * @returns {Promise<boolean>} true on success, false on error
    */
   async function postJSON(url, data) {
-    clearError();
+    clearStatus();
     try {
       var res = await fetch(url, {
         method: 'POST',
@@ -330,7 +330,7 @@ var parasol = (function () {
     revalidateAll();
     setBaseline();
     configForm.removeAttribute('aria-busy');
-    clearError();
+    clearStatus();
     if (resetInProgress) resetInProgress = false;
     updateUI();
     handleHash();
@@ -403,7 +403,6 @@ var parasol = (function () {
   function onWSMessage(event) {
     var msg = JSON.parse(event.data);
     if (msg.type === 'status') { processStatus(msg.data); return; }
-    if (msg.type === 'error') { showError(msg.message); return; }
     if (msg.type === 'message') { showMessage(msg.level, msg.message); return; }
     wsRetries = 0;
     if (msg.type === 'ack') { onAck(msg); return; }
@@ -1647,8 +1646,7 @@ var parasol = (function () {
     findField: findField,
     updateUI: updateUI,
     showError: showError,
-    clearError: clearError,
-    showMessage: showMessage,
+    clearStatus: clearStatus,
     postJSON: postJSON,
     syncThen: syncThen,
     handleSaveApply: handleSaveApply,

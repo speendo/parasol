@@ -997,7 +997,7 @@ describe('populateFromGroups', () => {
   })
 })
 
-describe('showError / clearError', () => {
+describe('showError / clearStatus', () => {
   beforeEach(() => {
     var sb = document.getElementById('status-bar')
     sb.textContent = ''
@@ -1010,40 +1010,50 @@ describe('showError / clearError', () => {
     expect(document.getElementById('status-bar').style.color).toBe('var(--pico-color-red)')
   })
 
-  it('clearError resets status bar', () => {
+  it('clearStatus resets status bar', () => {
     window.showError('Error')
-    window.clearError()
+    window.clearStatus()
     expect(document.getElementById('status-bar').textContent).toBe('')
     expect(document.getElementById('status-bar').style.color).toBe('')
   })
 })
 
 describe('showMessage', function () {
+  function recv(level, text) {
+    var frame = { type: 'message', message: text }
+    if (level !== undefined) frame.level = level
+    window.__test.receiveWSMessage({ data: JSON.stringify(frame) })
+  }
+
   beforeEach(function () {
     var sb = document.getElementById('status-bar')
     sb.textContent = ''
     sb.style.color = ''
     document.getElementById('config-form').removeAttribute('aria-busy')
     window.__test.inFlight = {}
+    window.__test.lastSent = {}
+    window.__test.pending = {}
+    window.__test.recovering = {}
+    window.__test.syncId = 0
     window.__test.dirty = false
   })
 
   it('shows INFO with the info glyph and no color', function () {
-    window.showMessage('info', 'Settings saved')
+    recv('info', 'Settings saved')
     var sb = document.getElementById('status-bar')
     expect(sb.textContent).toBe('\u2139 Settings saved')
     expect(sb.style.color).toBe('')
   })
 
   it('shows WARNING with the warning glyph in orange', function () {
-    window.showMessage('warning', 'Wi-Fi changed; reconnect')
+    recv('warning', 'Wi-Fi changed; reconnect')
     var sb = document.getElementById('status-bar')
     expect(sb.textContent).toBe('\u26a0 Wi-Fi changed; reconnect')
     expect(sb.style.color).toBe('orange')
   })
 
   it('shows ERROR with the error glyph in red', function () {
-    window.showMessage('error', 'Could not write config')
+    recv('error', 'Could not write config')
     var sb = document.getElementById('status-bar')
     expect(sb.textContent).toBe('\u2716 Could not write config')
     expect(sb.style.color).toBe('var(--pico-color-red)')
@@ -1051,54 +1061,75 @@ describe('showMessage', function () {
 
   it('treats an unknown or missing level as INFO', function () {
     var sb = document.getElementById('status-bar')
-    window.showMessage('bogus', 'hello')
+    recv('bogus', 'hello')
     expect(sb.textContent).toBe('\u2139 hello')
     expect(sb.style.color).toBe('')
-    window.showMessage(undefined, 'again')
+    recv(undefined, 'again')
     expect(sb.textContent).toBe('\u2139 again')
   })
 
+  it('renders a missing message key as an empty status line', function () {
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      type: 'message', level: 'info',
+    }) })
+    expect(document.getElementById('status-bar').textContent).toBe('\u2139 ')
+  })
+
   it('renders message text literally, not as markup', function () {
-    window.showMessage('info', '<b>hi</b>')
+    recv('info', '<img src=x onerror="window.__pwned=1">')
     var sb = document.getElementById('status-bar')
-    expect(sb.textContent).toBe('\u2139 <b>hi</b>')
-    expect(sb.querySelector('b')).toBe(null)
+    expect(sb.textContent).toBe('\u2139 <img src=x onerror="window.__pwned=1">')
+    expect(sb.querySelector('img')).toBe(null)
   })
 
   it('replaces an earlier message and clears its color', function () {
     var sb = document.getElementById('status-bar')
-    window.showMessage('error', 'bad')
-    window.showMessage('info', 'ok')
+    recv('error', 'bad')
+    recv('info', 'ok')
     expect(sb.textContent).toBe('\u2139 ok')
     expect(sb.style.color).toBe('')
   })
 
-  it('a message frame renders while a batch is in flight', function () {
-    window.__test.inFlight = { 'wifi.ssid': true }
-    document.getElementById('config-form').setAttribute('aria-busy', 'true')
-    window.__test.receiveWSMessage({ data: JSON.stringify({
-      type: 'message', level: 'warning', message: 'x',
-    }) })
-    expect(document.getElementById('status-bar').textContent).toBe('\u26a0 x')
+  it('renders a protocol error frame as an ERROR message', function () {
+    recv('error', 'Missing apply id')
+    var sb = document.getElementById('status-bar')
+    expect(sb.textContent).toBe('\u2716 Missing apply id')
+    expect(sb.style.color).toBe('var(--pico-color-red)')
   })
 
-  it('a message frame leaves dirty state and form values alone', function () {
+  it('ignores the removed type:"error" frame', function () {
+    window.__test.receiveWSMessage({ data: JSON.stringify({
+      type: 'error', message: 'legacy',
+    }) })
+    expect(document.getElementById('status-bar').textContent).toBe('')
+  })
+
+  it('is not exported on the public object', function () {
+    expect(window.showMessage).toBeUndefined()
+  })
+
+  it('renders while a batch is in flight and changes no state', function () {
     document.querySelector('#config-form').innerHTML = '<input name="wifi.ssid" value="mine" />'
     window.__test.groups = [
       { id: 'wifi', fields: [
         { key: 'ssid', type: 'text', label: 'SSID', opts: { value: 'mine' } },
       ]},
     ]
-    window.__test.dirty = false
     window.setBaseline()
+    window.__test.lastSent = { 'wifi.ssid': 'mine' }
+    window.__test.pending = { 7: { keys: ['wifi.ssid'], sent: { 'wifi.ssid': 'mine' } } }
+    window.__test.inFlight = { 'wifi.ssid': true }
+    document.getElementById('config-form').setAttribute('aria-busy', 'true')
 
-    window.__test.receiveWSMessage({ data: JSON.stringify({
-      type: 'message', level: 'info', message: 'hello',
-    }) })
+    recv('warning', 'x')
 
+    expect(document.getElementById('status-bar').textContent).toBe('\u26a0 x')
+    expect(window.__test.inFlight['wifi.ssid']).toBe(true)
+    expect(window.__test.lastSent['wifi.ssid']).toBe('mine')
+    expect(window.__test.pending[7]).toBeDefined()
     expect(window.__test.dirty).toBe(false)
-    expect(document.querySelector('[name="wifi.ssid"]').value).toBe('mine')
     expect(window.getPending()).toEqual({})
+    expect(document.getElementById('config-form').getAttribute('aria-busy')).toBe('true')
   })
 })
 
