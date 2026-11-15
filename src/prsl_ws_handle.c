@@ -48,7 +48,7 @@ int prsl_ws_handle(const char *json, size_t len, prsl_store_t *store,
 
     cJSON *msg = cJSON_ParseWithLength(json, len);
     if (!msg) {
-        out->error = strdup("{\"type\":\"error\",\"message\":\"Invalid JSON\"}");
+        out->error = strdup("{\"type\":\"message\",\"level\":\"error\",\"message\":\"Invalid JSON\"}");
         return -1;
     }
 
@@ -63,7 +63,7 @@ int prsl_ws_handle(const char *json, size_t len, prsl_store_t *store,
     /* Sync: reply to the requester only; no store mutation, no broadcast. */
     if (strcmp(action->valuestring, "sync") == 0) {
         if (!cJSON_IsNumber(id)) {
-            out->error = strdup("{\"type\":\"error\",\"message\":\"Missing sync id\"}");
+            out->error = strdup("{\"type\":\"message\",\"level\":\"error\",\"message\":\"Missing sync id\"}");
             cJSON_Delete(msg);
             return 0;
         }
@@ -88,7 +88,7 @@ int prsl_ws_handle(const char *json, size_t len, prsl_store_t *store,
     }
 
     if (!cJSON_IsNumber(id)) {
-        out->error = strdup("{\"type\":\"error\",\"message\":\"Missing apply id\"}");
+        out->error = strdup("{\"type\":\"message\",\"level\":\"error\",\"message\":\"Missing apply id\"}");
         cJSON_Delete(msg);
         return 0;
     }
@@ -121,7 +121,7 @@ int prsl_ws_handle(const char *json, size_t len, prsl_store_t *store,
     out->to_sender = print_and_delete(ack);
 
     if (invalid_data) {
-        out->error = strdup("{\"type\":\"error\",\"message\":\"Invalid data\"}");
+        out->error = strdup("{\"type\":\"message\",\"level\":\"error\",\"message\":\"Invalid data\"}");
     } else if (applied > 0) {
         out->to_all = print_and_delete(prsl_build_settings_payload(store));
     }

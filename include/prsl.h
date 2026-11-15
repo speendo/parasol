@@ -29,6 +29,9 @@ typedef enum {
     PRSL_VAL_NULL
 } prsl_val_kind_t;
 
+/* Max bytes of text accepted by prsl_message(); a ceiling, not a buffer. */
+#define PRSL_MSG_MAX 512
+
 /** @brief Severity for prsl_message(). */
 typedef enum {
     PRSL_MSG_INFO,
@@ -318,11 +321,12 @@ esp_err_t prsl_broadcast_status(void);
  *  normal application task after prsl_start().
  *
  *  @param level   PRSL_MSG_INFO, PRSL_MSG_WARNING, or PRSL_MSG_ERROR.
- *  @param message NUL-terminated text. Keep it short; the library copies it
- *                 into the outgoing message and frees its own copy.
- *  @return ESP_OK on a broadcast attempt, ESP_ERR_INVALID_ARG for NULL,
- *          ESP_ERR_INVALID_STATE when the WebSocket is not started,
- *          ESP_ERR_NO_MEM when the outbound JSON cannot be built.
+ *  @param message NUL-terminated text, at most PRSL_MSG_MAX (512) bytes.
+ *                 Keep it short: the browser shows it as a status line.
+ *  @return ESP_OK on a broadcast attempt, ESP_ERR_INVALID_ARG for NULL or
+ *          text longer than PRSL_MSG_MAX, ESP_ERR_INVALID_STATE when the
+ *          WebSocket is not started, ESP_ERR_NO_MEM when the outbound JSON
+ *          cannot be built.
  */
 esp_err_t prsl_message(prsl_msg_level_t level, const char *message);
 

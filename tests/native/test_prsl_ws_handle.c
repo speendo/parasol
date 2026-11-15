@@ -134,7 +134,12 @@ void test_missing_i_is_protocol_error(void) {
     TEST_ASSERT_NULL(r.to_all);
     TEST_ASSERT_NOT_NULL(r.error);
     cJSON *e = parse(r.error);
-    TEST_ASSERT_EQUAL_STRING("Missing apply id", cJSON_GetStringValue(cJSON_GetObjectItem(e, "message")));
+    TEST_ASSERT_EQUAL_STRING("message",
+        cJSON_GetStringValue(cJSON_GetObjectItem(e, "type")));
+    TEST_ASSERT_EQUAL_STRING("error",
+        cJSON_GetStringValue(cJSON_GetObjectItem(e, "level")));
+    TEST_ASSERT_EQUAL_STRING("Missing apply id",
+        cJSON_GetStringValue(cJSON_GetObjectItem(e, "message")));
     cJSON_Delete(e); free_reply(&r);
     TEST_ASSERT_EQUAL_STRING("old",
         cJSON_GetStringValue(prsl_store_get_value(&store, "wifi", "ssid")));
@@ -157,6 +162,14 @@ void test_non_object_data_acks_and_errors(void) {
     TEST_ASSERT_EQUAL(9, cJSON_GetNumberValue(cJSON_GetObjectItem(ack, "i")));
     TEST_ASSERT_NOT_NULL(r.error);
     TEST_ASSERT_NULL(r.to_all);
+    cJSON *e = parse(r.error);
+    TEST_ASSERT_EQUAL_STRING("message",
+        cJSON_GetStringValue(cJSON_GetObjectItem(e, "type")));
+    TEST_ASSERT_EQUAL_STRING("error",
+        cJSON_GetStringValue(cJSON_GetObjectItem(e, "level")));
+    TEST_ASSERT_EQUAL_STRING("Invalid data",
+        cJSON_GetStringValue(cJSON_GetObjectItem(e, "message")));
+    cJSON_Delete(e);
     cJSON_Delete(ack); free_reply(&r);
 }
 
@@ -164,6 +177,14 @@ void test_invalid_json_error_only(void) {
     prsl_ws_reply_t r = run("{\"action\":");
     TEST_ASSERT_NULL(r.to_sender);
     TEST_ASSERT_NOT_NULL(r.error);
+    cJSON *e = parse(r.error);
+    TEST_ASSERT_EQUAL_STRING("message",
+        cJSON_GetStringValue(cJSON_GetObjectItem(e, "type")));
+    TEST_ASSERT_EQUAL_STRING("error",
+        cJSON_GetStringValue(cJSON_GetObjectItem(e, "level")));
+    TEST_ASSERT_EQUAL_STRING("Invalid JSON",
+        cJSON_GetStringValue(cJSON_GetObjectItem(e, "message")));
+    cJSON_Delete(e);
     free_reply(&r);
 }
 
@@ -192,7 +213,12 @@ void test_sync_without_id_is_protocol_error(void) {
     TEST_ASSERT_NULL(r.to_sender);
     TEST_ASSERT_NOT_NULL(r.error);
     cJSON *e = parse(r.error);
-    TEST_ASSERT_EQUAL_STRING("Missing sync id", cJSON_GetStringValue(cJSON_GetObjectItem(e, "message")));
+    TEST_ASSERT_EQUAL_STRING("message",
+        cJSON_GetStringValue(cJSON_GetObjectItem(e, "type")));
+    TEST_ASSERT_EQUAL_STRING("error",
+        cJSON_GetStringValue(cJSON_GetObjectItem(e, "level")));
+    TEST_ASSERT_EQUAL_STRING("Missing sync id",
+        cJSON_GetStringValue(cJSON_GetObjectItem(e, "message")));
     cJSON_Delete(e); free_reply(&r);
 }
 

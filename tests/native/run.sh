@@ -28,6 +28,12 @@ gcc "${FLAGS[@]}" \
   "$ROOT/tests/native/test_prsl_ws_handle.c" -o "/tmp/prsl_native_ws_handle"
 echo "== ws_handle =="; "/tmp/prsl_native_ws_handle"
 
+# msg: pure frame builder; no store or websocket dependency.
+gcc "${FLAGS[@]}" \
+  "$ROOT/src/prsl_msg.c" "$DEPS/cJSON.c" "$DEPS/unity.c" \
+  "$ROOT/tests/native/test_prsl_msg.c" -o "/tmp/prsl_native_msg"
+echo "== msg =="; "/tmp/prsl_native_msg"
+
 cat > "$ROOT/tests/native/check_store_api.cpp" <<'EOF'
 #include "prsl.h"
 #include "prsl_store.h"

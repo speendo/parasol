@@ -6,6 +6,7 @@
 #include "prsl_body.h"
 #include "prsl_upload.h"
 #include "prsl_state.h"
+#include "prsl_msg.h"
 #include "ESPAsyncWebServer.h"
 #include <string.h>
 #include <stdio.h>
@@ -850,26 +851,13 @@ esp_err_t prsl_broadcast_status(void) {
 
 /* ── User messages ──────────────────────────────────────────── */
 
-static const char *msg_level_name(prsl_msg_level_t level) {
-    switch (level) {
-        case PRSL_MSG_WARNING: return "warning";
-        case PRSL_MSG_ERROR:   return "error";
-        default:               return "info";
-    }
-}
-
 esp_err_t prsl_message(prsl_msg_level_t level, const char *message) {
     if (!message) return ESP_ERR_INVALID_ARG;
     if (!g_ws) return ESP_ERR_INVALID_STATE;
 
-    cJSON *root = cJSON_CreateObject();
-    if (!root) return ESP_ERR_NO_MEM;
-    cJSON_AddStringToObject(root, "type", "message");
-    cJSON_AddStringToObject(root, "level", msg_level_name(level));
-    cJSON_AddStringToObject(root, "message", message);
-    char *str = cJSON_PrintUnformatted(root);
-    cJSON_Delete(root);
-    if (!str) return ESP_ERR_NO_MEM;
+    char *str = NULL;
+    esp_err_t err = prsl_msg_build(level, message, &str);
+    if (err != ESP_OK) return err;
 
     g_ws->textAll(str);
     free(str);
