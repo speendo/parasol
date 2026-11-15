@@ -315,7 +315,7 @@ esp_err_t prsl_broadcast_status(void);
  *
  *  INFO and WARNING are shown in the status bar; ERROR is highlighted.
  *  The message is not stored and does not affect dirty state. Protocol
- *  failures still use the library's own type:"error" path.
+ *  failures use the same frame with level "error".
  *
  *  Safe to call from on_set, on_save, on_reset, on_reboot, on_upload, or a
  *  normal application task after prsl_start().
