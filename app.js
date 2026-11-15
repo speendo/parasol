@@ -4,6 +4,7 @@ var parasol = (function () {
   var navList = document.getElementById('nav-list');
   var configForm = document.getElementById('config-form');
   var statusBar = document.getElementById('status-bar');
+  var statusLive = document.getElementById('status-live');
   var statusDismiss = document.getElementById('status-dismiss');
   var footer = document.querySelector('footer');
   var btnSaveApply = document.getElementById('btn-save-apply');
@@ -41,18 +42,22 @@ var parasol = (function () {
   var serverUploading = false;
   var activeUpload = null;
 
-  /** Show an error message in the status bar. @param {string} msg */
-  function showError(msg) {
-    statusBar.textContent = msg;
-    statusBar.style.color = 'var(--pico-color-red)';
-    statusDismiss.hidden = false;
+  /** Write a status line to the visible bar and the live region. */
+  function setStatus(text, color) {
+    statusBar.textContent = text;
+    statusLive.textContent = text;
+    statusBar.style.color = color;
+    statusDismiss.hidden = !text;
   }
 
-  /** Clear the status bar error. */
+  /** Show an error message in the status bar. @param {string} msg */
+  function showError(msg) {
+    setStatus(msg, 'var(--pico-color-red)');
+  }
+
+  /** Clear the status bar and its live region. */
   function clearStatus() {
-    statusBar.textContent = '';
-    statusBar.style.color = '';
-    statusDismiss.hidden = true;
+    setStatus('', '');
   }
 
   /** Show a transient INFO/WARNING/ERROR message in the status bar. */
@@ -61,9 +66,7 @@ var parasol = (function () {
     var color = '';
     if (level === 'warning') { icon = '\u26a0'; color = 'orange'; }
     else if (level === 'error') { icon = '\u2716'; color = 'var(--pico-color-red)'; }
-    statusBar.textContent = icon + ' ' + (msg || '');
-    statusBar.style.color = color;
-    statusDismiss.hidden = false;
+    setStatus(icon + ' ' + (msg || ''), color);
   }
 
   /**

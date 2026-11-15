@@ -23,6 +23,7 @@ document.body.innerHTML = `
   </header>
   <form id="config-form"></form>
   <div id="status-bar"></div>
+  <span id="status-live" role="status"></span>
   <button id="status-dismiss" type="button" aria-label="Dismiss message" hidden>&times;</button>
   <footer></footer>
   <button id="btn-save-apply"></button>

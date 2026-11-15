@@ -9,6 +9,10 @@ test.describe('status bar messages', () => {
     await page.goto('/')
     await page.waitForSelector('#config-form:not([aria-busy])')
     await expect(page.locator('details#wifi')).toBeVisible()
+    await expect(page.locator('#status-live')).toHaveAttribute('role', 'status')
+    expect(await page.locator('#status-live').evaluate(function (el) {
+      return getComputedStyle(el).display
+    })).not.toBe('none')
 
     const res = await request.post('/api/test/message', {
       data: { level: 'warning', message: 'Wi-Fi changed; reconnect' },
@@ -19,10 +23,11 @@ test.describe('status bar messages', () => {
     expect(await page.locator('#status-bar').evaluate(function (el) {
       return el.style.color
     })).toBe('orange')
-    await expect(page.locator('#status-bar')).toHaveAttribute('role', 'status')
+    await expect(page.locator('#status-live')).toHaveText('\u26a0 Wi-Fi changed; reconnect')
     await expect(page.locator('#status-dismiss')).toBeVisible()
     await page.locator('#status-dismiss').click()
     await expect(page.locator('#status-bar')).toBeEmpty()
+    await expect(page.locator('#status-live')).toBeEmpty()
     await expect(page.locator('#status-dismiss')).toBeHidden()
   })
 

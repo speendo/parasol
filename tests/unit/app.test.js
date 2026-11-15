@@ -1015,6 +1015,7 @@ describe('showError / clearStatus', () => {
     window.clearStatus()
     expect(document.getElementById('status-bar').textContent).toBe('')
     expect(document.getElementById('status-bar').style.color).toBe('')
+    expect(document.getElementById('status-live').textContent).toBe('')
   })
 })
 
@@ -1043,6 +1044,7 @@ describe('showMessage', function () {
     var sb = document.getElementById('status-bar')
     expect(sb.textContent).toBe('\u2139 Settings saved')
     expect(sb.style.color).toBe('')
+    expect(document.getElementById('status-live').textContent).toBe('\u2139 Settings saved')
   })
 
   it('shows WARNING with the warning glyph in orange', function () {
@@ -1153,6 +1155,7 @@ describe('status dismiss', function () {
 
     expect(document.getElementById('status-bar').textContent).toBe('')
     expect(document.getElementById('status-bar').style.color).toBe('')
+    expect(document.getElementById('status-live').textContent).toBe('')
     expect(btn.hidden).toBe(true)
   })
 
