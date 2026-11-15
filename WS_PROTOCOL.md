@@ -154,25 +154,30 @@ applies. It is written **before** the settings broadcast the apply produces.
   value, unchanged by the failed write); `e` carries the failure. The client
   branches on `e` first, so the rejection wins over the stored value.
 
-A correlated rejection is reported as a failure only in `e` — no second
-`type:"error"` message follows. A batch that reaches an ack but cannot be
-applied at all (`data` is not an object) gets the ack **and** a `type:"error"`;
-unparsable input has no readable `i` and gets `type:"error"` alone.
+A correlated rejection is reported as a failure only in `e` — no message
+frame follows. A batch that reaches an ack but cannot be applied at all
+(`data` is not an object) gets the ack **and** an ERROR message; unparsable
+input has no readable `i` and gets the ERROR message alone.
 
-### `type: "error"`
+### `type: "message"`
 
-Sent on processing errors and protocol errors (for example an `apply` with no
-numeric `i`).
+Transient user-facing text. Application messages are broadcast to every
+connected client; protocol failures are sent to one client. A message is
+not stored, carries no `i`, no `_meta`, and no ack.
 
 ```json
-{
-  "type": "error",
-  "message": "Failed to apply setting: wifi.ssid exceeds max length"
-}
+{"type":"message","level":"info","message":"Settings saved"}
+{"type":"message","level":"warning","message":"Wi-Fi changed; reconnect"}
+{"type":"message","level":"error","message":"Missing apply id"}
 ```
 
-The browser displays the message in a notification bar. The form remains
-usable — error messages don't block further interaction.
+`level` is `"info"`, `"warning"`, or `"error"`; an unknown level renders as
+INFO. The browser prefixes `ℹ` / `⚠` / `✖`, colors WARNING amber and ERROR
+red, and offers a dismiss button. The status bar is a polite live region
+(`role="status"`). The device sends ERROR messages for protocol failures:
+invalid JSON, a missing/non-numeric apply `i`, invalid `data`, and a `sync`
+without a numeric `i`. Text is capped at `PRSL_MSG_MAX` (512 bytes) on the
+device.
 
 ## Client to Server Messages
 
@@ -199,8 +204,8 @@ meaningful only for the connection that sent it: it is not a version and not
 device-global. The server never stores it and never uses it as a precondition
 for applying a value; it only echoes it in the `ack`. **A missing or
 non-numeric `i` is a protocol error:** the batch is not applied, nothing is
-broadcast, and the sender gets `type:"error"`. No ack is possible, because
-there is nothing to correlate to.
+broadcast, and the sender gets an ERROR `type:"message"`. No ack is
+possible, because there is nothing to correlate to.
 
 **Why partial?** Sending only changed fields minimizes wire overhead (ESP32 is
 CPU- and bandwidth-constrained). The server merges the partial update into its
@@ -245,8 +250,9 @@ only**, carrying the same `i`:
 Ordinary broadcasts carry no `i`, so a reply is recognized exactly rather than
 as "the next push after I asked" — the user can start a new batch before the
 reply arrives. The sync id is drawn from the same per-connection counter as
-batch ids, so the two spaces never collide. A `sync` without a numeric `i` gets
-`type:"error"` and no reply. It mutates nothing and triggers no broadcast.
+batch ids, so the two spaces never collide. A `sync` without a numeric `i`
+gets an ERROR `type:"message"` and no reply. It mutates nothing and triggers
+no broadcast.
 
 ## State Machine Summary
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.10.0
+- New `prsl_message(level, message)`: broadcast a transient INFO / WARNING / ERROR line to every connected browser. Not stored, no ack, no effect on dirty state. The text is capped at `PRSL_MSG_MAX` (512 bytes); longer text returns `ESP_ERR_INVALID_ARG` before any allocation.
+- Client: messages render in the status bar with `ℹ` / `⚠` / `✖`, WARNING in amber and ERROR in red. The bar is a polite live region (`role="status"`) and carries a dismiss button. `clearError()` is renamed `clearStatus()`; a message arriving during a save is no longer erased by the save completing.
+- BREAKING (wire): protocol failures no longer use `type:"error"`. Invalid JSON, a missing/non-numeric apply `i`, invalid `data`, and a missing sync `i` now send `{"type":"message","level":"error","message":"..."}`. The client's `type:"error"` branch is removed.
+- Correctness: the save handler's OOM fallback answers 500 with an initialized message; a sync reply that omits a recovering key drops it instead of re-arming; `prsl_stop()` is documented as a shutdown call (never from `on_save`/`on_reset`/`on_reboot`/`on_upload`) and a stopping guard rejects new HTTP/WS work during teardown. Reconnect-with-unsaved-edit and busy-state failure tests added.
+- Server: `prsl_msg_build()` is host-testable and owns the frame cap, level mapping, and cJSON failure checks.
+- Specs: `2026-11-13-prsl-message-design.md`, `2026-11-15-0.10-message-followups-design.md`.
+- JS budget: `app.min.js` 23,289 raw / 7,992 gzip vs 0.9.0 at 22,737 raw / 7,808 gzip.
+
 ## 0.9.0
 - BREAKING (wire): `action:"apply"` now requires a numeric `i`. A message without one is a protocol error — nothing is applied, nothing is broadcast, and the sender gets `type:"error"` (no ack is possible, because there is nothing to correlate to).
 - New `type:"ack"` sent to the sender of every apply, including no-ops and all-rejected batches, and written before the resulting settings broadcast. `d` carries the decided `"group.key"` → value **read back from the store after `on_set`**, so transforms, discards, and fields with no `on_set` all report what is actually stored; `e` names the rejected key with reason `"rejected"`.

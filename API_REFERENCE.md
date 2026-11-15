@@ -802,7 +802,7 @@ esp_err_t prsl_get_bool(const char *path, bool *out);
 
 ## Push and Broadcast
 
-Two functions for sending data to connected WebSocket clients.
+Three functions for sending data to connected WebSocket clients.
 
 ```c
 /**
@@ -830,6 +830,25 @@ esp_err_t prsl_push(void);
  *
  * @return ESP_OK on success. */
 esp_err_t prsl_broadcast_status(void);
+```
+
+```c
+/**
+ * @brief Broadcast a transient user-facing message to all connected clients.
+ *
+ * Serializes {"type":"message","level":...,"message":...} and sends it to
+ * every open WS connection. The message is not stored and does not affect
+ * dirty state. Protocol failures use the same frame with level "error".
+ *
+ * @param level   PRSL_MSG_INFO, PRSL_MSG_WARNING, or PRSL_MSG_ERROR.
+ * @param message NUL-terminated text, at most PRSL_MSG_MAX (512) bytes.
+ *                Keep it short: the footer shows it as one status line.
+ * @return ESP_OK on a broadcast attempt, ESP_ERR_INVALID_ARG for NULL or
+ *         text longer than PRSL_MSG_MAX, ESP_ERR_INVALID_STATE when the
+ *         WebSocket is not started, ESP_ERR_NO_MEM when the frame cannot
+ *         be built.
+ */
+esp_err_t prsl_message(prsl_msg_level_t level, const char *message);
 ```
 
 **Pattern for live status updates:**
