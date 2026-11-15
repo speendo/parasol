@@ -698,6 +698,22 @@ async def api_test_apply_log():
     return {"keys": list(_apply_log)}
 
 
+@app.post("/api/test/message")
+async def api_test_message(body: dict):
+    """Broadcast a prsl_message frame to every connected client."""
+    payload = {
+        "type": "message",
+        "level": body.get("level", "info"),
+        "message": body.get("message", ""),
+    }
+    for client in list(connected):
+        try:
+            await client.send_json(payload)
+        except Exception:
+            connected.discard(client)
+    return {"ok": True}
+
+
 @app.post("/api/test/uploading")
 async def api_test_uploading(body: dict):
     global _uploading
