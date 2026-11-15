@@ -1616,11 +1616,17 @@ describe('buildPatch', () => {
 })
 
 describe('handleSaveApply', () => {
+  let origFetch
   beforeEach(() => {
+    origFetch = window.fetch
     document.querySelector('#config-form').innerHTML = '<input name="wifi.ssid" value="" />'
     window.__test.groups = [{ id: 'wifi', fields: [{ key: 'ssid', type: 'text', label: 'SSID' }] }]
     window.__test.dirty = false
     window.setBaseline()
+  })
+
+  afterEach(() => {
+    window.fetch = origFetch
   })
 
   it('sends pending patch to /api/settings/save', async () => {
@@ -1685,6 +1691,7 @@ describe('handleSaveApply', () => {
       return Promise.resolve({ ok: false, status: 500, text: function () { return Promise.resolve('Save failed') } })
     }
     window.handleSaveApply()
+    expect(document.getElementById('btn-save-apply').getAttribute('aria-busy')).toBe('true')
     await new Promise(function (r) { return setTimeout(r, 0) })
     expect(document.getElementById('btn-save-apply').getAttribute('aria-busy')).toBe(null)
     expect(document.getElementById('status-bar').textContent).toContain('Save failed')
@@ -3436,6 +3443,8 @@ describe('ack timeout and recovery', () => {
   it('a sync reply that omits a recovering key drops it and sends no second sync', () => {
     type('wifi.ssid', 'sent')
     vi.advanceTimersByTime(5000)              // sync i:2
+    expect(window.__test.syncId).toBe(2)
+    expect(window.__test.sent.filter(function (m) { return m.action === 'sync' }).length).toBe(1)
     window.__test.sent = []
     recv({ type: 'settings', i: 2, _meta: {}, data: { wifi: {
       pass: ['text', 'Pass', { value: '' }] }}})
@@ -3449,6 +3458,7 @@ describe('ack timeout and recovery', () => {
     vi.advanceTimersByTime(5000)              // sync i:2 is in flight
     recv({ type: 'settings', _meta: {}, data: { wifi: {
       pass: ['text', 'Pass', { value: '' }] }}})
+    expect(window.__test.syncId).toBe(2)
     expect(window.__test.recovering['wifi.ssid']).toBeDefined()
   })
 

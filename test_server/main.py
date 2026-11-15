@@ -96,7 +96,7 @@ start_time = time.time()
 connected: set[WebSocket] = set()
 _dirty: bool = False
 _drop_next_apply = False
-_apply_log = []      # store keys applied since the last reset
+_apply_log: list[str] = []      # store keys applied since the last reset
 
 # ── Upload state (mirrors the device's PRSL_FILE upload contract) ──────────
 UPLOAD_DIR = BASE / "test-results" / "uploads"
@@ -455,12 +455,12 @@ async def api_settings_apply(request: Request):
 @app.api_route("/api/settings/reset", methods=["GET", "POST"])
 async def api_settings_reset():
     global _dirty, _drop_next_apply
+    _apply_log.clear()
+    _drop_next_apply = False
     if _uploading:
         return PlainTextResponse("Upload in progress", status_code=409)
     nvs_store.clear()
     applied_store.clear()
-    _apply_log.clear()
-    _drop_next_apply = False
     # Discard any deferred (pending) uploads.
     for p in _pending.values():
         try:

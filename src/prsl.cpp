@@ -321,7 +321,10 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
         }, NULL,
         [](AsyncWebServerRequest *req, uint8_t *data, size_t len,
            size_t index, size_t total) {
-            if (g_stopping) return;
+            if (g_stopping) {
+                if (req->_tempObject) { free(req->_tempObject); req->_tempObject = NULL; }
+                return;
+            }
             /* During an upload, skip allocation and the apply/send path; the
              * final handler above reports 409 without buffering a large body.
              * If an upload began after an earlier chunk allocated _tempObject,
@@ -347,6 +350,7 @@ esp_err_t prsl_init(AsyncWebServer *server, prsl_save_cb_t on_save,
             if (index + len < total) return;
 
             if (!buf) {
+                /* Also reached if the upload early-out released the buffer. */
                 req->send(500, "text/plain", "Out of memory");
                 return;
             }

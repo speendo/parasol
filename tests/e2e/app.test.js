@@ -343,7 +343,8 @@ test.describe('WebSocket notifications', () => {
   test('reconnect with a pending edit resends only the edited field', async ({ page, request }) => {
     await page.goto('/')
     await page.waitForSelector('#config-form:not([aria-busy])')
-    await request.post('/api/test/drop-next-apply')
+    const arm = await request.post('/api/test/drop-next-apply')
+    expect(arm.ok()).toBeTruthy()
 
     await page.locator('[name="wifi.ssid"]').fill('ReconnectKeep')
     await page.locator('[name="wifi.ssid"]').blur()
@@ -356,6 +357,11 @@ test.describe('WebSocket notifications', () => {
       const res = await request.get('/api/test/apply-log')
       return (await res.json()).keys
     }).toEqual(['wifi.ssid'])
+
+    // A late extra apply must not slip past the first matching poll.
+    await page.waitForTimeout(250)
+    const settled = await request.get('/api/test/apply-log')
+    expect((await settled.json()).keys).toEqual(['wifi.ssid'])
   })
 })
 

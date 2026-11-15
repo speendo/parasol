@@ -455,6 +455,7 @@ var parasol = (function () {
       var rp = rk.split('.');
       var rv = resolveNested(data, rp);
       if (rv !== undefined && rv instanceof Array && rv.length >= 3) rv = rv[2] && rv[2].value;
+      /* Only a sync reply may drop an omitted key; ordinary pushes keep recovery armed. */
       if (rv === undefined) { if (isReply) delete recovering[rk]; continue; }
       resolveRecovering(rk, rv);
     }

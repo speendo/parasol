@@ -256,8 +256,9 @@ esp_err_t prsl_reset(void);
  *  replace the contract above.
  *
  *  Closes WebSocket clients, removes the WS handler, stops the server
- *  (server->end()), frees the store and resets globals. Afterwards a fresh
- *  prsl_add_group -> prsl_init -> prsl_start cycle can run again.
+ *  (server->end()), frees the store and clears the server, callback, and
+ *  initialized state. Afterwards a fresh prsl_add_group -> prsl_init ->
+ *  prsl_start cycle can run again.
  *  @note The AsyncWebServer object is owned by the caller and is not freed;
  *  to re-init on the SAME server object, call server->reset() first to avoid
  *  duplicate route handlers.
