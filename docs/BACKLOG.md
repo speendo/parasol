@@ -28,7 +28,7 @@ sub-spec and is based on `main` after the scope docs landed.
 | Branch | Sub-spec | Status |
 |---|---|---|
 | `feature/0.10-correctness` | `2026-11-13-0.10-correctness-design.md` | [x] merged |
-| `feature/0.10-message-api` | `2026-11-13-prsl-message-design.md` | [ ] |
+| `feature/0.10-message-api` | `2026-11-13-prsl-message-design.md` | [x] merged |
 | `feature/0.10-secure-example` | `2026-11-13-secure-example-design.md` | [ ] |
 | `docs/future-endpoints-actions` | `2026-11-13-endpoints-actions-design.md` | [x] design only, merged |
 
@@ -50,7 +50,7 @@ sub-spec and is based on `main` after the scope docs landed.
     the main loop.
   Add a stopping flag so new requests are rejected once teardown begins.
   Branch: `feature/0.10-correctness`.
-- [ ] **`prsl_message(level, message)`.** Broadcast a transient user message
+- [x] **`prsl_message(level, message)`.** Broadcast a transient user message
   with INFO / WARNING / ERROR levels. Wire:
   `{"type":"message","level":"info|warning|error","message":"..."}`. The
   client adds `ℹ` / `⚠` / `✖` and colors warning/error. Protocol failures
