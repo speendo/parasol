@@ -2,12 +2,15 @@
 #include "ESPAsyncWebServer.h"
 #include "prsl.h"
 
-/* The three examples define app_main under unique names via their .cpp
+/* The four examples define app_main under unique names via their .cpp
  * wrappers. Referencing them here keeps the linker from discarding them. */
 void simple_app_main(void);
 void ota_app_main(void);
 void upload_app_main(void);
-static void (*const examples[])(void) = { simple_app_main, ota_app_main, upload_app_main };
+void secure_app_main(void);
+static void (*const examples[])(void) = {
+    simple_app_main, ota_app_main, upload_app_main, secure_app_main
+};
 
 AsyncWebServer server(80);
 
