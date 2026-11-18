@@ -41,6 +41,9 @@ void test_cookie_malformed(void) {
     TEST_ASSERT_FALSE(session_cookie_matches("prsl_session=abc", NULL));
     TEST_ASSERT_FALSE(session_cookie_matches("prsl_session=", "abc"));
     TEST_ASSERT_FALSE(session_cookie_matches("prsl_session", "abc"));
+    TEST_ASSERT_FALSE(session_cookie_matches("=abc", "abc"));
+    TEST_ASSERT_FALSE(session_cookie_matches("prsl_session=; foo=1", "abc"));
+    TEST_ASSERT_TRUE(session_cookie_matches("foo=1;\tprsl_session=abc", "abc"));
 }
 
 void test_origin_missing_and_null(void) {
@@ -62,6 +65,8 @@ void test_origin_scheme_host_port(void) {
     TEST_ASSERT_TRUE(origin_matches("https://dev.local:8080", "dev.local:8080"));
     TEST_ASSERT_FALSE(origin_matches("http://dev.local/", "dev.local"));
     TEST_ASSERT_FALSE(origin_matches("http://dev.local", ""));
+    TEST_ASSERT_FALSE(origin_matches(" http://dev.local", "dev.local"));
+    TEST_ASSERT_FALSE(origin_matches("http://dev.local ", "dev.local"));
 }
 
 int main(void) {

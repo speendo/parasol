@@ -58,10 +58,11 @@ static esp_err_t save_to_nvs(void) {
     nvs_handle_t h;
     if (nvs_open("parasol", NVS_READWRITE, &h) != ESP_OK) return ESP_FAIL;
     const char *name = prsl_get("system.name");
-    if (name) nvs_set_str(h, "system.name", name);
-    nvs_commit(h);
+    esp_err_t err = ESP_OK;
+    if (name) err = nvs_set_str(h, "system.name", name);
+    if (err == ESP_OK) err = nvs_commit(h);
     nvs_close(h);
-    return ESP_OK;
+    return err;
 }
 
 /* Positional initializers keep this C++ smoke build valid before C++20.
