@@ -34,6 +34,12 @@ gcc "${FLAGS[@]}" \
   "$ROOT/tests/native/test_prsl_msg.c" -o "/tmp/prsl_native_msg"
 echo "== msg =="; "/tmp/prsl_native_msg"
 
+# session_cookie: secure example's pure cookie and Origin helpers.
+gcc "${FLAGS[@]}" -I"$ROOT/examples/secure" \
+  "$DEPS/unity.c" "$ROOT/tests/native/test_session_cookie.c" \
+  -o /tmp/prsl_native_session_cookie
+echo "== session_cookie =="; "/tmp/prsl_native_session_cookie"
+
 cat > "$ROOT/tests/native/check_store_api.cpp" <<'EOF'
 #include "prsl.h"
 #include "prsl_store.h"
