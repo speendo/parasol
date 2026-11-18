@@ -107,6 +107,22 @@ Design: `docs/superpowers/specs/2026-11-13-endpoints-actions-design.md`.
 - [ ] **Endpoint-level auth.** Cookie/session gate per endpoint; app owns
   credentials, Parasol owns the gate. Revisit after the endpoints refactor.
 
+### Secure example follow-ups
+
+Design: `docs/superpowers/specs/2026-11-18-secure-example-followups-design.md`.
+
+- [ ] **HTTP response hardening (L2/L3).** `Cache-Control: no-store` and an
+  anti-framing policy for library-served pages/assets. Affects every user;
+  needs its own byte-budget and behavior spec.
+- [ ] **Automated gate-order test (L6).** Assert the secure example's guard is
+  the first handler and the allowlist stays exact. No public handler-list
+  accessor today; needs test infrastructure.
+- [ ] **Secure example build recipe (L7).** Complete PlatformIO/Arduino
+  instructions in the release-docs pass.
+- [ ] **Proxy Host/Origin documentation (L9).** A TLS-terminating proxy must
+  preserve `Host`, including a non-default public port, for the WS `Origin`
+  check.
+
 ## Dropped / YAGNI (do not re-open without new evidence)
 
 These were reviewed on 2026-11-13 and deliberately dropped for the current
@@ -148,6 +164,14 @@ product: one ESP32, one settings store, trusted LAN, usually one tab.
   first-payload re-render race is too narrow to justify more code.
 - [-] **Native test for the `val_str == NULL` branch.** Stale: that branch no
   longer exists in the code.
+- [-] **`WWW-Authenticate` on the secure example's 401 (L4).** A Basic
+  challenge can make browsers prompt on API/WS requests; a bare 401 matches
+  the spec and the intended UX.
+- [-] **Constant-time session-token compare (L8).** The token is 128 random
+  bits; timing is not a practical signal. Password timing remains out of
+  scope.
+- [-] **Special-case 401 for `/api` without a trailing slash (L10).** No route
+  exists; the 302 is cosmetic.
 
 ## Application-level / examples (not library roadmap)
 
