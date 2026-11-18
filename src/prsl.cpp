@@ -685,6 +685,13 @@ esp_err_t prsl_stop(void) {
     return ESP_OK;
 }
 
+esp_err_t prsl_disconnect_clients(void) {
+    if (!g_ws) return ESP_ERR_INVALID_STATE;
+    g_ws->closeAll();
+    g_ws->cleanupClients();
+    return ESP_OK;
+}
+
 /* ── Runtime value access ───────────────────────────────────── */
 
 static esp_err_t parse_dot_path(const char *path, char *group_id, char *key) {

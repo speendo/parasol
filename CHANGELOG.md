@@ -7,6 +7,7 @@
 - Correctness: the save handler's OOM fallback answers 500 with an initialized message; a sync reply that omits a recovering key drops it instead of re-arming; `prsl_stop()` is documented as a shutdown call (never from `on_save`/`on_reset`/`on_reboot`/`on_upload`) and a stopping guard rejects new HTTP/WS work during teardown. Reconnect-with-unsaved-edit and busy-state failure tests added.
 - Server: `prsl_msg_build()` is host-testable and owns the frame cap, level mapping, and cJSON failure checks.
 - Specs: `2026-11-13-prsl-message-design.md`, `2026-11-15-0.10-message-followups-design.md`.
+- New `prsl_disconnect_clients()`: closes every open WebSocket with `closeAll` + `cleanupClients`. Wire-neutral. Used by the secure example on login/logout so a replaced session cannot keep sending `action:"apply"`.
 - JS budget: `app.min.js` 23,289 raw / 7,992 gzip vs 0.9.0 at 22,737 raw / 7,808 gzip.
 
 ## 0.9.0

@@ -276,6 +276,21 @@ esp_err_t prsl_reset(void);
  *  successful stop also returns ESP_ERR_INVALID_STATE. */
 esp_err_t prsl_stop(void);
 
+/** @brief Close every connected WebSocket client.
+ *
+ *  Sends a normal close and removes closed clients. Use after a session is
+ *  replaced or logged out so an existing socket cannot keep sending actions.
+ *  The wire format is unchanged; clients reconnect and receive 401 until a
+ *  new session exists.
+ *
+ *  Safe from an HTTP/WS callback or the main loop; the WebSocket takes its
+ *  client lock internally.
+ *
+ *  @return ESP_OK on success, ESP_ERR_INVALID_STATE when the WebSocket is
+ *          not started.
+ */
+esp_err_t prsl_disconnect_clients(void);
+
 /* ── Runtime value access ──────────────────────────────────── */
 
 /** @brief Typed setters for compile-time safety. Each maps to cJSON type.

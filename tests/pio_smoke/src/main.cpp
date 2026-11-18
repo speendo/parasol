@@ -32,6 +32,7 @@ void setup() {
     prsl_init(&server, NULL, NULL, NULL);
     (void)prsl_is_uploading();
     prsl_start();
+    (void)prsl_disconnect_clients();
     (void)prsl_message(PRSL_MSG_INFO, "boot");
 }
 
