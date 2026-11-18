@@ -53,12 +53,41 @@ Add `Cache-Control: no-store` and an anti-framing policy (for example
 `X-Frame-Options: DENY` or CSP `frame-ancestors 'none'`) to library-served
 pages and assets. This is **not** an example-only fix: the important page
 (`/`) is served by prsl's asset handler, so a complete fix affects every
-Parasol user and needs its own byte-budget and behavior spec. When scheduled:
+Parasol user and needs its own byte-budget and behavior spec.
 
-- decide whether the policy is unconditional or configurable,
-- decide whether headers apply to assets as well as `/`,
-- measure the compressed-byte delta,
-- test the headers through the normal HTTP path.
+When scheduled, start a fresh session and read this record before opening
+the code; do not bundle it with the 0.10 release gates. The spec must answer:
+
+- **Scope:** `/` only, `/` plus `app.min.js` and `pico.jade.min.css`, or all
+  assets? A partial policy can give a false sense of completeness.
+- **Cache policy:** `no-store` vs `no-cache` vs `max-age=0,
+  must-revalidate`. `no-store` prevents a stale shell after logout but forces
+  a fresh transfer of the 11.7 KB gzip Pico CSS and ~8 KB gzip app JS on
+  every page load. On an ESP32, that is a real bandwidth/CPU cost.
+- **Asset freshness:** asset paths are fixed. After an OTA update, strong
+  caching can serve old JS/CSS. Decide whether to add a build version,
+  validators, or rely on `no-store`/`no-cache`.
+- **Anti-framing mechanism:** `X-Frame-Options: DENY` is one line;
+  `Content-Security-Policy: frame-ancestors 'none'` is more modern but may
+  interact with the inline `<style>` and inline `onerror` handler in the
+  page. Decide whether a full CSP is in scope or XFO is enough.
+- **Configuration:** unconditional, or a `parasol_config.json` option?
+  Unconditional is smaller and simpler; configurable is more flexible for
+  legitimate embedding.
+- **Example pages:** the secure example's `/login` and `/logout` are
+  example-served, not library assets. Decide whether the library spec also
+  fixes the example, or whether the example adds its own headers.
+- **API and redirect responses:** cache headers are meaningless on POST and
+  WS, but 401/redirect responses can be cached or framed. Decide whether the
+  policy covers them.
+- **Byte budget:** headers are uncompressed response bytes. Measure the
+  per-response cost on the asset paths and set a target (these are small, but
+  the project still counts them).
+- **Tests:** assert the headers on `/`, the JS/CSS assets, and any covered
+  error/redirect paths. Prefer an e2e HTTP assertion over a unit test of
+  header constants.
+- **Compatibility:** confirm the headers do not break the existing e2e suite,
+  the ESP32 client, or a TLS-terminating proxy deployment.
 
 ### L6 — automated gate-order test
 
