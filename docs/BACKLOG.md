@@ -6,7 +6,7 @@ outstanding. Add items here instead of leaving them buried in prose.
 
 Legend: `[ ]` open · `[~]` in progress · `[x]` done · `[-]` dropped/superseded
 
-Last updated: 2026-11-14
+Last updated: 2026-11-18
 
 ## 0.10 scope
 
@@ -55,10 +55,18 @@ sub-spec and is based on `main` after the scope docs landed.
   `{"type":"message","level":"info|warning|error","message":"..."}`. The
   client adds `ℹ` / `⚠` / `✖` and colors warning/error. Protocol failures
   keep using `type:"error"`. Branch: `feature/0.10-message-api`.
-- [ ] **`examples/secure` cookie lock.** Login/logout, shared password,
-  in-RAM session token, `HttpOnly; SameSite=Strict` cookie, server-wide
-  middleware covering HTTP and the WS handshake, `Origin` check, HTTPS
-  caveat. Compile-check in CI. Branch: `feature/0.10-secure-example`.
+- [ ] **`examples/secure` cookie lock.** Login/logout pages, shared password,
+  in-RAM session token, `HttpOnly; SameSite=Strict` cookie, header-time guard
+  handler covering the page, assets, API, uploads, and the WS handshake before
+  any body callback runs, `Origin` check, HTTPS caveat, availability/DoS
+  caveat. Cookie matcher host-tested; compile-checked in CI. Branch:
+  `feature/0.10-secure-example`.
+- [ ] **`prsl_disconnect_clients()`.** Wire-neutral library call that closes
+  every open WebSocket (`closeAll` + `cleanupClients`). The secure example
+  calls it on a successful login and on an authenticated logout, so a
+  replaced session cannot keep sending `action:"apply"`. Returns
+  `ESP_ERR_INVALID_STATE` when the WS is not started. Branch:
+  `feature/0.10-secure-example`.
 - [x] **Reconnect-while-dirty e2e test.** Verify a reconnect with unsaved
   edits re-sends only values that differ from the device and keeps the rest.
   Add to `feature/0.10-correctness` if it fits naturally.
