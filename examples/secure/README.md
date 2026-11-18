@@ -7,7 +7,9 @@ This example locks the whole Parasol UI behind one shared password:
 - the WebSocket handshake.
 
 It is an **application-level example**, not a library auth module. Parasol
-itself stays unauthenticated by default.
+itself stays unauthenticated by default. It registers one text field
+(`system.name`) and one file field (`system.blob`) so the upload path is
+exercised too; the authorized blob is stored in LittleFS as `/secure.bin`.
 
 Files:
 
@@ -19,12 +21,17 @@ Files:
 This is an Arduino-ESP32 sketch (`app_main`) that needs the same dependencies
 as the other examples:
 
-- Arduino-ESP32 core,
+- Arduino-ESP32 core (includes LittleFS),
 - `esp32async/ESPAsyncWebServer` (the pinned 3.12.x fork),
 - Parasol (`prsl.h` and the library sources).
 
 For a quick compile check, the repository’s `tests/pio_smoke` project includes
 this file through a wrapper and is built by CI.
+
+The example uses an ESP-IDF-style `app_main`; it calls `prsl_start()` and then
+keeps the entry point alive in a loop, because the `AsyncWebServer` is an
+automatic local. In an Arduino sketch, put the same setup in `setup()` and
+leave `loop()` running instead.
 
 The example starts an access point:
 
@@ -129,8 +136,8 @@ Run this on a real device before shipping a build based on the example.
 - [ ] The login page loads with Pico styling (one CSS request).
 - [ ] Unauthenticated `POST /api/settings/save` returns `401` and changes
       nothing.
-- [ ] Unauthenticated `PUT /api/upload/...` returns `401`, leaves no file, and
-      produces no upload callback output.
+- [ ] Unauthenticated `PUT /api/upload/system/blob?name=secure.bin` returns
+      `401`, leaves no `/secure.bin`, and produces no upload callback output.
 - [ ] Unauthenticated `/api/events` WebSocket handshake fails.
 - [ ] Wrong password returns `401`, sets no cookie, and leaves an existing
       session working.
@@ -151,7 +158,7 @@ Useful commands:
 curl -i -X POST http://DEVICE/api/settings/save \
   -H 'Content-Type: application/json' -d '{"system":{"name":"pwned"}}'
 
-curl -i -X PUT 'http://DEVICE/api/upload/system/name?name=x.bin' \
+curl -i -X PUT 'http://DEVICE/api/upload/system/blob?name=secure.bin' \
   -H 'Content-Type: application/octet-stream' --data-binary @file.bin
 
 curl -i http://DEVICE/ -H 'Cookie: prsl_session=abc'

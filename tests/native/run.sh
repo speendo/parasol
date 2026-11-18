@@ -40,6 +40,12 @@ gcc "${FLAGS[@]}" -I"$ROOT/examples/secure" \
   -o /tmp/prsl_native_session_cookie
 echo "== session_cookie =="; "/tmp/prsl_native_session_cookie"
 
+# ws_track: snapshot client ids before closing; never iterate the live list.
+gcc "${FLAGS[@]}" \
+  "$ROOT/src/prsl_ws_track.c" "$DEPS/unity.c" \
+  "$ROOT/tests/native/test_prsl_ws_track.c" -o /tmp/prsl_native_ws_track
+echo "== ws_track =="; "/tmp/prsl_native_ws_track"
+
 cat > "$ROOT/tests/native/check_store_api.cpp" <<'EOF'
 #include "prsl.h"
 #include "prsl_store.h"

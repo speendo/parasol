@@ -857,8 +857,9 @@ esp_err_t prsl_message(prsl_msg_level_t level, const char *message);
  *
  * Sends a normal close and removes closed clients. Use after a session is
  * replaced or logged out so an existing socket cannot keep sending actions.
- * The wire format is unchanged; clients reconnect and receive 401 until a
- * new session exists.
+ * Client ids are snapshotted before closing because close() can erase the
+ * live list. The wire format is unchanged; clients reconnect and receive 401
+ * until a new session exists.
  *
  * Safe from an HTTP/WS callback or the main loop; the WebSocket takes its
  * client lock internally.

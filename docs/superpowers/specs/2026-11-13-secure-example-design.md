@@ -237,7 +237,9 @@ Both helpers are host-tested (see “Tests”).
 esp_err_t prsl_disconnect_clients(void);
 ```
 
-- Calls `AsyncWebSocket::closeAll()` then `cleanupClients()`.
+- Takes a snapshot of tracked client ids, closes each id one at a time, then
+  calls `cleanupClients()`. It does **not** call `closeAll()` on the live
+  list: the server’s `close()` can erase the element being iterated.
 - No wire change: clients see a normal close, reconnect, and receive `401`
   until a new session exists.
 - Safe from an HTTP/WS callback or the main loop; the server takes its

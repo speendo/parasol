@@ -669,10 +669,10 @@ esp_err_t prsl_stop(void) {
 
     if (g_server) {
         if (g_ws) {
-            g_ws->closeAll();                 /* close WS clients */
-            g_ws->cleanupClients();
+            prsl_ws_close_all(g_ws);          /* snapshot ids; never iterate live list */
             g_server->removeHandler(g_ws);    /* server deletes g_ws */
             g_ws = NULL;                      /* dangling after removal — do not use */
+            prsl_ws_reset_tracking();
         }
         g_server->end();                      /* stop the listener */
     }
@@ -687,8 +687,7 @@ esp_err_t prsl_stop(void) {
 
 esp_err_t prsl_disconnect_clients(void) {
     if (!g_ws) return ESP_ERR_INVALID_STATE;
-    g_ws->closeAll();
-    g_ws->cleanupClients();
+    prsl_ws_close_all(g_ws);
     return ESP_OK;
 }
 

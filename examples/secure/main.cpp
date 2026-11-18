@@ -13,6 +13,7 @@
 #include "session_cookie.h"
 #include <esp_random.h>
 #include <nvs_flash.h>
+#include <LittleFS.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -67,6 +68,64 @@ static esp_err_t save_to_nvs(void) {
  * Field order: is_status, on_get, on_set, help, attrs. */
 static const prsl_field_opts_t name_opts = {
     false, load_name, on_name, "Device name", NULL
+};
+
+/* ── Uploaded blob ─────────────────────────────────────────── */
+
+#define BLOB_TMP   "/secure.tmp"
+#define BLOB_FINAL "/secure.bin"
+#define BLOB_LABEL "secure.bin"
+#define BLOB_MAX   (64 * 1024)
+
+static File g_blob;
+
+static const char *blob_label(void) {
+    return LittleFS.exists(BLOB_FINAL) ? BLOB_LABEL : "none";
+}
+
+static esp_err_t on_blob(prsl_upload_t *u) {
+    switch (u->event) {
+    case PRSL_UPLOAD_META:
+        LittleFS.remove(BLOB_TMP);
+        g_blob = LittleFS.open(BLOB_TMP, "w");
+        if (!g_blob) {
+            snprintf(u->err, u->err_len, "Cannot open temp file");
+            return ESP_FAIL;
+        }
+        break;
+
+    case PRSL_UPLOAD_CHUNK:
+        if (g_blob.write(u->data, u->len) != u->len) {
+            snprintf(u->err, u->err_len, "Write failed");
+            return ESP_FAIL;
+        }
+        break;
+
+    case PRSL_UPLOAD_END:
+        g_blob.close();
+        LittleFS.remove(BLOB_FINAL);
+        if (!LittleFS.rename(BLOB_TMP, BLOB_FINAL)) {
+            LittleFS.remove(BLOB_TMP);
+            snprintf(u->err, u->err_len, "Commit failed");
+            return ESP_FAIL;
+        }
+        prsl_set_dirty(true);
+        prsl_push();
+        break;
+
+    case PRSL_UPLOAD_ABORT:
+        if (g_blob) g_blob.close();
+        LittleFS.remove(BLOB_TMP);
+        break;
+    }
+    return ESP_OK;
+}
+
+/* Field order: on_get, on_upload, accept, max_size, idle_timeout_ms,
+ * help, attrs. */
+static const prsl_file_opts_t blob_opts = {
+    blob_label, on_blob, ".bin", BLOB_MAX, 30000,
+    "Config blob, up to 64 KiB.", NULL
 };
 
 /* ── Session ───────────────────────────────────────────────── */
@@ -232,7 +291,7 @@ static void on_logout_post(AsyncWebServerRequest *req) {
 
     /* Only a valid session may revoke the current token or kick clients. */
     if (valid_session(req)) {
-        g_token[0] = '\0';
+        memset(g_token, 0, sizeof g_token);
         (void)prsl_disconnect_clients();
     }
 
@@ -243,6 +302,8 @@ static void on_logout_post(AsyncWebServerRequest *req) {
 
 void app_main(void) {
     nvs_flash_init();
+    LittleFS.begin(true);
+    LittleFS.remove(BLOB_TMP);          /* drop a stale pending upload */
     WiFi.mode(WIFI_AP);
     WiFi.softAP(AP_SSID, AP_PASSWORD);
 
@@ -253,6 +314,7 @@ void app_main(void) {
 
     prsl_add_group("system", "System");
     prsl_add_field(PRSL_TEXT, "system", "name", "Name", &name_opts);
+    prsl_add_file_field("system", "blob", "Config blob", &blob_opts);
     prsl_init(&server, save_to_nvs, NULL, NULL);
 
     server.on("/login", HTTP_GET, on_login_get);
@@ -261,4 +323,8 @@ void app_main(void) {
     server.on("/logout", HTTP_POST, on_logout_post);
 
     prsl_start();
+
+    /* Keep app_main alive: the server is an automatic local and must not be
+     * destroyed. Arduino sketches instead use setup()/loop(). */
+    for (;;) vTaskDelay(pdMS_TO_TICKS(1000));
 }
